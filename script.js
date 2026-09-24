@@ -1,5 +1,5 @@
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbwTpyynyD9rT0RGSJVwIEZMPBDElaDsbmfFioWre4Q7pDM9-GHJS8OEthnDpVaQwzs6/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbxDFdMLdKgg8B09CDRzrYw3fmBBTv0EydkMQNhXqy4BMAF-ZhAVDLDKNXQXML7GAXzl/exec"
 };
 
 const SLOT_MIN = 36; // จำนวนช่องว่างเริ่มต้นเมื่อยังไม่มีหัวคะแนน (18 สัปดาห์ x 2 คาบ) — ถ้ามีหัวแล้วจะคำนวณจาก slotTarget()
@@ -29,6 +29,8 @@ const fmtWd = iso => isValidDate(iso) ? WEEKDAYS[new Date(iso+"T00:00:00").getDa
 const sameStr = (x, y) => String(x ?? "").trim() === String(y ?? "").trim();
 const esc = v => String(v ?? "").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");
 const fmtLong = iso => { const d=new Date(iso+"T00:00:00"); return d.toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'2-digit'}); };
+/* เลขที่นักเรียน แสดงหน้าชื่อ */
+const snum = no => (no===undefined||no===null||no==="") ? "" : `<b class="sn">${esc(no)}</b>`;
 const numOrNull = v => (v===""||v==null||isNaN(Number(v))) ? null : Number(v);
 
 /* ================= ภาคเรียน / ประเภท (จำไว้ใน localStorage) ================= */
@@ -120,7 +122,9 @@ async function apiGet(type){
   const res = await fetch(`${CONFIG.API_URL}?type=${type}`);
   return res.json();
 }
+const GS_REQUIRED = "v5";
 async function apiPost(payload){
+  if(state.gsOld) return { success:false, message:"Apps Script ที่เชื่อมอยู่ยังเป็นเวอร์ชันเก่า (ไม่รองรับภาคเรียน/ประเภท) — Deploy โค้ด GS.txt ล่าสุด แล้วใส่ลิงก์ใน CONFIG.API_URL ของ script.js จากนั้นรีเฟรชแบบล้างแคช" };
   try{
     const res = await fetch(CONFIG.API_URL, {
       method:"POST",
@@ -140,6 +144,8 @@ window.addEventListener("unhandledrejection", e=>{ hideSaving(); toast("เก�
 async function loadAll(){
   try{
     const data = await apiGet("all");
+    state.gsOld = (data.gsVersion !== GS_REQUIRED);   // Deploy เก่า/คนละลิงก์ = บล็อกการบันทึก กันข้อมูลเข้าชีทผิดรูปแบบ
+    if(state.gsOld) toast("Apps Script ยังเป็นเวอร์ชันเก่า — ต้อง Deploy GS.txt ล่าสุดและใช้ลิงก์ใหม่ก่อนบันทึกครับ");
     state.students = data.students || [];
     state.scores = data.scores || [];
     state.activities = data.activities || [];
@@ -297,9 +303,10 @@ qs("#attendSaveBtn").addEventListener("click", async ()=>{
   const absent = rows.filter(r=>r.status==="absent").map(r=>r.name).join(", ");
   const leave = rows.filter(r=>r.status==="leave").map(r=>r.name).join(", ");
   const late = rows.filter(r=>r.status==="late").map(r=>r.name).join(", ");
+  const nos = st => rows.filter(r=>r.status===st).map(r=>r.no).join(", ");
   qs("#attendSaveBtn").disabled = true;
   showSaving("กำลังบันทึกการเช็คชื่อ...");
-  const res = await apiPost({ type:"addAttendance", term, ptype:type, level:room, subject, absent, leave, late, date });
+  const res = await apiPost({ type:"addAttendance", term, ptype:type, level:room, subject, absent, leave, late, date, absentNo:nos("absent"), leaveNo:nos("leave"), lateNo:nos("late") });
   qs("#attendSaveBtn").disabled = false;
   if(res.success){
     await loadAll();
@@ -400,7 +407,7 @@ function scoreRoster(room){
     seen.add(sig); list.push({ name, no });
   });
   const count = {}; list.forEach(x=>{ count[x.name] = (count[x.name]||0)+1; });
-  return list.map(x=>({ label:x.name, key: count[x.name]>1 ? `${x.name} (เลขที่ ${x.no})` : x.name }));
+  return list.map(x=>({ label:x.name, no:x.no, key: count[x.name]>1 ? `${x.name} (เลขที่ ${x.no})` : x.name }));
 }
 
 function renderScoreTable(){
@@ -438,7 +445,7 @@ function renderScoreTable(){
 
   let rows = "";
   roster.forEach(st=>{
-    rows += `<tr><td class="name-cell">${esc(st.label)}</td>`;
+    rows += `<tr><td class="name-cell">${snum(st.no)}${esc(st.label)}</td>`;
     state.score.headers.forEach(d=>{
       const pend = state.score.pending.get(pendingKey(st.key, d));
       const saved = savedScore(st.key, d);
@@ -488,10 +495,11 @@ function updateScoreSaveBar(){
 /* กดติ๊กคะแนนแล้วแค่เก็บไว้ในเครื่องก่อน (ไม่ยิง API ทุกครั้ง เพื่อไม่ให้ช้า) แล้วค่อยกด "บันทึกคะแนน" ทีเดียว */
 qs("#scoreSaveBtn").addEventListener("click", async ()=>{
   if(state.score.pending.size===0) return;
+  const noOf = new Map(scoreRoster(state.score.room).map(x=>[x.key, x.no]));
   const items = [...state.score.pending.entries()].map(([key, score])=>{
     const { name, date } = splitPendingKey(key);
     return {
-      term: period.term, type: period.type, level: state.score.room, name, date,
+      term: period.term, type: period.type, level: state.score.room, name, date, no: noOf.get(name),
       assignment: findActivity(date)?.["งาน"] || fmtShort(date),
       score
     };
@@ -841,7 +849,7 @@ function renderRepTable(){
       return `<td><span class="ar ar-${s}">${LBL[s]}</span></td>`;
     }).join("");
     const sum = k => `<td class="sum"><b class="s-${k} ${cnt[k]?"on":""}">${cnt[k]}</b></td>`;
-    rows += `<tr><td class="name-cell">${esc(st.label)}</td>${sum("absent")}${sum("leave")}${sum("late")}${cells}</tr>`;
+    rows += `<tr><td class="name-cell">${snum(st.no)}${esc(st.label)}</td>${sum("absent")}${sum("leave")}${sum("late")}${cells}</tr>`;
   });
   wrap.innerHTML = `<table class="score-table"><thead>${thead}</thead><tbody>${rows}</tbody></table>`;
 
@@ -899,7 +907,7 @@ function renderExam(){
   let rows = "";
   roster.forEach(st=>{
     const v = u.vals.get(st.key) || { mc:null, es:null };
-    rows += `<tr data-name="${esc(st.key)}"><td class="name-cell">${esc(st.label)}</td>
+    rows += `<tr data-name="${esc(st.key)}"><td class="name-cell">${snum(st.no)}${esc(st.label)}</td>
       <td><input class="exam-in" data-k="mc" type="number" inputmode="decimal" min="0" step="any" value="${v.mc===null?"":v.mc}"></td>
       <td><input class="exam-in" data-k="es" type="number" inputmode="decimal" min="0" step="any" value="${v.es===null?"":v.es}"></td>
       <td class="exam-tot"></td></tr>`;
@@ -1063,7 +1071,7 @@ function renderSumTable(){
   S.rows.forEach(o=>{
     dist[o.grade] = (dist[o.grade]||0) + 1; if(o.near) nearN++;
     const c = v => `<td>${fmt1(v)}</td>`, t = v => `<td class="tot">${fmt1(v)}</td>`;
-    body += `<tr class="${o.near?"near":""}"><td class="name-cell">${esc(o.st.label)}</td>
+    body += `<tr class="${o.near?"near":""}"><td class="name-cell">${snum(o.st.no)}${esc(o.st.label)}</td>
       ${c(o.workm)}${c(o.behm)}${c(o.exm)}${t(o.mid)}${c(o.workf)}${c(o.behf)}${c(o.exf)}${t(o.fin)}
       <td class="tot grand">${o.r}</td>
       <td class="gcell"><span class="gr g${o.grade.replace(".","_")}">${o.grade}</span>${o.near ? `<small class="near-tag">อีก 1 → ${gradeOf(o.r+1)}</small>` : ""}</td></tr>`;
