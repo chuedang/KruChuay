@@ -580,3 +580,6 @@ td.sum b.s-late.on{color:#B45309; font-weight:700;}
   .w-card{padding:10px; margin-bottom:8px;}
   .w-grid input{padding:8px;}
 }
+
+/* เลขที่นักเรียนหน้าชื่อ */
+.sn{display:inline-flex; align-items:center; justify-content:center; min-width:22px; height:20px; padding:0 5px; margin-right:6px; border-radius:10px; background:var(--c-bg,#E8F0FE); color:var(--c-ink,#174EA6); font-size:11px; font-weight:700; vertical-align:1px;}
