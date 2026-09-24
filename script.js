@@ -1,5 +1,5 @@
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbwTpyynyD9rT0RGSJVwIEZMPBDElaDsbmfFioWre4Q7pDM9-GHJS8OEthnDpVaQwzs6/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbzjaajL_y-nVzaLA_6W-HE0TbMJiqMxYTyRL7n05Qzf5Vuvxow47hINElMCFWvh51sQ/exec"
 };
 
 const SLOT_MIN = 36; // จำนวนช่องว่างเริ่มต้นเมื่อยังไม่มีหัวคะแนน (18 สัปดาห์ x 2 คาบ) — ถ้ามีหัวแล้วจะคำนวณจาก slotTarget()
@@ -257,7 +257,7 @@ function updateAttendSummary(){
   const rows = state.attend.rows, c = { present:0, absent:0, leave:0, late:0 };
   rows.forEach(r=> c[r.status]++);
   box.innerHTML = rows.length===0 ? "" :
-    Object.keys(STATUS_LABEL).map(k=>`<div class="sum-tile" data-status="${k}"><b>${c[k]}</b><span>${STATUS_LABEL[k]}</span></div>`).join("") +
+    Object.keys(STATUS_LABEL).map(k=>`<div class="sum-tile ${c[k]?"":"zero"}" data-status="${k}"><b>${c[k]}</b><span>${STATUS_LABEL[k]}</span></div>`).join("") +
     `<button class="sum-all" id="attendAllBtn" title="ตั้งเป็นมาทั้งหมด">↺ มาครบ</button>`;
   const all = qs("#attendAllBtn");
   if(all) all.addEventListener("click", ()=>{ state.attend.rows.forEach(r=>r.status="present"); renderRoster(); });
