@@ -1,5 +1,5 @@
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbzjaajL_y-nVzaLA_6W-HE0TbMJiqMxYTyRL7n05Qzf5Vuvxow47hINElMCFWvh51sQ/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbwTpyynyD9rT0RGSJVwIEZMPBDElaDsbmfFioWre4Q7pDM9-GHJS8OEthnDpVaQwzs6/exec"
 };
 
 const SLOT_MIN = 36; // จำนวนช่องว่างเริ่มต้นเมื่อยังไม่มีหัวคะแนน (18 สัปดาห์ x 2 คาบ) — ถ้ามีหัวแล้วจะคำนวณจาก slotTarget()
