@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KruChauy</title>
+<!-- เปลี่ยนเลข v= ทุกครั้งที่อัปเดตไฟล์ เพื่อให้เบราว์เซอร์โหลดของใหม่ ไม่ใช้ของเก่าที่แคชไว้ -->
+<link rel="stylesheet" href="style.css?v=12">
+</head>
+<body>
+<div id="splash"><div id="splashBg"></div><div id="splashLogo">Kru<span>Chauy</span></div><div id="splashLoading">กำลังโหลดข้อมูล...</div></div>
+<div id="app">
+
+  <!-- HOME -->
+  <section id="view-home" class="view active">
+    <div class="brand">
+      <div class="mark">Kru<span>Chauy</span></div>
+      <div class="rule"></div>
+      <div class="tag">ผู้ช่วยครูประจำวัน</div>
+    </div>
+    <div class="menu">
+      <button class="menu-item c-blue" data-go="attend" style="--i:0">
+        <span class="ico">✅</span>
+        <span class="txt"><h3>เช็คชื่อ</h3><p>เลือกห้องและวิชา บันทึกการเข้าเรียนของนักเรียน</p></span>
+        <span class="arrow">›</span>
+      </button>
+      <button class="menu-item c-green" data-go="scores" style="--i:1">
+        <span class="ico">📊</span>
+        <span class="txt"><h3>ลงคะแนน</h3><p>สร้างตารางคะแนนรายสัปดาห์ พร้อมมอบหมายงานรายวัน</p></span>
+        <span class="arrow">›</span>
+      </button>
+      <button class="menu-item c-yellow" data-go="teaching" style="--i:2">
+        <span class="ico">📝</span>
+        <span class="txt"><h3>บันทึกหลังการสอน</h3><p>ข้อสังเกต แนวทางแก้ไข และผลการพัฒนา</p></span>
+        <span class="arrow">›</span>
+      </button>
+      <button class="menu-item c-purple" data-go="exam" style="--i:3">
+        <span class="ico">🧾</span>
+        <span class="txt"><h3>ตรวจข้อสอบ</h3><p>เร็วๆ นี้</p></span>
+        <span class="arrow">›</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- ATTEND SETUP -->
+  <section id="view-attend-setup" class="view">
+    <div class="topbar">
+      <button class="back-btn" data-back="view-home">‹</button>
+      <div class="tb-txt"><h2>เช็คชื่อ</h2><div class="sub">เลือกภาคเรียน ห้อง วิชา และวันที่</div></div>
+      <span class="tb-ico">✅</span>
+    </div>
+    <div class="period-bar" data-mode="full"></div>
+    <div class="card">
+      <div class="field"><label>ห้อง / ชั้นปี</label><select id="attendRoom" class="room-select"></select></div>
+      <div class="field"><label>วิชา</label><select id="attendSubject" class="subject-select"><option value="">เลือกห้องก่อน</option></select></div>
+      <div class="field"><label>วันที่</label><input id="attendDate" type="date"></div>
+    </div>
+    <button id="attendStartBtn" class="btn btn-primary">เริ่มเช็คชื่อ</button>
+    <button id="attendReportBtn" class="btn btn-outline btn-block" style="margin-top:12px;">📅 ดูสรุปการมาเรียน</button>
+  </section>
+
+  <!-- ATTEND LIST -->
+  <section id="view-attend-list" class="view">
+    <div class="topbar">
+      <button class="back-btn" data-back="view-attend-setup">‹</button>
+      <div class="tb-txt"><h2>รายชื่อ</h2><div class="sub" id="attendHeadSub"></div></div>
+      <span class="tb-ico">✅</span>
+    </div>
+    <div class="period-bar" data-mode="lock" data-compact="1"></div>
+    <div class="exist-note" id="attendExistNote" style="display:none;">✏️ วันนี้เคยเช็คชื่อวิชานี้ไว้แล้ว — โหลดข้อมูลเดิมมาให้ ถ้าบันทึกจะแก้ทับข้อมูลเดิม ไม่เพิ่มแถวใหม่</div>
+    <div class="roster" id="rosterList"></div>
+    <div class="actions-fixed"><button id="attendSaveBtn" class="btn btn-primary">บันทึกการเช็คชื่อ</button></div>
+  </section>
+
+  <!-- ATTEND REPORT SETUP -->
+  <section id="view-attend-report-setup" class="view">
+    <div class="topbar">
+      <button class="back-btn" data-back="view-attend-setup">‹</button>
+      <div class="tb-txt"><h2>สรุปการมาเรียน</h2><div class="sub">เลือกห้อง วิชา และวันที่เริ่มต้น</div></div>
+      <span class="tb-ico">📅</span>
+    </div>
+    <div class="period-bar" data-mode="full"></div>
+    <div class="card">
+      <div class="field"><label>ห้อง / ชั้นปี</label><select id="repRoom" class="room-select"></select></div>
+      <div class="field"><label>วิชา</label><select id="repSubject" class="subject-select"><option value="">เลือกห้องก่อน</option></select></div>
+      <div class="field"><label>ตั้งแต่วันที่ (วันสอน A)</label><input id="repStart" type="date"></div>
+      <div id="repSourceNote" class="gen-preview" style="display:none;"></div>
+      <div id="repCalcBox" style="display:none;">
+        <div class="field"><label>สอนกี่คาบต่อสัปดาห์</label>
+          <div class="seg" id="repPeriods">
+            <button type="button" data-n="1">1 คาบ (A)</button>
+            <button type="button" data-n="2">2 คาบ (AB)</button>
+            <button type="button" data-n="3">3 คาบ (ABC)</button>
+          </div>
+        </div>
+        <div class="field" id="repFieldB"><label>วันสอนครั้งที่ 2 (B)</label><input id="repDateB" type="date"></div>
+        <div class="field" id="repFieldC"><label>วันสอนครั้งที่ 3 (C)</label><input id="repDateC" type="date"></div>
+      </div>
+    </div>
+    <button id="repStartBtn" class="btn btn-primary">ดูสรุปการมาเรียน</button>
+  </section>
+
+  <!-- ATTEND REPORT -->
+  <section id="view-attend-report" class="view">
+    <div class="topbar">
+      <button class="back-btn" data-back="view-attend-report-setup">‹</button>
+      <div class="tb-txt"><h2>สรุปการมาเรียน</h2><div class="sub" id="repHeadSub"></div></div>
+      <span class="tb-ico">📅</span>
+    </div>
+    <div class="period-bar" data-mode="lock" data-compact="1"></div>
+    <div class="table-toolbar">
+      <div class="att-legend">
+        <span class="ar ar-present">✓ มา</span><span class="ar ar-absent">ขาด</span><span class="ar ar-leave">ลา</span><span class="ar ar-late">สาย</span><span class="ar ar-none">· ยังไม่เช็ค</span>
+      </div>
+      <span class="score-info" id="repInfo"></span>
+    </div>
+    <div class="score-scroll"><div id="repTableWrap"></div></div>
+  </section>
+
+  <!-- SCORES SETUP -->
+  <section id="view-scores-setup" class="view">
+    <div class="topbar">
+      <button class="back-btn" data-back="view-home">‹</button>
+      <div class="tb-txt"><h2>ลงคะแนน</h2><div class="sub">เลือกภาคเรียน ห้อง และวิชา</div></div>
+      <span class="tb-ico">📊</span>
+    </div>
+    <div class="period-bar" data-mode="full"></div>
+    <div class="card">
+      <div class="field"><label>ห้อง / ชั้นปี</label><select id="scoreRoom" class="room-select"></select></div>
+      <div class="field"><label>วิชา</label><select id="scoreSubject" class="subject-select"><option value="">เลือกห้องก่อน</option></select></div>
+    </div>
+    <button id="scoreStartBtn" class="btn btn-primary">เข้าสู่ตารางคะแนน</button>
+    <button id="scoreSummaryBtn" class="btn btn-outline btn-block" style="margin-top:12px;">📈 สรุปคะแนน / ตัดเกรด</button>
+  </section>
+
+  <!-- SCORES TABLE -->
+  <section id="view-scores-table" class="view">
+    <div class="topbar">
+      <button class="back-btn" data-back="view-scores-setup">‹</button>
+      <div class="tb-txt"><h2>ตารางคะแนน</h2><div class="sub" id="scoreHeadSub"></div></div>
+      <span class="tb-ico">📊</span>
+    </div>
+    <div class="period-bar" data-mode="full" data-compact="1"></div>
+    <div class="score-tabs" id="scoreTabs">
+      <button type="button" data-tab="beh" class="on">📝 งาน/จิตพิสัย 1-5</button>
+      <button type="button" data-tab="exam">🧾 คะแนนสอบ</button>
+      <button type="button" id="openSummaryBtn" class="tab-sum">📈 สรุป</button>
+    </div>
+    <div class="pane" id="behPane">
+      <div class="table-toolbar">
+        <button id="genHeaderBtn" class="btn btn-gold btn-sm">✨ สร้างหัวคะแนน</button>
+        <span class="score-info" id="scoreInfo"></span>
+      </div>
+      <div class="score-scroll"><div id="scoreTableWrap"></div></div>
+    </div>
+    <div class="pane" id="examPane" style="display:none;">
+      <div id="examSetupBox"></div>
+      <div class="table-toolbar"><span class="score-info" id="examInfo"></span></div>
+      <div class="score-scroll"><div id="examWrap"></div></div>
+    </div>
+    <div class="actions-fixed" id="scoreSaveBar">
+      <button id="scoreSaveBtn" class="btn btn-primary">บันทึกคะแนน <span id="scoreSaveCount"></span></button>
+      <button id="examSaveBtn" class="btn btn-primary" style="display:none;">บันทึกคะแนนสอบ</button>
+    </div>
+  </section>
+
+  <!-- SCORE SUMMARY -->
+  <section id="view-summary" class="view">
+    <div class="topbar">
+      <button class="back-btn" id="sumBackBtn">‹</button>
+      <div class="tb-txt"><h2>สรุปคะแนน</h2><div class="sub" id="sumHeadSub"></div></div>
+      <span class="tb-ico">📈</span>
+    </div>
+    <div class="period-bar" data-mode="term" data-compact="1"></div>
+    <div class="w-card" id="sumWeights"></div>
+    <div id="sumStats" class="sum-stats"></div>
+    <div class="score-scroll"><div id="sumTableWrap"></div></div>
+  </section>
+
+  <!-- TEACHING LOG -->
+  <section id="view-teaching" class="view">
+    <div class="topbar">
+      <button class="back-btn" data-back="view-home">‹</button>
+      <div class="tb-txt"><h2>บันทึกหลังการสอน</h2><div class="sub">ข้อสังเกต แนวทางแก้ไข และผลการพัฒนา</div></div>
+      <span class="tb-ico">📝</span>
+    </div>
+    <div class="period-bar" data-mode="full"></div>
+    <div class="card">
+      <div class="field"><label>ห้อง / ชั้นปี</label><select id="teachRoom" class="room-select"></select></div>
+      <div class="field"><label>วิชา</label><select id="teachSubject" class="subject-select"><option value="">เลือกห้องก่อน</option></select></div>
+      <div class="field"><label>วันที่</label><input id="teachDate" type="date"></div>
+      <div class="field"><label>ข้อสังเกต</label><textarea id="teachObs"></textarea></div>
+      <div class="field"><label>แนวทางแก้ไข</label><textarea id="teachSolution"></textarea></div>
+      <div class="field"><label>ผลการพัฒนา</label><textarea id="teachDev"></textarea></div>
+    </div>
+    <button id="teachSaveBtn" class="btn btn-primary">บันทึก</button>
+  </section>
+
+  <!-- EXAM PLACEHOLDER -->
+  <section id="view-exam" class="view">
+    <div class="topbar">
+      <button class="back-btn" data-back="view-home">‹</button>
+      <div class="tb-txt"><h2>ตรวจข้อสอบ</h2><div class="sub">เร็วๆ นี้</div></div>
+      <span class="tb-ico">🧾</span>
+    </div>
+    <div class="empty-note">ฟีเจอร์นี้กำลังจะมาเร็วๆ นี้</div>
+  </section>
+
+
+  <!-- MODAL: header generator -->
+  <div class="modal-backdrop" id="modalHeaderGen">
+    <div class="modal-sheet">
+      <h3>สร้างหัวคะแนน (18 สัปดาห์)</h3>
+      <div class="field"><label>สอนกี่คาบต่อสัปดาห์</label>
+        <div class="seg" id="genPeriods">
+          <button type="button" data-n="1">1 คาบ (A)</button>
+          <button type="button" data-n="2">2 คาบ (AB)</button>
+          <button type="button" data-n="3">3 คาบ (ABC)</button>
+        </div>
+      </div>
+      <div class="field"><label>วันสอนครั้งที่ 1 (A)</label><input id="genDateA" type="date"></div>
+      <div class="field" id="genFieldB"><label>วันสอนครั้งที่ 2 (B)</label><input id="genDateB" type="date"></div>
+      <div class="field" id="genFieldC"><label>วันสอนครั้งที่ 3 (C)</label><input id="genDateC" type="date"></div>
+      <p class="hint" id="genHint"></p>
+      <p class="hint warn" id="genWarn" style="display:none;"></p>
+      <div class="modal-actions">
+        <button class="btn btn-outline" data-close>ยกเลิก</button>
+        <button id="genConfirmBtn" class="btn btn-primary">สร้างตาราง</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: assignment -->
+  <div class="modal-backdrop" id="modalAssignment">
+    <div class="modal-sheet">
+      <h3>ตั้งค่าหัวคะแนน · <span id="actDateLabel"></span></h3>
+      <div class="field"><label>วันที่ (แก้ไขได้ เช่น เลื่อนเพราะวันหยุด)</label><input id="actDateInput" type="date"></div>
+      <div class="field"><label>ชื่องาน (ไม่ใส่ก็ได้)</label><input id="actName"></div>
+      <div class="field"><label>คำอธิบายงาน (ไม่ใส่ก็ได้)</label><textarea id="actDesc"></textarea></div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" data-close>ยกเลิก</button>
+        <button id="actSaveBtn" class="btn btn-primary">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: score pick -->
+  <div class="modal-backdrop" id="modalScorePick">
+    <div class="modal-sheet">
+      <h3>ให้คะแนน</h3>
+      <div class="pick-who" id="pickLabel"></div>
+      <div class="score-pick" id="scorePickGrid">
+        <button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button>
+        <button data-v="4">4</button><button data-v="5">5</button>
+      </div>
+      <div class="modal-actions">
+        <button id="scoreClearBtn" class="btn btn-danger">🗑 ลบคะแนน</button>
+        <button class="btn btn-outline" data-close>ปิด</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: confirm (แทน confirm() ของเบราว์เซอร์) -->
+  <div class="modal-backdrop" id="modalConfirm">
+    <div class="modal-sheet confirm-sheet">
+      <div class="confirm-ico" id="confirmIco">⚠️</div>
+      <h3 id="confirmTitle"></h3>
+      <p class="confirm-msg" id="confirmMsg"></p>
+      <div class="confirm-stats" id="confirmStats"></div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" id="confirmCancel">ยกเลิก</button>
+        <button class="btn btn-primary" id="confirmOk">ตกลง</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- SAVING OVERLAY -->
+  <div class="loading-overlay" id="savingOverlay">
+    <div class="loading-box">
+      <div class="spinner"></div>
+      <div class="loading-msg" id="savingMsg">กำลังบันทึกข้อมูล...</div>
+    </div>
+  </div>
+</div>
+<script src="script.js?v=12"></script>
+</body>
+</html>
