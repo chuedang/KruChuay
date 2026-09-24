@@ -521,3 +521,62 @@ td.sum b.s-late.on{color:#B45309; font-weight:700;}
 .near-tag{display:block; margin-top:3px; font-size:10.5px; font-weight:700; color:#B45309;}
 .sum-table tr.near td, .sum-table tr.near td.name-cell{background:#FFF1BF !important;}
 .sum-table tr.near td.name-cell{box-shadow:2px 0 0 #F5D36B, inset 4px 0 0 #F59E0B;}
+
+/* =====================================================================
+   Round 12 : ปุ่ม ขาด/ลา/สาย เป็นสีเทาจนกว่าจะกด + ปรับให้ใช้บนมือถือ
+   ===================================================================== */
+.chip[data-status]{background:#EEF1F6; color:#9AA3B5;}
+.chip[data-status="present"].active{background:var(--present); color:#fff;}
+.chip[data-status="absent"].active{background:var(--absent); color:#fff;}
+.chip[data-status="leave"].active{background:var(--leave); color:#fff;}
+.chip[data-status="late"].active{background:var(--late); color:#fff;}
+.sum-tile.zero{background:#F1F3F8 !important; color:#A3ABBC !important;}
+.score-scroll{overscroll-behavior:contain;}
+
+@media (max-width:600px){
+  .view{padding:10px 10px 16px;}
+  .topbar{padding:8px 10px; margin-bottom:8px; gap:8px; border-radius:18px;}
+  .topbar h2{font-size:16px;}
+  .topbar .sub{font-size:11px; margin-top:0;}
+  .back-btn{width:34px; height:34px; font-size:22px;}
+  .tb-ico{width:34px; height:34px; border-radius:11px; font-size:17px;}
+
+  .period-bar{padding:10px 10px 8px; margin-bottom:10px;}
+  .pb-now{font-size:18px;}
+  .pb-head{margin-bottom:8px;}
+  /* แถบแบบกะทัดรัด: ซ่อนหัวข้อ เหลือแต่ปุ่มเลือก (ปุ่มที่เลือกอยู่ขึ้นสีขาวเด่นบนพื้นสีตามประเภท) */
+  .period-bar[data-compact]:not([data-mode="lock"]) .pb-head{display:none;}
+  .period-bar[data-compact]:not([data-mode="lock"]){padding:6px; margin-bottom:8px;}
+  .pb-seg em{padding:0 4px 0 6px; font-size:11.5px;}
+  .pb-seg button{padding:6px 11px;}
+  .pb-type{min-width:0; flex:1 1 150px;}
+
+  .score-tabs{margin-bottom:8px; gap:6px;}
+  .score-tabs button{padding:8px 4px; font-size:12px;}
+  .score-tabs .tab-sum{padding:8px 10px;}
+  .table-toolbar{margin-bottom:8px;}
+  .table-toolbar .btn-sm{padding:7px 12px;}
+  #scoreSaveBar{margin-top:8px;}
+  #scoreSaveBar .btn{padding:12px 16px; font-size:15px;}
+  #scoreTableWrap .hint, #examWrap .hint{display:none;}
+
+  .exam-setup{padding:8px 10px 10px; margin-bottom:8px; border-radius:16px;}
+  .ex-title{display:none;}
+  .ex-grid input{padding:7px; font-size:15px;}
+  .exam-in{width:62px; padding:7px 2px;}
+
+  .score-scroll{border-radius:16px;}
+  table.score-table thead th.name-head, table.score-table td.name-cell{width:100px; min-width:100px; max-width:100px; font-size:12px;}
+  table.score-table th, table.score-table td{padding:6px 5px;}
+  .score-circle{width:38px; height:38px;}
+
+  #attendSummary{margin-bottom:10px; gap:6px;}
+  .sum-tile{padding:6px 2px 5px;} .sum-tile b{font-size:17px;}
+  .roster{gap:7px;}
+  .roster-row{padding:8px 10px; border-radius:14px; gap:8px;}
+  .roster-row .no{width:24px; height:24px; font-size:11px;}
+  .chip{width:36px; padding:8px 0;}
+  .exist-note{padding:8px 10px; font-size:12px; margin-bottom:8px;}
+  .w-card{padding:10px; margin-bottom:8px;}
+  .w-grid input{padding:8px;}
+}
