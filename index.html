@@ -250,6 +250,7 @@
         <span class="arrow">›</span>
       </button>
     </div>
+    <button id="emPrintBtn" class="btn btn-outline btn-block" style="margin-top:16px;">🖨 พิมพ์กระดาษคำตอบเปล่า</button>
   </section>
 
   <!-- EXAM: ตั้งเฉลย 1-20 -->
@@ -274,18 +275,40 @@
     <div class="score-scroll"><div id="examSumWrap"></div></div>
   </section>
 
-  <!-- EXAM: Scan (กำลังพัฒนาต่อ — ยังไม่ใช่กล้อง OMR จริง) -->
+  <!-- EXAM: Scan (กล้อง OMR — ตรวจจับหมุด 4 มุม / ปรับมุมภาพ / อ่านวงกลมคำตอบ) -->
   <section id="view-exam-scan" class="view">
     <div class="topbar">
       <button class="back-btn" data-back="view-exam-manage">‹</button>
-      <div class="tb-txt"><h2>Scan</h2><div class="sub">สแกนกระดาษคำตอบ</div></div>
+      <div class="tb-txt"><h2>Scan</h2><div class="sub" id="scanSub">สแกนกระดาษคำตอบ</div></div>
       <span class="tb-ico">📷</span>
     </div>
-    <div class="empty-state">
-      <div class="es-ico">📷</div>
-      <h4>กำลังพัฒนาต่อ</h4>
-      <p>ขั้นตอนต่อไปคือเปิดกล้อง ตรวจจับกระดาษจากจุดมุมสี่จุด ปรับภาพให้ตรง แล้วอ่านวงกลมคำตอบให้อัตโนมัติ<br>ระหว่างนี้ตั้งเฉลยไว้ก่อนได้เลยครับ</p>
-      <div class="es-actions"><button class="btn btn-primary btn-sm" data-back="view-exam-manage">‹ กลับไปตั้งเฉลย</button></div>
+
+    <div class="scan-stage" id="scanStage">
+      <video id="scanVideo" playsinline muted autoplay></video>
+      <canvas id="scanOverlay"></canvas>
+      <div class="scan-status" id="scanStatus">กำลังเปิดกล้อง…</div>
+    </div>
+
+    <div class="scan-num-row">
+      <button id="scanNumPrev" class="scan-num-btn" type="button">‹</button>
+      <div class="scan-num-cur">กำลังสแกนเลขที่ <b id="scanNumCur">1</b></div>
+      <button id="scanNumNext" class="scan-num-btn" type="button">›</button>
+    </div>
+
+    <div class="scan-result" id="scanResult" style="display:none">
+      <img id="scanResultThumb" class="scan-result-thumb" alt="หัวกระดาษที่สแกน">
+      <div class="scan-result-info">
+        <div class="scan-result-score" id="scanResultScore"></div>
+        <div class="scan-result-actions">
+          <button id="scanRedoBtn" class="btn btn-outline btn-sm" type="button">สแกนใหม่</button>
+          <button id="scanOkBtn" class="btn btn-primary btn-sm" type="button">ถัดไป ›</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="scan-controls">
+      <button id="scanFlipBtn" class="btn btn-outline btn-sm" type="button">🔄 สลับกล้อง</button>
+      <button id="scanManualBtn" class="btn btn-gold btn-sm" type="button">📸 ถ่ายเอง</button>
     </div>
   </section>
 
@@ -379,6 +402,6 @@
     </div>
   </div>
 </div>
-<script src="script.js?v=19"></script>
+<script src="script.js?v=20"></script>
 </body>
 </html>
