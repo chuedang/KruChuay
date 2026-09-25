@@ -1,5 +1,5 @@
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbxDFdMLdKgg8B09CDRzrYw3fmBBTv0EydkMQNhXqy4BMAF-ZhAVDLDKNXQXML7GAXzl/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbxB41G5zwGmTLLqeBYSKMhew_FVXYdLN49cbSbVBns-k6rnYsKct8OKhvPCcahz2O8i/exec"
 };
 
 const SLOT_MIN = 36; // จำนวนช่องว่างเริ่มต้นเมื่อยังไม่มีหัวคะแนน (18 สัปดาห์ x 2 คาบ) — ถ้ามีหัวแล้วจะคำนวณจาก slotTarget()
@@ -9,7 +9,8 @@ const state = {
   students: [], scores: [], activities: [], attendance: [], teaching: [], config: [], examRows: [], examSetup: [],
   examUi: { mc:"", es:"", vals:new Map(), dirty:false },
   attend: { room:"", subject:"", date:"", rows:[] },
-  score: { tab:"beh", room:"", subject:"", headers:[], editingDate:null, pickCell:null, pending:new Map(), warned:false, scrolled:false }
+  score: { tab:"beh", room:"", subject:"", headers:[], editingDate:null, pickCell:null, pending:new Map(), warned:false, scrolled:false },
+  examSets: []
 };
 
 const qs = (s, r=document) => r.querySelector(s);
@@ -41,6 +42,20 @@ const period = (()=>{
   try{ const p = JSON.parse(localStorage.getItem(PERIOD_KEY)); if(p && ["1","2"].includes(String(p.term)) && TYPES.includes(p.type)) return { term:String(p.term), type:p.type }; }catch(e){}
   return { term:"1", type:"กลางภาค" };
 })();
+
+/* ================= ตรวจข้อสอบ (เก็บในเครื่องด้วย localStorage — คนละส่วนกับ Google Sheet) =================
+   ชุดข้อสอบแต่ละชุด: { id, name, answerKey:{ "1":"ก", ... }, students:{ "7":{score,total,headerImage,scannedAt}, ... } }
+   ตอนนี้เป็นโครงเริ่มต้น: สร้าง/ลบชุด + ตั้งเฉลย + ดูตารางสรุป — ส่วนกล้อง/ตรวจ OMR จริงจะเพิ่มในขั้นถัดไป */
+const EXAM_SETS_KEY = "kc_examsets";
+const EXAM_LETTERS = ["ก","ข","ค","ง"];
+function loadExamSets(){
+  try{ const a = JSON.parse(localStorage.getItem(EXAM_SETS_KEY)); if(Array.isArray(a)) return a; }catch(e){}
+  return [];
+}
+function saveExamSets(){ try{ localStorage.setItem(EXAM_SETS_KEY, JSON.stringify(state.examSets)); }catch(e){} }
+state.examSets = loadExamSets();
+let currentExamId = null;
+const currentExamSet = () => state.examSets.find(s=>s.id===currentExamId);
 /* แถวในชีทที่อยู่ในภาคเรียน+ประเภทที่เลือกอยู่ (แถวเก่าที่ช่อง ภาคเรียนที่/ประเภท ว่าง จะไม่ตรง) */
 const inPeriod = r => sameStr(r["ภาคเรียนที่"], period.term) && sameStr(r["ประเภท"], period.type);
 const scoreUnsaved = () => state.score.pending.size + (state.examUi.dirty ? 1 : 0);
@@ -122,18 +137,24 @@ async function apiGet(type){
   const res = await fetch(`${CONFIG.API_URL}?type=${type}`);
   return res.json();
 }
-const GS_REQUIRED = "v5";
-async function apiPost(payload){
+const GS_REQUIRED = "v6";
+const sleep = ms => new Promise(r=>setTimeout(r, ms));
+async function apiPost(payload, tries=3){
   if(state.gsOld) return { success:false, message:"Apps Script ที่เชื่อมอยู่ยังเป็นเวอร์ชันเก่า (ไม่รองรับภาคเรียน/ประเภท) — Deploy โค้ด GS.txt ล่าสุด แล้วใส่ลิงก์ใน CONFIG.API_URL ของ script.js จากนั้นรีเฟรชแบบล้างแคช" };
-  try{
-    const res = await fetch(CONFIG.API_URL, {
-      method:"POST",
-      headers:{"Content-Type":"text/plain;charset=utf-8"},
-      body: JSON.stringify(payload)
-    });
-    return await res.json();
-  }catch(err){
-    return { success:false, message:"เชื่อมต่อชีทไม่สำเร็จ (ตรวจเน็ต หรือ Deploy Apps Script เป็นเวอร์ชันใหม่แล้วหรือยัง)" };
+  for(let i=0; i<tries; i++){
+    try{
+      const res = await fetch(CONFIG.API_URL, {
+        method:"POST",
+        headers:{"Content-Type":"text/plain;charset=utf-8"},
+        body: JSON.stringify(payload)
+      });
+      return await res.json();
+    }catch(err){
+      // เน็ตมือถือหลุดกลางทางบ่อย ทั้งที่ Apps Script มักบันทึกสำเร็จไปแล้วฝั่งหลังบ้าน (ทุกคำสั่งเขียนเป็นแบบ upsert
+      // จึงส่งซ้ำได้อย่างปลอดภัย ไม่สร้างแถวซ้ำ) — ลองใหม่อัตโนมัติก่อนแจ้งว่าไม่สำเร็จ
+      if(i < tries-1){ await sleep(1000 * (i+1)); continue; }
+      return { success:false, network:true, message:"เชื่อมต่อชีทไม่สำเร็จ (ตรวจเน็ต หรือ Deploy Apps Script เป็นเวอร์ชันใหม่แล้วหรือยัง) — ข้อมูลอาจบันทึกไปแล้วฝั่งหลังบ้าน ลองกดรีเฟรชดูอีกครั้งก่อนบันทึกซ้ำ" };
+    }
   }
 }
 
@@ -205,7 +226,7 @@ qsa(".menu-item[data-go]").forEach(btn=>{
     if(go==="attend"){ fillRoomSelects(); qs("#attendDate").value = todayISO(); showView("view-attend-setup"); }
     if(go==="scores"){ fillRoomSelects(); showView("view-scores-setup"); }
     if(go==="teaching"){ fillRoomSelects(); qs("#teachDate").value = todayISO(); showView("view-teaching"); }
-    if(go==="exam"){ showView("view-exam"); }
+    if(go==="exam"){ renderExamHome(); showView("view-exam"); }
   });
 });
 qsa("[data-back]").forEach(b=> b.addEventListener("click", async ()=>{
@@ -224,6 +245,7 @@ qsa("[data-back]").forEach(b=> b.addEventListener("click", async ()=>{
 
 /* ================= ATTENDANCE ================= */
 qs("#attendStartBtn").addEventListener("click", async ()=>{
+  exitFocusMode();
   const room = qs("#attendRoom").value, subject = qs("#attendSubject").value.trim(), date = qs("#attendDate").value;
   if(!room || !subject || !date){ toast("กรอกข้อมูลให้ครบก่อนครับ"); return; }
   state.attend.room = room; state.attend.subject = subject; state.attend.date = date;
@@ -313,11 +335,19 @@ qs("#attendSaveBtn").addEventListener("click", async ()=>{
     hideSaving();
     toast(state.attend.existing ? "แก้ไขการเช็คชื่อเดิมของวันนี้แล้ว" : "บันทึกการเช็คชื่อแล้ว");
     showView("view-home");
+  } else if(res.network){
+    // เน็ตสะดุดตอนรอผล แต่ addAttendance เป็น upsert — โหลดชีทมาเช็คก่อนว่าวันนี้ถูกบันทึกไปแล้วหรือยัง
+    await loadAll();
+    const ok = state.attendance.some(a => sameStr(a["รายวิชา"],subject) && sameStr(a["ระดับชั้น"],room) && dateKey(a["วันที่"])===date && inPeriod(a));
+    hideSaving();
+    if(ok){ toast("การเชื่อมต่อสะดุดแต่บันทึกสำเร็จแล้ว ✓ (ตรวจกับชีทให้แล้ว)"); showView("view-home"); }
+    else toast(res.message || "บันทึกไม่สำเร็จ");
   } else { hideSaving(); toast(res.message || "บันทึกไม่สำเร็จ"); }
 });
 
 /* ================= SCORES ================= */
 qs("#scoreStartBtn").addEventListener("click", ()=>{
+  exitFocusMode();
   const room = qs("#scoreRoom").value, subject = qs("#scoreSubject").value.trim();
   if(!room || !subject){ toast("เลือกห้องและวิชาก่อนครับ"); return; }
   state.score.room = room; state.score.subject = subject;
@@ -514,6 +544,14 @@ qs("#scoreSaveBtn").addEventListener("click", async ()=>{
     hideSaving();
     toast("บันทึกคะแนนแล้ว ✓");
     renderScoreTable();
+  } else if(res.network){
+    // เน็ตสะดุดตอนรอผล แต่คำสั่งเป็น upsert — โหลดชีทมาเช็คว่ารายการที่ค้างอยู่เข้าไปจริงหรือยังก่อนฟันธงว่าพัง
+    await loadAll();
+    const stillPending = items.some(it => findScore(it.name, it.date) === null);
+    hideSaving();
+    if(!stillPending){ state.score.pending.clear(); toast("การเชื่อมต่อสะดุดแต่บันทึกสำเร็จแล้ว ✓ (ตรวจกับชีทให้แล้ว)"); }
+    else toast(res.message || "บันทึกไม่สำเร็จ");
+    renderScoreTable();
   } else { hideSaving(); toast(res.message || "บันทึกไม่สำเร็จ"); }
 });
 
@@ -632,17 +670,22 @@ qs("#genConfirmBtn").addEventListener("click", async ()=>{
   qs("#modalHeaderGen").classList.remove("active");
   showSaving("กำลังบันทึกหัวคะแนนลงชีท Act...");
   const res = await apiPost({ type:"setHeaders", term: period.term, ptype: period.type, subject: state.score.subject, level: state.score.room, dates, weeks: GEN_WEEKS, periods: gen.periods });
-  if(res.success){
+  if(res.success || res.network){
+    // res.network = เน็ตหลุดตอนรอผลลัพธ์ แต่ Apps Script อาจเขียนสำเร็จไปแล้วฝั่งหลังบ้าน (มือถือเจอบ่อย) —
+    // โหลดข้อมูลจริงจากชีทมาตรวจก่อน ถ้าจำนวนแถวตรงกับที่ควรจะเป็นก็ถือว่าสำเร็จ ไม่ต้องให้ผู้ใช้เข้าใจผิดว่าพัง
     await loadAll();
     state.score.scrolled = false;
     syncHeadersWithActivities();
     hideSaving();
     renderScoreTable();
-    // ตรวจซ้ำหลังบันทึก: Act ต้องเหลือเท่าจำนวนวันใหม่พอดี ไม่มีแถวเก่าค้าง
     const left = actRowsOfRoom().length;
-    toast(left !== dates.length
-      ? `⚠ ใน Act เหลือ ${left} แถว (ควรเป็น ${dates.length}) — ตรวจสคริปต์ setHeaders ฝั่ง Apps Script`
-      : (res.message || "สร้างหัวคะแนนเรียบร้อย"));
+    if(left === dates.length){
+      toast(res.success ? (res.message || "สร้างหัวคะแนนเรียบร้อย") : "การเชื่อมต่อสะดุดแต่บันทึกสำเร็จแล้ว ✓ (ตรวจกับชีทให้แล้ว)");
+    } else if(res.success){
+      toast(`⚠ ใน Act เหลือ ${left} แถว (ควรเป็น ${dates.length}) — ตรวจสคริปต์ setHeaders ฝั่ง Apps Script`);
+    } else {
+      toast(res.message || "สร้างหัวคะแนนไม่สำเร็จ");
+    }
   } else { hideSaving(); toast(res.message || "สร้างหัวคะแนนไม่สำเร็จ"); }
 });
 
@@ -688,12 +731,13 @@ qs("#actSaveBtn").addEventListener("click", async ()=>{
   } else { hideSaving(); toast(res.message || "บันทึกไม่สำเร็จ"); }
 });
 
-/* score pick modal — แค่ "จำ" ค่าไว้ในเครื่องก่อน ยังไม่ยิง API จนกว่าจะกด "บันทึกคะแนน" */
-function openScorePick(name, date){
-  if(!date){ openAssignmentModal(null); return; }        // ช่องว่างที่ยังไม่มีวันที่ -> เปิดหน้าเพิ่มวันที่
-  state.score.pickCell = { name, date };
-  const cur = currentScore(name, date);
-  qs("#pickLabel").textContent = `${name} · ${fmtLong(date)}`;
+/* score pick modal — ใช้ร่วมกัน 2 โหมด: "weekly" (คะแนนเก็บ/จิตพิสัยรายวัน จำไว้ในเครื่องก่อน ยังไม่ยิง API
+   จนกว่าจะกด "บันทึกคะแนน") และ "examBeh" (จิตพิสัยของรอบสอบ กลางภาค/ปลายภาค บันทึกทันทีลง state.examUi) */
+function openScorePick(name, date, mode="weekly"){
+  if(mode==="weekly" && !date){ openAssignmentModal(null); return; }   // ช่องว่างที่ยังไม่มีวันที่ -> เปิดหน้าเพิ่มวันที่
+  state.score.pickCell = { name, date, mode };
+  const cur = mode==="examBeh" ? (state.examUi.vals.get(name)?.beh ?? null) : currentScore(name, date);
+  qs("#pickLabel").textContent = mode==="examBeh" ? `${name} · จิตพิสัย (${period.type})` : `${name} · ${fmtLong(date)}`;
   qsa("#scorePickGrid button").forEach(b=> b.classList.toggle("cur", cur!==null && Number(b.dataset.v)===cur));
   const clr = qs("#scoreClearBtn"); if(clr) clr.style.display = (cur===null) ? "none" : "";     // มีคะแนนอยู่ถึงจะมีปุ่มลบ
   qs("#modalScorePick").classList.add("active");
@@ -701,8 +745,15 @@ function openScorePick(name, date){
 qsa("#modalScorePick [data-close]").forEach(b=>b.addEventListener("click", ()=> qs("#modalScorePick").classList.remove("active")));
 qsa("#scorePickGrid button").forEach(btn=>{
   btn.addEventListener("click", ()=>{
-    const { name, date } = state.score.pickCell;
-    const v = Number(btn.dataset.v), key = pendingKey(name, date);
+    const { name, date, mode } = state.score.pickCell;
+    const v = Number(btn.dataset.v);
+    if(mode==="examBeh"){
+      const rec = state.examUi.vals.get(name); if(rec){ rec.beh = v; state.examUi.dirty = true; }
+      qs("#modalScorePick").classList.remove("active");
+      refreshExamBehCircle(name); updateExamSaveBar();
+      return;
+    }
+    const key = pendingKey(name, date);
     if(v === savedScore(name, date)) state.score.pending.delete(key);   // เท่าค่าเดิม ไม่ต้องบันทึกซ้ำ
     else state.score.pending.set(key, v);
     qs("#modalScorePick").classList.remove("active");
@@ -711,7 +762,13 @@ qsa("#scorePickGrid button").forEach(btn=>{
 });
 /* ลบคะแนน: ถ้าเคยบันทึกไว้แล้ว -> ทำเครื่องหมายรอลบ (ลบจริงตอนกดบันทึกคะแนน) / ถ้าเพิ่งลงยังไม่บันทึก -> ยกเลิกเฉยๆ */
 qs("#scoreClearBtn")?.addEventListener("click", ()=>{
-  const { name, date } = state.score.pickCell;
+  const { name, date, mode } = state.score.pickCell;
+  if(mode==="examBeh"){
+    const rec = state.examUi.vals.get(name); if(rec){ rec.beh = null; state.examUi.dirty = true; }
+    qs("#modalScorePick").classList.remove("active");
+    refreshExamBehCircle(name); updateExamSaveBar();
+    return;
+  }
   const key = pendingKey(name, date);
   if(savedScore(name, date)!==null) state.score.pending.set(key, null);
   else state.score.pending.delete(key);
@@ -795,6 +852,7 @@ qs("#attendReportBtn").addEventListener("click", ()=>{
 });
 
 qs("#repStartBtn").addEventListener("click", async ()=>{
+  exitFocusMode();
   const room = qs("#repRoom").value, subject = qs("#repSubject").value.trim(), start = qs("#repStart").value;
   if(!room || !subject || !start){ toast("เลือกห้อง วิชา และวันที่เริ่มต้นให้ครบก่อนครับ"); return; }
   showSaving("กำลังโหลดข้อมูลการเช็คชื่อ...");
@@ -886,7 +944,7 @@ function loadExamUi(){
   u.vals = new Map();
   scoreRoster(room).forEach(st=>{
     const r = findExamRow(period.term, period.type, room, subject, st.key);
-    u.vals.set(st.key, { mc: numOrNull(r?.["ปรนัย"]), es: numOrNull(r?.["อัตนัย"]) });
+    u.vals.set(st.key, { beh: numOrNull(r?.["จิตพิสัย"]), mc: numOrNull(r?.["ปรนัย"]), es: numOrNull(r?.["อัตนัย"]) });
   });
   u.dirty = false;
 }
@@ -906,14 +964,17 @@ function renderExam(){
     </div>`;
   let rows = "";
   roster.forEach(st=>{
-    const v = u.vals.get(st.key) || { mc:null, es:null };
+    const v = u.vals.get(st.key) || { beh:null, mc:null, es:null };
+    const bCls = v.beh===null ? "" : `filled v${v.beh}`;
     rows += `<tr data-name="${esc(st.key)}"><td class="name-cell">${snum(st.no)}${esc(st.label)}</td>
+      <td><div class="score-circle beh-circle ${bCls}" data-name="${esc(st.key)}">${v.beh===null?"":v.beh}</div></td>
       <td><input class="exam-in" data-k="mc" type="number" inputmode="decimal" min="0" step="any" value="${v.mc===null?"":v.mc}"></td>
       <td><input class="exam-in" data-k="es" type="number" inputmode="decimal" min="0" step="any" value="${v.es===null?"":v.es}"></td>
       <td class="exam-tot"></td></tr>`;
   });
-  wrap.innerHTML = `<table class="score-table exam-table"><thead><tr><th class="name-head">ชื่อ</th><th>ปรนัย</th><th>อัตนัย</th><th>รวม</th></tr></thead><tbody>${rows}</tbody></table>
-    <div class="hint" style="padding:10px 12px 0;">พิมพ์คะแนนที่ได้ในแต่ละช่อง · ช่องสีแดง = เกินคะแนนเต็ม · กด "บันทึกคะแนนสอบ" ด้านล่างครั้งเดียว</div>`;
+  wrap.innerHTML = `<table class="score-table exam-table"><thead><tr><th class="name-head">ชื่อ</th><th>จิตพิสัย</th><th>ปรนัย</th><th>อัตนัย</th><th>รวม</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="hint" style="padding:10px 12px 0;">กดวงกลมเพื่อให้คะแนนจิตพิสัย 1-5 · พิมพ์คะแนนปรนัย/อัตนัยที่ได้ในแต่ละช่อง · ช่องสีแดง = เกินคะแนนเต็ม · กด "บันทึกคะแนนสอบ" ด้านล่างครั้งเดียว</div>`;
+  qsa(".beh-circle", wrap).forEach(c=> c.addEventListener("click", ()=> openScorePick(c.dataset.name, "", "examBeh")));
   refreshExamCalc();
 }
 /* คำนวณรวม/ตรวจเกินคะแนนเต็มโดยไม่วาดตารางใหม่ (ไม่ให้แป้นพิมพ์หลุด) */
@@ -932,6 +993,13 @@ function refreshExamCalc(){
   });
   const info = qs("#examInfo"); if(info) info.textContent = `${u.vals.size} คน · ลงแล้ว ${filled}`;
   updateExamSaveBar();
+}
+/* วาดใหม่แค่วงกลมจิตพิสัยช่องเดียว (กันตารางกระพริบ/แป้นพิมพ์หลุดตอนพิมพ์ปรนัย-อัตนัยอยู่) */
+function refreshExamBehCircle(name){
+  const v = state.examUi.vals.get(name); if(!v) return;
+  const el = qs(`.beh-circle[data-name="${CSS.escape(name)}"]`); if(!el) return;
+  el.className = `score-circle beh-circle ${v.beh===null ? "" : `filled v${v.beh}`}`;
+  el.textContent = v.beh===null ? "" : v.beh;
 }
 function updateExamSaveBar(){ const b = qs("#examSaveBtn"); if(b) b.disabled = !state.examUi.dirty; }
 
@@ -957,7 +1025,7 @@ qs("#examSaveBtn").addEventListener("click", async ()=>{
     if(v.es!==null && (v.es<0 || fe===null || v.es>fe)) bad = true;
   });
   if(bad){ toast("มีคะแนนเกินคะแนนเต็ม หรือยังไม่ได้ใส่คะแนนเต็ม — ตรวจช่องสีแดงก่อนครับ"); return; }
-  const items = [...u.vals].map(([name, v]) => ({ name, mc:v.mc, es:v.es }));
+  const items = [...u.vals].map(([name, v]) => ({ name, beh:v.beh, mc:v.mc, es:v.es }));
   qs("#examSaveBtn").disabled = true;
   showSaving("กำลังบันทึกคะแนนสอบ...");
   const res = await apiPost({ type:"saveExam", term:period.term, ptype:period.type, subject, level:room, fullMc:fm, fullEs:fe, items });
@@ -966,6 +1034,14 @@ qs("#examSaveBtn").addEventListener("click", async ()=>{
     loadExamUi(); renderExam();
     hideSaving();
     toast("บันทึกคะแนนสอบแล้ว ✓");
+  } else if(res.network){
+    // เน็ตสะดุดตอนรอผล แต่ saveExam เป็น upsert — โหลดชีทมาเช็คก่อนว่าบันทึกไปแล้วจริงหรือยัง
+    await loadAll();
+    const s = findExamSetup(period.term, period.type, room, subject);
+    const ok = s && numOrNull(s["คะแนนเต็มปรนัย"])===fm && numOrNull(s["คะแนนเต็มอัตนัย"])===fe;
+    hideSaving();
+    if(ok){ loadExamUi(); renderExam(); toast("การเชื่อมต่อสะดุดแต่บันทึกสำเร็จแล้ว ✓ (ตรวจกับชีทให้แล้ว)"); }
+    else { updateExamSaveBar(); toast(res.message || "บันทึกไม่สำเร็จ"); }
   } else { hideSaving(); updateExamSaveBar(); toast(res.message || "บันทึกไม่สำเร็จ"); }
 });
 
@@ -1094,6 +1170,7 @@ function renderSummary(){
 }
 let sumBack = "view-scores-setup";
 async function openSummary(room, subject, back){
+  exitFocusMode();
   if(!room || !subject){ toast("เลือกห้องและวิชาก่อนครับ"); return; }
   if(state.score.room!==room || state.score.subject!==subject){
     state.score.room = room; state.score.subject = subject; state.score.pending = new Map(); state.examUi.dirty = false;
@@ -1112,6 +1189,226 @@ qs("#openSummaryBtn").addEventListener("click", ()=> openSummary(state.score.roo
 qs("#sumBackBtn").addEventListener("click", ()=> showView(sumBack));
 
 renderPeriodBars();
+
+/* ================= สรุปงานค้างนักเรียน (ไม่โชว์คะแนน ใช้ให้เด็กดูได้ว่ายังขาดงานอะไรบ้าง) ================= */
+function renderPending(){
+  const { room, subject } = state.score;
+  qs("#pendHeadSub").textContent = `${room} · ${subject} · ภาคเรียนที่ ${period.term} · ${period.type}`;
+  const acts = state.activities
+    .filter(a=> sameStr(a["รายวิชา"],subject) && sameStr(a["ระดับชั้น"],room) && inPeriod(a) && dateKey(a["วันที่"]))
+    .map(a=> ({ date: dateKey(a["วันที่"]), name: String(a["งาน"]||"").trim() }))
+    .sort((x,y)=> x.date.localeCompare(y.date));
+  const roster = scoreRoster(room);
+  const wrap = qs("#pendTableWrap");
+  if(roster.length===0){ wrap.innerHTML = `<div class="empty-note">ไม่พบรายชื่อนักเรียนในห้องนี้</div>`; qs("#pendInfo").textContent = ""; return; }
+  if(acts.length===0){ wrap.innerHTML = `<div class="empty-note">ยังไม่มีหัวคะแนนของวิชานี้ในภาคเรียน/ประเภทที่เลือก</div>`; qs("#pendInfo").textContent = ""; return; }
+
+  let doneN = 0;
+  const rowsHtml = roster.map(st=>{
+    const missing = acts.filter(a => savedScore(st.key, a.date) === null);
+    if(missing.length===0) doneN++;
+    const chips = missing.map(a=> `<span class="pend-chip">${fmtLong(a.date)}${a.name ? ` · ${esc(a.name)}` : ""}</span>`).join("");
+    return `<tr><td class="name-cell">${snum(st.no)}${esc(st.label)}</td>
+      <td class="pend-cell">${missing.length ? chips : `<span class="pend-ok">✅ ครบแล้ว</span>`}</td></tr>`;
+  }).join("");
+  wrap.innerHTML = `<table class="score-table pend-table"><thead><tr><th class="name-head">ชื่อ</th><th>งานที่ค้าง</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
+  qs("#pendInfo").textContent = `${acts.length} งาน · ครบแล้ว ${doneN}/${roster.length} คน`;
+}
+let pendBack = "view-scores-setup";
+async function openPending(room, subject){
+  exitFocusMode();
+  if(!room || !subject){ toast("เลือกห้องและวิชาก่อนครับ"); return; }
+  if(state.score.room!==room || state.score.subject!==subject){
+    state.score.room = room; state.score.subject = subject; state.score.pending = new Map(); state.examUi.dirty = false;
+  }
+  showSaving("กำลังโหลดข้อมูลล่าสุด...");
+  await loadAll();
+  hideSaving();
+  renderPeriodBars();
+  renderPending();
+  showView("view-pending");
+}
+qs("#scorePendingBtn").addEventListener("click", ()=> openPending(qs("#scoreRoom").value, qs("#scoreSubject").value.trim()));
+qs("#pendBackBtn").addEventListener("click", ()=> showView(pendBack));
+
+/* ================= ตรวจข้อสอบ : หน้าแรก (รายการชุดข้อสอบ) ================= */
+function renderExamHome(){
+  const wrap = qs("#examSetList");
+  if(!state.examSets.length){
+    wrap.innerHTML = `
+      <div class="empty-state">
+        <div class="es-ico">🧾</div>
+        <h4>ยังไม่มีชุดข้อสอบ</h4>
+        <p>กดปุ่ม "＋ สร้างชุดข้อสอบ" ด้านบนเพื่อเริ่มชุดแรก<br>เช่น ม.4, ม.5, คณิตศาสตร์ ม.2/1</p>
+      </div>`;
+    return;
+  }
+  wrap.innerHTML = state.examSets.map(s=>{
+    const keyCount = Object.keys(s.answerKey||{}).length;
+    const stCount = Object.values(s.students||{}).filter(st=>st && st.total!=null).length;
+    return `<div class="examset-card" data-id="${s.id}">
+      <div class="ec-main">
+        <h3>${esc(s.name)}</h3>
+        <p>เฉลยแล้ว ${keyCount}/20 · สแกนแล้ว ${stCount}/20</p>
+      </div>
+      <button class="ec-del" type="button" data-id="${s.id}" title="ลบชุดข้อสอบ">🗑</button>
+    </div>`;
+  }).join("");
+}
+qs("#examNewBtn").addEventListener("click", ()=>{
+  qs("#examNewName").value = "";
+  qs("#modalExamNew").classList.add("active");
+  setTimeout(()=> qs("#examNewName").focus(), 200);
+});
+qsa("#modalExamNew [data-close]").forEach(b=> b.addEventListener("click", ()=> qs("#modalExamNew").classList.remove("active")));
+qs("#examNewSaveBtn").addEventListener("click", ()=>{
+  const name = qs("#examNewName").value.trim();
+  if(!name){ toast("ตั้งชื่อชุดข้อสอบก่อนครับ"); return; }
+  const set = { id:"ex_"+Date.now().toString(36)+Math.random().toString(36).slice(2,6), name, answerKey:{}, students:{} };
+  state.examSets.push(set);
+  saveExamSets();
+  qs("#modalExamNew").classList.remove("active");
+  renderExamHome();
+  toast(`สร้างชุด "${name}" แล้ว`);
+});
+qs("#examSetList").addEventListener("click", async e=>{
+  const del = e.target.closest(".ec-del");
+  if(del){
+    const set = state.examSets.find(s=>s.id===del.dataset.id);
+    if(!set) return;
+    const ok = await confirmDialog({
+      title:"ลบชุดข้อสอบ", icon:"🗑", danger:true,
+      message:`ต้องการลบ "${set.name}" ใช่ไหม\nเฉลยและคะแนนทั้งหมดในชุดนี้จะหายไปด้วย`,
+      okText:"ลบเลย", cancelText:"ยกเลิก"
+    });
+    if(!ok) return;
+    state.examSets = state.examSets.filter(s=>s.id!==set.id);
+    saveExamSets();
+    renderExamHome();
+    return;
+  }
+  const card = e.target.closest(".examset-card");
+  if(card) openExamManage(card.dataset.id);
+});
+
+/* ================= ตรวจข้อสอบ : จัดการชุด (เฉลย / Scan / สรุปคะแนน) ================= */
+function openExamManage(id){
+  currentExamId = id;
+  if(!currentExamSet()) return;
+  renderExamManage();
+  showView("view-exam-manage");
+}
+function renderExamManage(){
+  const set = currentExamSet(); if(!set) return;
+  qs("#emTitle").textContent = set.name;
+  const keyCount = Object.keys(set.answerKey||{}).length;
+  const scanned = Object.values(set.students||{}).filter(st=>st && st.total!=null).length;
+  qs("#emKeySub").textContent = keyCount ? `เฉลยแล้ว ${keyCount}/20 ข้อ · คะแนนเต็ม ${keyCount}` : "ยังไม่ได้ตั้งเฉลย";
+  qs("#emSummarySub").textContent = scanned ? `สแกนแล้ว ${scanned}/20 คน` : "ยังไม่มีนักเรียนสแกน";
+  qs("#emStats").innerHTML =
+    `<div class="es-stat"><b>${keyCount}/20</b><span>เฉลยแล้ว</span></div>
+     <div class="es-stat"><b>${scanned}/20</b><span>สแกนแล้ว</span></div>`;
+}
+qs("#emKeyBtn").addEventListener("click", ()=> openExamKey());
+qs("#emScanBtn").addEventListener("click", ()=> showView("view-exam-scan"));
+qs("#emSummaryBtn").addEventListener("click", ()=> openExamSummary());
+
+/* ================= ตรวจข้อสอบ : ตั้งเฉลย 1-20 ================= */
+function openExamKey(){
+  if(!currentExamSet()) return;
+  renderExamKey();
+  showView("view-exam-key");
+}
+function renderExamKey(){
+  const set = currentExamSet(); if(!set) return;
+  const keyCount = Object.keys(set.answerKey||{}).length;
+  qs("#ekSub").textContent = `${set.name} · เฉลยแล้ว ${keyCount}/20 ข้อ · คะแนนเต็มปัจจุบัน ${keyCount}`;
+  const rows = [];
+  for(let i=1; i<=20; i++){
+    const cur = set.answerKey ? set.answerKey[i] : null;
+    const opts = EXAM_LETTERS.map(L=> `<button type="button" data-v="${L}" class="${cur===L?"on":""}">${L}</button>`).join("");
+    rows.push(`<div class="ek-row" data-q="${i}"><div class="ek-num">${i}</div><div class="ek-opts">${opts}</div></div>`);
+  }
+  qs("#examKeyList").innerHTML = rows.join("");
+}
+qs("#examKeyList").addEventListener("click", e=>{
+  const btn = e.target.closest(".ek-opts button"); if(!btn) return;
+  const set = currentExamSet(); if(!set) return;
+  const q = btn.closest(".ek-row").dataset.q;
+  set.answerKey = set.answerKey || {};
+  if(set.answerKey[q] === btn.dataset.v) delete set.answerKey[q]; // กดซ้ำที่เดิม = ยกเลิกเฉลยข้อนี้
+  else set.answerKey[q] = btn.dataset.v;
+  renderExamKey();
+});
+qs("#examKeySaveBtn").addEventListener("click", ()=>{
+  if(!currentExamSet()) return;
+  saveExamSets();
+  toast("บันทึกเฉลยแล้ว");
+  renderExamManage();
+  showView("view-exam-manage");
+});
+
+/* ================= ตรวจข้อสอบ : สรุปคะแนนเลขที่ 1-20 ================= */
+function openExamSummary(){
+  if(!currentExamSet()) return;
+  renderExamSummary();
+  showView("view-exam-summary");
+}
+function renderExamSummary(){
+  const set = currentExamSet(); if(!set) return;
+  qs("#esSub").textContent = set.name;
+  const rows = [];
+  for(let i=1; i<=20; i++){
+    const st = set.students ? set.students[i] : null;
+    const scoreTxt = (st && st.total!=null) ? `${st.score}/${st.total}` : `<span class="pend-ok" style="color:var(--ink-soft); font-weight:500;">ยังไม่มีข้อมูล</span>`;
+    const thumb = (st && st.headerImage) ? `<img src="${st.headerImage}" class="ec-thumb">` : `<div class="ec-thumb-empty">—</div>`;
+    rows.push(`<tr><td>${i}</td><td class="ec-thumb-cell">${thumb}</td><td>${scoreTxt}</td></tr>`);
+  }
+  qs("#examSumWrap").innerHTML =
+    `<table class="score-table exam-sum-table"><thead><tr><th>เลขที่</th><th>นักเรียน</th><th>คะแนน</th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
+}
+
+/* ================= ปุ่มขยายเต็มจอ: ยุบทุกอย่างเหลือแค่ตาราง (เลขที่/รายชื่อ/ช่องลงคะแนน/หัวตาราง)
+   + ขอเข้าโหมด Fullscreen จริงของมือถือ (ซ่อนแถบที่อยู่/แถบเบราว์เซอร์ ให้เว็บกินเต็มจอจริง ๆ)
+   - ไม่จำค่าไว้ข้ามหน้า: ทุกครั้งที่กด "เข้าดู/เข้าลงคะแนน" ใหม่ (จากหน้าเลือกห้อง) จะเริ่มแบบปกติเสมอ
+   - ตอนโฟกัสอยู่ ปุ่มย้อนกลับ (back-btn) ในแถบหัวจะถูกซ่อนไปด้วย เหลือแค่ปุ่ม ⤡ นี้ปุ่มเดียวที่กดได้
+     ต้องกดยุบโหมดนี้ออกก่อน ถึงจะเห็นปุ่มย้อนกลับแล้วกดออกจากหน้าได้ (กันกดย้อนกลับมาแล้วค้างเป็นเต็มจอ)
+   - หมายเหตุ: Fullscreen API นี้ Android Chrome รองรับเต็มที่ (ซ่อนแถบด้านบน/ล่างจริง) ส่วน iPhone Safari
+     ตัวเบราว์เซอร์เองยังไม่รองรับการขอ fullscreen ของหน้าเว็บทั่วไป (ข้อจำกัดจาก Apple) จึงจะเห็นแค่โหมดยุบ UI
+     ให้ใหญ่/อ่านง่ายขึ้นตามปกติ แต่แถบที่อยู่ของ Safari จะไม่หายไป — ถ้าอยากได้เต็มจอจริงบน iPhone ต้องกด
+     "แชร์ > เพิ่มไปยังหน้าจอโฮม" แล้วเปิดแอปจากไอคอนนั้นแทนการเปิดผ่าน Safari ตรง ๆ */
+function requestFS(el){
+  const fn = el.requestFullscreen || el.webkitRequestFullscreen || el.webkitEnterFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+  if(fn){ try{ const r = fn.call(el); if(r && r.catch) r.catch(()=>{}); }catch(e){} }
+}
+function exitFS(){
+  if(!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement)) return;
+  const fn = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+  if(fn){ try{ const r = fn.call(document); if(r && r.catch) r.catch(()=>{}); }catch(e){} }
+}
+/* จอมือถือ (แคบ) เท่านั้นที่จะขอ Fullscreen API จริงของเบราว์เซอร์ — บนคอม/จอกว้าง ปุ่มนี้จะแค่สลับโหมด
+   ย่อ UI (ตัวใหญ่ขึ้น/เคลียร์ส่วนที่ไม่จำเป็น) โดยไม่ยิงขอเต็มจอทั้งหน้าต่างเบราว์เซอร์ */
+function isMobileViewport(){ return window.matchMedia("(max-width:600px)").matches; }
+let focusMode = false;
+function applyFocusMode(){
+  document.body.classList.toggle("focus-mode", focusMode);
+  qsa(".focus-btn").forEach(b=>{ b.textContent = focusMode ? "⤡" : "⤢"; b.title = focusMode ? "ย่อกลับ / ย้อนกลับได้" : "ขยายเต็มจอ"; });
+}
+function exitFocusMode(){ if(focusMode){ focusMode = false; applyFocusMode(); exitFS(); } }
+qsa(".focus-btn").forEach(b=> b.addEventListener("click", ()=>{
+  focusMode = !focusMode;
+  applyFocusMode();
+  if(focusMode){ if(isMobileViewport()) requestFS(document.documentElement); }
+  else exitFS();
+}));
+/* เผื่อผู้ใช้กดออกจาก fullscreen เอง (เช่น ปุ่มย้อนกลับของระบบ Android) ให้ UI ย่อตามกลับมาปกติด้วย */
+["fullscreenchange","webkitfullscreenchange","mozfullscreenchange","MSFullscreenChange"].forEach(ev=>
+  document.addEventListener(ev, ()=>{
+    const inFS = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
+    if(!inFS && focusMode){ focusMode = false; applyFocusMode(); }
+  })
+);
+applyFocusMode();
 
 /* ================= SPLASH (ค้างจนกว่าจะโหลดข้อมูลเสร็จ) ================= */
 (async function splash(){
