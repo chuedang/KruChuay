@@ -499,7 +499,8 @@ td.sum b.s-late.on{color:#B45309; font-weight:700;}
 .ss-row{display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:13px;}
 .ss-near{background:#FFF1BF; color:#7A4F00; border-radius:12px; padding:8px 12px; font-size:12.5px; font-weight:600;}
 .ss-warn{background:#FDECEC; color:#B42318; border-radius:12px; padding:8px 12px; font-size:12px; font-weight:500; line-height:1.5;}
-#view-summary .score-scroll{flex:none; min-height:0; max-height:none;}
+#view-summary.active{height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)); min-height:0;}
+#view-summary .score-scroll{flex:1 1 0; min-height:0; max-height:none;}
 .sum-table thead th{cursor:default; min-width:54px; font-size:12px;}
 .sum-table thead th.name-head{min-width:122px;}
 .sum-table thead tr.r1 th{top:0; height:34px; text-align:center;}
@@ -693,3 +694,65 @@ body.focus-mode .pend-chip{font-size:13px !important; padding:6px 12px !importan
   .exam-stats .es-stat{padding:11px 6px;}
   .exam-stats .es-stat b{font-size:19px;}
 }
+
+/* =====================================================================
+   Round 17 : Scan กระดาษคำตอบด้วยกล้อง (OMR) — จอกล้อง/สถานะ/ผลลัพธ์
+   ===================================================================== */
+.scan-stage{
+  position:relative; width:100%; aspect-ratio:3/4; background:#0B0E14; border-radius:20px;
+  overflow:hidden; box-shadow:0 1px 2px rgba(27,34,51,.05), 0 16px 28px -20px rgba(27,34,51,.5);
+}
+.scan-stage video, .scan-stage canvas#scanOverlay{
+  position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+}
+.scan-stage video{ transform:scaleX(1); }
+#scanOverlay{ pointer-events:none; }
+.scan-status{
+  position:absolute; left:0; right:0; bottom:0; padding:12px 14px calc(10px + env(safe-area-inset-bottom,0px));
+  background:linear-gradient(0deg, rgba(0,0,0,.68), rgba(0,0,0,0)); color:#fff; font-size:13px; font-weight:600;
+  text-align:center; letter-spacing:.2px;
+}
+
+.scan-num-row{display:flex; align-items:center; justify-content:center; gap:18px; margin:14px 0;}
+.scan-num-btn{
+  width:38px; height:38px; border-radius:50%; border:1.5px solid var(--line); background:#fff;
+  font-size:18px; color:var(--ink); cursor:pointer; flex-shrink:0;
+}
+.scan-num-btn:active{transform:scale(.9);}
+.scan-num-cur{font-size:14.5px; font-weight:600; color:var(--ink-soft);}
+.scan-num-cur b{color:var(--c-main,#4285F4); font-size:19px; margin-left:4px;}
+
+.scan-result{
+  display:flex; gap:12px; align-items:center; background:var(--surface); border-radius:18px; padding:12px;
+  margin-bottom:14px; box-shadow:0 1px 2px rgba(27,34,51,.05), 0 12px 22px -18px rgba(27,34,51,.35);
+}
+.scan-result-thumb{width:70px; height:94px; object-fit:cover; border-radius:10px; background:#F1F3F9; flex-shrink:0; border:1px solid var(--line);}
+.scan-result-info{flex:1; min-width:0;}
+.scan-result-score{font-size:15.5px; font-weight:700; margin-bottom:10px;}
+.scan-result-actions{display:flex; gap:8px;}
+.scan-result-actions .btn{flex:1;}
+
+.scan-controls{display:flex; gap:10px; margin-top:auto;}
+.scan-controls .btn{flex:1;}
+
+@media (max-width:600px){
+  .scan-num-row{gap:14px;}
+  .scan-num-cur{font-size:13.5px;}
+  .scan-num-cur b{font-size:17px;}
+}
+
+/* =====================================================================
+   Round 18 : แก้บั๊กพื้นที่ว่างค้างด้านล่าง (เห็นชัดสุดที่หน้าเฉลย และตอนกดเต็มจอ
+   ในหน้าสรุปคะแนนสอบ / งานค้าง)
+   ต้นเหตุ: .score-scroll เวอร์ชันแรก (ด้านบนไฟล์) ถูกโอเวอร์ไรด์เป็น flex:none
+   + max-height:calc(100dvh - 320px) ซึ่งเป็นเลขเดามั่ว ๆ — พอเนื้อหาน้อยกว่ากรอบ
+   กล่องเลยหดตามเนื้อหา เหลือพื้นที่ว่างโล่ง ๆ ใต้กล่องภายใน .view (ซึ่งเป็น flex
+   column เต็มจอ) หน้า view-scores-table กับ view-attend-report เคยแก้ไว้แล้ว
+   (flex:1 1 0 + max-height:none) แต่หน้าเฉลย/สรุปคะแนนสอบ/งานค้าง ยังไม่ได้แก้
+   เลยพังอยู่ — รอบนี้ใช้สูตรเดียวกันให้ครบทุกหน้า */
+#view-exam-key.active{height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)); min-height:0;}
+#view-exam-key .score-scroll{flex:1 1 0; min-height:0; max-height:none;}
+#view-exam-summary.active{height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)); min-height:0;}
+#view-exam-summary .score-scroll{flex:1 1 0; min-height:0; max-height:none;}
+#view-pending.active{height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)); min-height:0;}
+#view-pending .score-scroll{flex:1 1 0; min-height:0; max-height:none;}
