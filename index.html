@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>KruChauy</title>
 <!-- เปลี่ยนเลข v= ทุกครั้งที่อัปเดตไฟล์ เพื่อให้เบราว์เซอร์โหลดของใหม่ ไม่ใช้ของเก่าที่แคชไว้ -->
-<link rel="stylesheet" href="style.css?v=14">
+<link rel="stylesheet" href="style.css?v=19">
 </head>
 <body>
 <div id="splash"><div id="splashBg"></div><div id="splashLogo">Kru<span>Chauy</span></div><div id="splashLoading">กำลังโหลดข้อมูล...</div></div>
@@ -36,7 +36,7 @@
       </button>
       <button class="menu-item c-purple" data-go="exam" style="--i:3">
         <span class="ico">🧾</span>
-        <span class="txt"><h3>ตรวจข้อสอบ</h3><p>เร็วๆ นี้</p></span>
+        <span class="txt"><h3>ตรวจข้อสอบ</h3><p>สร้างชุดข้อสอบ ตั้งเฉลย แล้วสแกนกระดาษคำตอบด้วยกล้อง</p></span>
         <span class="arrow">›</span>
       </button>
     </div>
@@ -65,6 +65,7 @@
       <button class="back-btn" data-back="view-attend-setup">‹</button>
       <div class="tb-txt"><h2>รายชื่อ</h2><div class="sub" id="attendHeadSub"></div></div>
       <span class="tb-ico">✅</span>
+      <button class="focus-btn" title="ขยายเต็มจอ">⤢</button>
     </div>
     <div class="period-bar" data-mode="lock" data-compact="1"></div>
     <div class="exist-note" id="attendExistNote" style="display:none;">✏️ วันนี้เคยเช็คชื่อวิชานี้ไว้แล้ว — โหลดข้อมูลเดิมมาให้ ถ้าบันทึกจะแก้ทับข้อมูลเดิม ไม่เพิ่มแถวใหม่</div>
@@ -106,6 +107,7 @@
       <button class="back-btn" data-back="view-attend-report-setup">‹</button>
       <div class="tb-txt"><h2>สรุปการมาเรียน</h2><div class="sub" id="repHeadSub"></div></div>
       <span class="tb-ico">📅</span>
+      <button class="focus-btn" title="ขยายเต็มจอ">⤢</button>
     </div>
     <div class="period-bar" data-mode="lock" data-compact="1"></div>
     <div class="table-toolbar">
@@ -130,7 +132,8 @@
       <div class="field"><label>วิชา</label><select id="scoreSubject" class="subject-select"><option value="">เลือกห้องก่อน</option></select></div>
     </div>
     <button id="scoreStartBtn" class="btn btn-primary">เข้าสู่ตารางคะแนน</button>
-    <button id="scoreSummaryBtn" class="btn btn-outline btn-block" style="margin-top:12px;">📈 สรุปคะแนน / ตัดเกรด</button>
+    <button id="scorePendingBtn" class="btn btn-outline btn-block" style="margin-top:12px;">📋 สรุปงานค้างนักเรียน</button>
+    <button id="scoreSummaryBtn" class="btn btn-outline btn-block" style="margin-top:10px;">📈 สรุปคะแนน / ตัดเกรด</button>
   </section>
 
   <!-- SCORES TABLE -->
@@ -139,6 +142,7 @@
       <button class="back-btn" data-back="view-scores-setup">‹</button>
       <div class="tb-txt"><h2>ตารางคะแนน</h2><div class="sub" id="scoreHeadSub"></div></div>
       <span class="tb-ico">📊</span>
+      <button class="focus-btn" title="ขยายเต็มจอ">⤢</button>
     </div>
     <div class="period-bar" data-mode="full" data-compact="1"></div>
     <div class="score-tabs" id="scoreTabs">
@@ -170,11 +174,25 @@
       <button class="back-btn" id="sumBackBtn">‹</button>
       <div class="tb-txt"><h2>สรุปคะแนน</h2><div class="sub" id="sumHeadSub"></div></div>
       <span class="tb-ico">📈</span>
+      <button class="focus-btn" title="ขยายเต็มจอ">⤢</button>
     </div>
     <div class="period-bar" data-mode="term" data-compact="1"></div>
     <div class="w-card" id="sumWeights"></div>
     <div id="sumStats" class="sum-stats"></div>
     <div class="score-scroll"><div id="sumTableWrap"></div></div>
+  </section>
+
+  <!-- PENDING WORK (สรุปงานค้าง — ไม่โชว์คะแนน) -->
+  <section id="view-pending" class="view">
+    <div class="topbar">
+      <button class="back-btn" id="pendBackBtn">‹</button>
+      <div class="tb-txt"><h2>งานค้างนักเรียน</h2><div class="sub" id="pendHeadSub"></div></div>
+      <span class="tb-ico">📋</span>
+      <button class="focus-btn" title="ขยายเต็มจอ">⤢</button>
+    </div>
+    <div class="period-bar" data-mode="full" data-compact="1"></div>
+    <div class="table-toolbar"><span class="score-info" id="pendInfo"></span></div>
+    <div class="score-scroll"><div id="pendTableWrap"></div></div>
   </section>
 
   <!-- TEACHING LOG -->
@@ -196,14 +214,79 @@
     <button id="teachSaveBtn" class="btn btn-primary">บันทึก</button>
   </section>
 
-  <!-- EXAM PLACEHOLDER -->
+  <!-- EXAM: หน้าแรก — รายการชุดข้อสอบ -->
   <section id="view-exam" class="view">
     <div class="topbar">
       <button class="back-btn" data-back="view-home">‹</button>
-      <div class="tb-txt"><h2>ตรวจข้อสอบ</h2><div class="sub">เร็วๆ นี้</div></div>
+      <div class="tb-txt"><h2>ตรวจข้อสอบ</h2><div class="sub">ชุดข้อสอบของฉัน</div></div>
       <span class="tb-ico">🧾</span>
     </div>
-    <div class="empty-note">ฟีเจอร์นี้กำลังจะมาเร็วๆ นี้</div>
+    <button id="examNewBtn" class="btn btn-primary" style="margin-bottom:16px;">＋ สร้างชุดข้อสอบ</button>
+    <div class="examset-list" id="examSetList"></div>
+  </section>
+
+  <!-- EXAM: จัดการชุดข้อสอบ (เฉลย / Scan / สรุปคะแนน) -->
+  <section id="view-exam-manage" class="view">
+    <div class="topbar">
+      <button class="back-btn" data-back="view-exam">‹</button>
+      <div class="tb-txt"><h2 id="emTitle">ชุดข้อสอบ</h2><div class="sub">เฉลย · สแกน · สรุปคะแนน</div></div>
+      <span class="tb-ico">🧾</span>
+    </div>
+    <div class="exam-stats" id="emStats"></div>
+    <div class="menu">
+      <button class="menu-item c-blue" id="emKeyBtn" style="--i:0">
+        <span class="ico">✅</span>
+        <span class="txt"><h3>เฉลย</h3><p id="emKeySub">ยังไม่ได้ตั้งเฉลย</p></span>
+        <span class="arrow">›</span>
+      </button>
+      <button class="menu-item c-green" id="emScanBtn" style="--i:1">
+        <span class="ico">📷</span>
+        <span class="txt"><h3>Scan</h3><p>เปิดกล้องสแกนกระดาษคำตอบต่อเนื่อง</p></span>
+        <span class="arrow">›</span>
+      </button>
+      <button class="menu-item c-yellow" id="emSummaryBtn" style="--i:2">
+        <span class="ico">📊</span>
+        <span class="txt"><h3>สรุปคะแนน</h3><p id="emSummarySub">ยังไม่มีนักเรียนสแกน</p></span>
+        <span class="arrow">›</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- EXAM: ตั้งเฉลย 1-20 -->
+  <section id="view-exam-key" class="view">
+    <div class="topbar">
+      <button class="back-btn" data-back="view-exam-manage">‹</button>
+      <div class="tb-txt"><h2>เฉลย</h2><div class="sub" id="ekSub"></div></div>
+      <span class="tb-ico">✅</span>
+    </div>
+    <div class="score-scroll examkey-scroll"><div class="examkey-list" id="examKeyList"></div></div>
+    <div class="actions-fixed"><button id="examKeySaveBtn" class="btn btn-primary">บันทึกเฉลย</button></div>
+  </section>
+
+  <!-- EXAM: สรุปคะแนนเลขที่ 1-20 -->
+  <section id="view-exam-summary" class="view">
+    <div class="topbar">
+      <button class="back-btn" data-back="view-exam-manage">‹</button>
+      <div class="tb-txt"><h2>สรุปคะแนน</h2><div class="sub" id="esSub"></div></div>
+      <span class="tb-ico">📊</span>
+      <button class="focus-btn" title="ขยายเต็มจอ">⤢</button>
+    </div>
+    <div class="score-scroll"><div id="examSumWrap"></div></div>
+  </section>
+
+  <!-- EXAM: Scan (กำลังพัฒนาต่อ — ยังไม่ใช่กล้อง OMR จริง) -->
+  <section id="view-exam-scan" class="view">
+    <div class="topbar">
+      <button class="back-btn" data-back="view-exam-manage">‹</button>
+      <div class="tb-txt"><h2>Scan</h2><div class="sub">สแกนกระดาษคำตอบ</div></div>
+      <span class="tb-ico">📷</span>
+    </div>
+    <div class="empty-state">
+      <div class="es-ico">📷</div>
+      <h4>กำลังพัฒนาต่อ</h4>
+      <p>ขั้นตอนต่อไปคือเปิดกล้อง ตรวจจับกระดาษจากจุดมุมสี่จุด ปรับภาพให้ตรง แล้วอ่านวงกลมคำตอบให้อัตโนมัติ<br>ระหว่างนี้ตั้งเฉลยไว้ก่อนได้เลยครับ</p>
+      <div class="es-actions"><button class="btn btn-primary btn-sm" data-back="view-exam-manage">‹ กลับไปตั้งเฉลย</button></div>
+    </div>
   </section>
 
 
@@ -274,6 +357,18 @@
     </div>
   </div>
 
+  <!-- MODAL: สร้างชุดข้อสอบใหม่ -->
+  <div class="modal-backdrop" id="modalExamNew">
+    <div class="modal-sheet">
+      <h3>สร้างชุดข้อสอบใหม่</h3>
+      <div class="field"><label>ชื่อชุดข้อสอบ</label><input id="examNewName" placeholder="เช่น ม.5 กลางภาค" maxlength="40"></div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" data-close>ยกเลิก</button>
+        <button id="examNewSaveBtn" class="btn btn-primary">สร้าง</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <!-- SAVING OVERLAY -->
@@ -284,6 +379,6 @@
     </div>
   </div>
 </div>
-<script src="script.js?v=14"></script>
+<script src="script.js?v=19"></script>
 </body>
 </html>
