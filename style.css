@@ -239,7 +239,7 @@ body.ready .menu-item{animation:rise .55s cubic-bezier(.2,.8,.2,1) backwards; an
 #view-attend-setup,#view-attend-list{--c-main:#4285F4; --c-bg:#E8F0FE; --c-ink:#174EA6; --c-sh:rgba(66,133,244,.6); --c-on:#fff;}
 #view-scores-setup,#view-scores-table,.modal-backdrop{--c-main:#34A853; --c-bg:#E6F4EA; --c-ink:#0D652D; --c-sh:rgba(52,168,83,.6); --c-on:#fff;}
 #view-teaching{--c-main:#FBBC04; --c-bg:#FEF3D0; --c-ink:#7A4F00; --c-sh:rgba(251,188,4,.7); --c-on:#4A3000;}
-#view-exam{--c-main:#A142F4; --c-bg:#F3E8FD; --c-ink:#6B21A8; --c-sh:rgba(161,66,244,.6); --c-on:#fff;}
+#view-exam,#view-exam-manage,#view-exam-key,#view-exam-summary,#view-exam-scan{--c-main:#A142F4; --c-bg:#F3E8FD; --c-ink:#6B21A8; --c-sh:rgba(161,66,244,.6); --c-on:#fff;}
 
 @keyframes viewIn{from{opacity:0; transform:translateY(12px);}}
 @keyframes sheetUp{from{transform:translateY(40px); opacity:.4;}}
@@ -583,3 +583,113 @@ td.sum b.s-late.on{color:#B45309; font-weight:700;}
 
 /* เลขที่นักเรียนหน้าชื่อ */
 .sn{display:inline-flex; align-items:center; justify-content:center; min-width:22px; height:20px; padding:0 5px; margin-right:6px; border-radius:10px; background:var(--c-bg,#E8F0FE); color:var(--c-ink,#174EA6); font-size:11px; font-weight:700; vertical-align:1px;}
+/* =====================================================================
+   Round 13 : จิตพิสัยในหน้าคะแนนสอบ · สรุปงานค้างนักเรียน · เน็ตสะดุดตอนบันทึก
+   ===================================================================== */
+.exam-table th:nth-child(2){min-width:60px;}
+.beh-circle{margin:0 auto;}
+
+.pend-table th:nth-child(2), .pend-table td.pend-cell{text-align:left;}
+.pend-table thead th{min-width:auto;}
+.pend-cell{display:flex; flex-wrap:wrap; gap:6px; padding:8px 10px;}
+.pend-chip{display:inline-block; background:#FDECEC; color:#B42318; border-radius:10px; padding:5px 10px; font-size:11.5px; font-weight:600; white-space:nowrap;}
+.pend-ok{color:var(--present); font-weight:700; font-size:12.5px;}
+
+@media (max-width:600px){
+  .pend-chip{font-size:11px; padding:4px 8px;}
+}
+
+/* =====================================================================
+   Round 15 : ปุ่มขยายเต็มจอ — ยุบทุกอย่างเหลือแค่ตาราง (เลขที่/รายชื่อ/ช่องลงคะแนน/หัวตาราง)
+   ปุ่มย้อนกลับก็ถูกซ่อนไปด้วย เหลือปุ่ม ⤡ ปุ่มเดียวที่กดได้ ต้องกดย่อออกก่อนถึงจะย้อนกลับได้
+   Round 15b : ของเดิมแค่ยุบหัวลงนิดเดียว ดูไม่เหมือนเต็มจอเลย — คราวนี้ทำให้ #app หลุดกรอบ 430px
+   เต็มความกว้างจอจริงๆ ตัดขอบ/เงาของกรอบตารางออก ขยายฟอนต์+ระยะห่างในตารางให้อ่านง่ายขึ้น
+   ===================================================================== */
+.focus-btn{width:30px; height:30px; border-radius:10px; border:1.5px solid #E1E7F3; background:#fff; color:var(--ink-soft,#5B6474); font-size:15px; line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer; flex:0 0 auto; transition:background .15s, transform .1s;}
+.focus-btn:active{transform:scale(.88);}
+body.focus-mode .focus-btn{background:var(--c-main,#4285F4); border-color:var(--c-main,#4285F4); color:#fff; box-shadow:0 6px 14px -6px rgba(0,0,0,.35);}
+
+/* หลุดกรอบ #app (max-width:430px) ให้กินเต็มความกว้างหน้าจอจริง ๆ — เฉพาะมือถือ (จอแคบ) เท่านั้น
+   บนคอม/แท็บเล็ตจอกว้างให้คงกรอบการ์ด 430px ไว้เหมือนเดิม ไม่ยืดเต็มจอ */
+@media (max-width:600px){
+  body.focus-mode #app{max-width:none;}
+}
+body.focus-mode{background:var(--surface,#fff);}
+
+/* แก้บั๊ก: เผื่อพื้นที่ safe-area ด้านล่างซ้ำซ้อน (body เผื่อไว้ชั้นหนึ่ง + .view เผื่อไว้อีกชั้นด้านล่าง)
+   ทำให้เห็นเป็นแถบขาวๆ เกินจริงที่ก้นจอตอนขยาย/เต็มจอ — ตัด padding-bottom ระดับ body ออกตอน focus-mode
+   แล้วปล่อยให้ .view (Round 15b ด้านล่าง) เป็นคนเผื่อ safe-area ก้นจอแทนแค่ชั้นเดียว */
+body.focus-mode{padding-bottom:0;}
+
+/* แถบหัว: ซ่อนทุกอย่างยกเว้นปุ่ม ⤡ (รวมปุ่มย้อนกลับ) แล้วยุบให้เหลือแค่แถบบางๆ ชิดขวา */
+body.focus-mode .topbar{background:transparent; box-shadow:none; padding:8px 10px 4px; margin-bottom:0; justify-content:flex-end; border-radius:0;}
+body.focus-mode .topbar > *:not(.focus-btn){display:none !important;}
+
+/* ซ่อนส่วนควบคุม/ข้อมูลรอง เหลือแค่ตาราง (roster/score-scroll) กับแถบปุ่มบันทึกด้านล่าง */
+body.focus-mode .period-bar,
+body.focus-mode .table-toolbar,
+body.focus-mode .score-tabs,
+body.focus-mode .exist-note,
+body.focus-mode #attendSummary,
+body.focus-mode .exam-setup,
+body.focus-mode .w-card,
+body.focus-mode #sumStats{display:none !important;}
+
+/* ตัวหน้าเต็มจอ: เอา padding ซ้าย/ขวาออกแทบหมด ให้ตารางกินพื้นที่จริง แถบล่าง (ปุ่มบันทึก) เว้นระยะพอจับได้ */
+body.focus-mode .view{padding:2px 6px calc(10px + env(safe-area-inset-bottom,0px)) !important;}
+body.focus-mode .score-scroll{border-radius:14px !important; box-shadow:none !important;}
+body.focus-mode .actions-fixed{margin-top:8px;}
+
+/* ขยายฟอนต์/ระยะห่างในตาราง+รายชื่อ ให้รู้สึกว่า "เต็มจอ" จริง อ่านง่ายกว่าโหมดปกติชัดเจน */
+body.focus-mode table.score-table{font-size:14.5px !important;}
+body.focus-mode table.score-table th, body.focus-mode table.score-table td{padding:12px 9px !important;}
+body.focus-mode table.score-table thead th.name-head, body.focus-mode table.score-table td.name-cell{width:auto !important; min-width:120px !important; max-width:150px !important;}
+body.focus-mode .score-circle{width:38px !important; height:38px !important; font-size:15px !important;}
+body.focus-mode .roster-row{padding:14px 16px !important;}
+body.focus-mode .roster-row .name{font-size:15px !important;}
+body.focus-mode .chip{padding:9px 0 !important;}
+body.focus-mode .pend-chip{font-size:13px !important; padding:6px 12px !important;}
+
+@media (max-width:600px){
+  .focus-btn{width:28px; height:28px; font-size:13px;}
+  body.focus-mode .topbar{padding:6px 8px 4px;}
+}
+
+/* =====================================================================
+   Round 16 : เริ่มฟีเจอร์ "ตรวจข้อสอบ" — สร้าง/จัดการชุดข้อสอบ, ตั้งเฉลย, สรุปคะแนน
+   (ยังไม่ใช่ตัวสแกนกล้อง — เป็นโครงเริ่มต้น: สร้างชุด ตั้งเฉลย ดูตารางสรุป)
+   ===================================================================== */
+.examset-list{display:flex; flex-direction:column; gap:12px;}
+.examset-card{display:flex; align-items:center; gap:12px; background:var(--surface); border-radius:20px; padding:16px 14px; box-shadow:0 1px 2px rgba(27,34,51,.05), 0 12px 22px -18px rgba(27,34,51,.35); cursor:pointer; transition:transform .12s;}
+.examset-card:active{transform:scale(.98);}
+.examset-card .ec-main{flex:1; min-width:0;}
+.examset-card h3{font-size:16.5px; margin-bottom:3px;}
+.examset-card p{margin:0; font-size:12.5px; color:var(--ink-soft);}
+.ec-del{width:38px; height:38px; flex-shrink:0; border:none; background:#FDECEC; color:#C62828; border-radius:12px; font-size:15px; cursor:pointer;}
+.ec-del:active{transform:scale(.9);}
+
+.exam-stats{display:flex; gap:10px; margin-bottom:18px;}
+.exam-stats .es-stat{flex:1; background:var(--c-bg); color:var(--c-ink); border-radius:18px; padding:14px 8px; text-align:center;}
+.exam-stats .es-stat b{display:block; font-size:22px; font-weight:800; line-height:1.2;}
+.exam-stats .es-stat span{font-size:11.5px; font-weight:600; opacity:.75;}
+
+.examkey-scroll{background:transparent; border:none; box-shadow:none; padding:0;}
+.examkey-list{display:flex; flex-direction:column; gap:8px;}
+.ek-row{display:flex; align-items:center; gap:12px; background:var(--surface); border-radius:16px; padding:9px 12px; box-shadow:0 1px 2px rgba(27,34,51,.05);}
+.ek-num{width:26px; text-align:center; font-weight:800; font-size:14px; color:var(--ink-soft); flex-shrink:0;}
+.ek-opts{display:flex; gap:8px; flex:1;}
+.ek-opts button{flex:1; padding:10px 0; border-radius:12px; border:1.5px solid #E1E7F3; background:#fff; color:var(--ink-soft); font:inherit; font-weight:700; font-size:14px; cursor:pointer; transition:background .12s, border-color .12s, color .12s, transform .1s;}
+.ek-opts button:active{transform:scale(.92);}
+.ek-opts button.on{background:var(--c-main); border-color:var(--c-main); color:#fff; box-shadow:0 6px 12px -8px var(--c-sh);}
+
+.exam-sum-table td, .exam-sum-table th{text-align:center;}
+.ec-thumb-cell{padding:6px 8px;}
+.ec-thumb{width:44px; height:34px; border-radius:8px; object-fit:cover; display:block; margin:0 auto;}
+.ec-thumb-empty{width:44px; height:34px; border-radius:8px; background:#F1F3F9; color:#B8C0D2; display:flex; align-items:center; justify-content:center; font-size:14px; margin:0 auto;}
+
+@media (max-width:600px){
+  .examset-card{padding:13px 12px; border-radius:16px;}
+  .ek-opts button{padding:9px 0; font-size:13px;}
+  .exam-stats .es-stat{padding:11px 6px;}
+  .exam-stats .es-stat b{font-size:19px;}
+}
