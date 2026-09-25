@@ -129,8 +129,11 @@ function confirmDialog({ title="ยืนยัน", message="", stats=[], okTex
 }
 
 function showView(id){
+  const prevActive = qs(".view.active");
+  if(prevActive && prevActive.id==="view-exam-scan" && id!=="view-exam-scan") stopExamScan();
   qsa(".view").forEach(v=>v.classList.remove("active"));
   qs("#"+id).classList.add("active");
+  if(id==="view-exam-scan") startExamScan();
 }
 
 async function apiGet(type){
@@ -1284,6 +1287,7 @@ qs("#examSetList").addEventListener("click", async e=>{
     if(!ok) return;
     state.examSets = state.examSets.filter(s=>s.id!==set.id);
     saveExamSets();
+    examDBDeletePrefix(set.id+"_"); // ลบรูปหัวกระดาษของชุดนี้ทิ้งด้วย กัน IndexedDB บวมไปเรื่อยๆ
     renderExamHome();
     return;
   }
@@ -1361,12 +1365,543 @@ function renderExamSummary(){
   for(let i=1; i<=20; i++){
     const st = set.students ? set.students[i] : null;
     const scoreTxt = (st && st.total!=null) ? `${st.score}/${st.total}` : `<span class="pend-ok" style="color:var(--ink-soft); font-weight:500;">ยังไม่มีข้อมูล</span>`;
-    const thumb = (st && st.headerImage) ? `<img src="${st.headerImage}" class="ec-thumb">` : `<div class="ec-thumb-empty">—</div>`;
+    const thumb = (st && st.headerImage) ? `<img class="ec-thumb" data-img-key="${esc(st.headerImage)}">` : `<div class="ec-thumb-empty">—</div>`;
     rows.push(`<tr><td>${i}</td><td class="ec-thumb-cell">${thumb}</td><td>${scoreTxt}</td></tr>`);
   }
   qs("#examSumWrap").innerHTML =
     `<table class="score-table exam-sum-table"><thead><tr><th>เลขที่</th><th>นักเรียน</th><th>คะแนน</th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
+  /* รูปหัวกระดาษเก็บใน IndexedDB (ไม่ใช่ในตัว object นักเรียนโดยตรง) — โหลดทีหลังแบบ async กันหน้าเว็บค้างรอ
+     ตอนตารางเพิ่งเรนเดอร์เสร็จใหม่ๆ ยังไม่มีรูป ก็ค่อยแปลง Blob เป็น URL ใส่ทีหลัง */
+  qsa("#examSumWrap img[data-img-key]").forEach(async img=>{
+    const key = img.dataset.imgKey;
+    try{
+      const blob = await examDBGet(key);
+      if(blob){ img.src = URL.createObjectURL(blob); }
+      else { img.outerHTML = `<div class="ec-thumb-empty">—</div>`; }
+    }catch(e){ img.outerHTML = `<div class="ec-thumb-empty">—</div>`; }
+  });
 }
+
+/* =====================================================================
+   Round 17 : Scan กระดาษคำตอบด้วยกล้อง (OMR)
+   ไอเดีย: กระดาษคำตอบมีจุดดำทึบสี่เหลี่ยม (marker) อยู่ 4 มุม → ใช้หาตำแหน่งกระดาษในภาพจากกล้อง
+   เมื่อเจอครบ 4 มุมและถือนิ่งพอ จะถ่ายภาพ แล้วคำนวณ perspective transform (homography) ปรับมุมภาพ
+   ให้กระดาษเป็นสี่เหลี่ยมตรงมาตรฐาน จากนั้นอ่านความเข้มของวงกลมคำตอบแต่ละข้อเทียบกับเฉลย ให้คะแนนอัตโนมัติ
+   พร้อม crop "หัวกระดาษ" (ช่องเขียนชื่อ/เลขที่) เก็บไว้เป็นรูปให้ครูดูทวนภายหลังได้
+   รูปภาพที่ crop ไว้ เก็บใน IndexedDB แยกจาก localStorage (ที่เก็บแค่ชุดข้อสอบ/คะแนน) เพราะรูปภาพหนักกว่ามาก
+   หมายเหตุ: อัลกอริทึมตรวจจับ/อ่านค่าเป็นแบบง่าย ปรับ threshold ได้ตามการทดสอบจริงในรอบถัดไป
+   ===================================================================== */
+
+/* ---- IndexedDB: เก็บ/ดึง/ลบรูปหัวกระดาษ (key = "<examSetId>_<เลขที่>") ---- */
+const EXAM_DB_NAME = "kc_exam_images", EXAM_DB_STORE = "images";
+function examDBOpen(){
+  return new Promise((resolve, reject)=>{
+    if(!window.indexedDB){ reject(new Error("ไม่รองรับ IndexedDB")); return; }
+    const req = indexedDB.open(EXAM_DB_NAME, 1);
+    req.onupgradeneeded = ()=>{ if(!req.result.objectStoreNames.contains(EXAM_DB_STORE)) req.result.createObjectStore(EXAM_DB_STORE); };
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  });
+}
+async function examDBPut(key, blob){
+  const db = await examDBOpen();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(EXAM_DB_STORE, "readwrite");
+    tx.objectStore(EXAM_DB_STORE).put(blob, key);
+    tx.oncomplete = ()=> resolve();
+    tx.onerror = ()=> reject(tx.error);
+  });
+}
+async function examDBGet(key){
+  const db = await examDBOpen();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(EXAM_DB_STORE, "readonly");
+    const req = tx.objectStore(EXAM_DB_STORE).get(key);
+    req.onsuccess = ()=> resolve(req.result || null);
+    req.onerror = ()=> reject(req.error);
+  });
+}
+async function examDBDeletePrefix(prefix){
+  try{
+    const db = await examDBOpen();
+    await new Promise((resolve, reject)=>{
+      const tx = db.transaction(EXAM_DB_STORE, "readwrite");
+      const store = tx.objectStore(EXAM_DB_STORE);
+      const req = store.openCursor();
+      req.onsuccess = e=>{
+        const cur = e.target.result;
+        if(cur){ if(String(cur.key).startsWith(prefix)) cur.delete(); cur.continue(); }
+      };
+      tx.oncomplete = ()=> resolve();
+      tx.onerror = ()=> reject(tx.error);
+    });
+  }catch(e){ /* ไม่มี IndexedDB หรือเบราว์เซอร์บล็อกไว้ — ปล่อยผ่าน ไม่ให้กระทบการลบชุดข้อสอบ */ }
+}
+
+/* ---- ผังกระดาษคำตอบ: พิกัดสัดส่วน (0-1) เทียบกับกรอบสี่เหลี่ยมที่ล้อมด้วยจุดกึ่งกลางหมุดทั้ง 4 มุม
+   ใช้ชุดค่าเดียวกันทั้งตอน "พิมพ์แบบฟอร์มเปล่า" และตอน "อ่านผลจากภาพที่ปรับมุมแล้ว" กันพิกัดสองฝั่งเพี้ยนไม่ตรงกัน ---- */
+const EXAM_LAYOUT = {
+  markerFrac: 0.045,                               // ขนาดหมุด (ใช้ตอนพิมพ์เท่านั้น)
+  header: { x0:0.07, y0:0.09, x1:0.93, y1:0.185 },  // กรอบหัวกระดาษ (ชื่อ/เลขที่ เขียนเอง) ที่จะ crop เก็บไว้ดู
+  qStart: 1, qEnd: 20,
+  rowY0: 0.245, rowY1: 0.955,                       // ช่วงแนวตั้งของแถวคำถามข้อ 1-20
+  optX0: 0.32, optX1: 0.91,                         // ช่วงแนวนอนของ 4 ตัวเลือก ก ข ค ง
+  bubbleR: 0.017                                    // รัศมีวงกลมคำตอบ (สัดส่วนความกว้างภาพที่ปรับมุมแล้ว)
+};
+function examRowY(q){ // q = 1..20 -> สัดส่วนแนวตั้ง 0-1
+  const n = EXAM_LAYOUT.qEnd - EXAM_LAYOUT.qStart;
+  return EXAM_LAYOUT.rowY0 + (q - EXAM_LAYOUT.qStart) * (EXAM_LAYOUT.rowY1 - EXAM_LAYOUT.rowY0) / n;
+}
+function examOptX(k){ // k = 0..3 (ก ข ค ง) -> สัดส่วนแนวนอน 0-1
+  return EXAM_LAYOUT.optX0 + k * (EXAM_LAYOUT.optX1 - EXAM_LAYOUT.optX0) / (EXAM_LETTERS.length - 1);
+}
+const EXAM_RECT_W = 700, EXAM_RECT_H = Math.round(700 * 297/210); // ภาพหลังปรับมุม ~700x990 (สัดส่วน A4 แนวตั้ง)
+
+/* ---- Homography 3x3 จากจุด 4 คู่ (src -> dst) : Direct Linear Transform เชิงเส้น 8 สมการ 8 ตัวไม่รู้ค่า (h33=1) ---- */
+function solveLinear8(A, B){
+  const n = 8;
+  const M = A.map((row,i)=> [...row, B[i]]);
+  for(let col=0; col<n; col++){
+    let piv = col;
+    for(let r=col+1; r<n; r++) if(Math.abs(M[r][col]) > Math.abs(M[piv][col])) piv = r;
+    if(Math.abs(M[piv][col]) < 1e-9) return null;
+    [M[col], M[piv]] = [M[piv], M[col]];
+    for(let r=0; r<n; r++){
+      if(r===col) continue;
+      const f = M[r][col] / M[col][col];
+      for(let c=col; c<=n; c++) M[r][c] -= f * M[col][c];
+    }
+  }
+  return M.map((row,i)=> row[n] / row[i]);
+}
+function computeHomography(src, dst){
+  const A = [], B = [];
+  for(let i=0; i<4; i++){
+    const {x,y} = src[i], X = dst[i].x, Y = dst[i].y;
+    A.push([x,y,1,0,0,0,-x*X,-y*X]); B.push(X);
+    A.push([0,0,0,x,y,1,-x*Y,-y*Y]); B.push(Y);
+  }
+  const h = solveLinear8(A, B);
+  if(!h) return null;
+  return [h[0],h[1],h[2], h[3],h[4],h[5], h[6],h[7],1];
+}
+function invertHomography(h){
+  const [a,b,c,d,e,f,g,i,j] = h;
+  const det = a*(e*j - f*i) - b*(d*j - f*g) + c*(d*i - e*g);
+  if(Math.abs(det) < 1e-12) return null;
+  const inv = 1/det;
+  return [
+    (e*j - f*i)*inv, (c*i - b*j)*inv, (b*f - c*e)*inv,
+    (f*g - d*j)*inv, (a*j - c*g)*inv, (c*d - a*f)*inv,
+    (d*i - e*g)*inv, (b*g - a*i)*inv, (a*e - b*d)*inv
+  ];
+}
+function applyH(h, x, y){
+  const w = h[6]*x + h[7]*y + h[8];
+  return { x: (h[0]*x + h[1]*y + h[2]) / w, y: (h[3]*x + h[4]*y + h[5]) / w };
+}
+
+/* ---- ตรวจจับหมุด 4 มุมจากเฟรมวิดีโอปัจจุบัน (ทำงานบนภาพที่ย่อเล็กแล้ว เพื่อความเร็ว) ----
+   วิธีคร่าวๆ: แบ่งภาพเป็นตารางช่องเล็กๆ, หาว่าช่องไหน "มืด" กว่าค่าเฉลี่ยทั้งภาพมากพอ,
+   รวมกลุ่มช่องมืดที่ติดกัน (flood fill), กรองเอาก้อนที่ทรงเหมือนสี่เหลี่ยมจัตุรัสและขนาดสมเหตุสมผล,
+   แล้วเลือกก้อนที่ใหญ่สุดในแต่ละ 1 ใน 4 โซนของภาพ (บนซ้าย/บนขวา/ล่างซ้าย/ล่างขวา) ---- */
+function detectMarkers(procCtx, w, h){
+  const img = procCtx.getImageData(0, 0, w, h).data;
+  let sum = 0, n0 = 0;
+  for(let p=0; p<img.length; p+=4*7){ sum += img[p]*0.299 + img[p+1]*0.587 + img[p+2]*0.114; n0++; }
+  const avg = n0 ? sum/n0 : 128;
+  const thresh = avg * 0.55; // เข้มกว่าค่าเฉลี่ยพอสมควรถึงจะนับเป็น "หมุดดำ" — ปรับตามแสงจริงได้ในรอบถัดไป
+  const cell = 4;
+  const cols = Math.floor(w/cell), rows = Math.floor(h/cell);
+  const dark = new Uint8Array(cols*rows);
+  for(let cy=0; cy<rows; cy++){
+    for(let cx=0; cx<cols; cx++){
+      let s=0, n=0;
+      for(let yy=0; yy<cell; yy++){
+        const py = cy*cell+yy; if(py>=h) continue;
+        for(let xx=0; xx<cell; xx++){
+          const px = cx*cell+xx; if(px>=w) continue;
+          const idx = (py*w+px)*4;
+          s += img[idx]*0.299 + img[idx+1]*0.587 + img[idx+2]*0.114; n++;
+        }
+      }
+      dark[cy*cols+cx] = (n && s/n < thresh) ? 1 : 0;
+    }
+  }
+  const seen = new Uint8Array(cols*rows);
+  const comps = [];
+  for(let idx0=0; idx0<cols*rows; idx0++){
+    if(!dark[idx0] || seen[idx0]) continue;
+    const stack = [idx0]; seen[idx0] = 1;
+    let minX=cols, maxX=0, minY=rows, maxY=0, count=0;
+    while(stack.length){
+      const idx = stack.pop();
+      const cx = idx % cols, cy = (idx / cols) | 0;
+      count++;
+      if(cx<minX) minX=cx; if(cx>maxX) maxX=cx; if(cy<minY) minY=cy; if(cy>maxY) maxY=cy;
+      const nbrs = [[cx-1,cy],[cx+1,cy],[cx,cy-1],[cx,cy+1]];
+      for(const [nx,ny] of nbrs){
+        if(nx<0 || nx>=cols || ny<0 || ny>=rows) continue;
+        const nb = ny*cols+nx;
+        if(!seen[nb] && dark[nb]){ seen[nb]=1; stack.push(nb); }
+      }
+    }
+    comps.push({minX,maxX,minY,maxY,count});
+  }
+  const minCells = 3, maxCells = Math.max(cols, rows) * 0.28;
+  const candidates = comps.filter(c=>{
+    const cw = c.maxX-c.minX+1, ch = c.maxY-c.minY+1;
+    if(cw<minCells || ch<minCells || cw>maxCells || ch>maxCells) return false;
+    const ratio = cw/ch;
+    if(ratio<0.5 || ratio>2) return false;
+    const fill = c.count/(cw*ch);
+    return fill >= 0.55; // สี่เหลี่ยมทึบควรมีความหนาแน่นพิกเซลมืดสูง
+  }).map(c=> ({
+    cx: ((c.minX+c.maxX)/2 + 0.5) * cell,
+    cy: ((c.minY+c.maxY)/2 + 0.5) * cell,
+    area: (c.maxX-c.minX+1) * (c.maxY-c.minY+1)
+  }));
+  if(candidates.length < 4) return null;
+  const midX = w/2, midY = h/2;
+  const zones = { tl:null, tr:null, bl:null, br:null };
+  for(const c of candidates){
+    const key = (c.cy<midY ? "t" : "b") + (c.cx<midX ? "l" : "r");
+    if(!zones[key] || c.area > zones[key].area) zones[key] = c;
+  }
+  if(!zones.tl || !zones.tr || !zones.bl || !zones.br) return null;
+  return {
+    tl:{x:zones.tl.cx, y:zones.tl.cy}, tr:{x:zones.tr.cx, y:zones.tr.cy},
+    bl:{x:zones.bl.cx, y:zones.bl.cy}, br:{x:zones.br.cx, y:zones.br.cy}
+  };
+}
+
+/* ---- ปรับมุมภาพ (perspective correction) จาก 4 จุดหมุดที่ตรวจเจอ ให้เป็นสี่เหลี่ยมมาตรฐาน EXAM_RECT_W x EXAM_RECT_H ---- */
+function rectifyImage(srcCanvas, srcPts){
+  const dst = [{x:0,y:0}, {x:EXAM_RECT_W,y:0}, {x:0,y:EXAM_RECT_H}, {x:EXAM_RECT_W,y:EXAM_RECT_H}];
+  const src = [srcPts.tl, srcPts.tr, srcPts.bl, srcPts.br];
+  const H = computeHomography(src, dst);
+  if(!H) return null;
+  const Hinv = invertHomography(H);
+  if(!Hinv) return null;
+  const sw = srcCanvas.width, sh = srcCanvas.height;
+  const srcImg = srcCanvas.getContext("2d").getImageData(0, 0, sw, sh).data;
+  const out = document.createElement("canvas");
+  out.width = EXAM_RECT_W; out.height = EXAM_RECT_H;
+  const octx = out.getContext("2d");
+  const outImg = octx.createImageData(EXAM_RECT_W, EXAM_RECT_H);
+  for(let y=0; y<EXAM_RECT_H; y++){
+    for(let x=0; x<EXAM_RECT_W; x++){
+      const p = applyH(Hinv, x, y);
+      const sx = Math.round(p.x), sy = Math.round(p.y);
+      const di = (y*EXAM_RECT_W+x)*4;
+      if(sx>=0 && sx<sw && sy>=0 && sy<sh){
+        const si = (sy*sw+sx)*4;
+        outImg.data[di]=srcImg[si]; outImg.data[di+1]=srcImg[si+1]; outImg.data[di+2]=srcImg[si+2]; outImg.data[di+3]=255;
+      } else {
+        outImg.data[di]=255; outImg.data[di+1]=255; outImg.data[di+2]=255; outImg.data[di+3]=255;
+      }
+    }
+  }
+  octx.putImageData(outImg, 0, 0);
+  return out;
+}
+function cropFraction(canvas, x0, y0, x1, y1){
+  const w = canvas.width, h = canvas.height;
+  const px0 = Math.round(x0*w), py0 = Math.round(y0*h), pw = Math.round((x1-x0)*w), ph = Math.round((y1-y0)*h);
+  const out = document.createElement("canvas"); out.width = Math.max(1,pw); out.height = Math.max(1,ph);
+  out.getContext("2d").drawImage(canvas, px0, py0, pw, ph, 0, 0, pw, ph);
+  return out;
+}
+
+/* ---- อ่านวงกลมคำตอบ 20 ข้อ x 4 ตัวเลือก จากภาพที่ปรับมุมแล้ว เทียบกับเฉลย ---- */
+function sampleDarkness(imgData, w, h, cx, cy, r){
+  let sum=0, n=0; const r2=r*r;
+  const x0=Math.max(0,Math.floor(cx-r)), x1=Math.min(w-1,Math.ceil(cx+r));
+  const y0=Math.max(0,Math.floor(cy-r)), y1=Math.min(h-1,Math.ceil(cy+r));
+  for(let y=y0; y<=y1; y++){
+    for(let x=x0; x<=x1; x++){
+      const dx=x-cx, dy=y-cy; if(dx*dx+dy*dy>r2) continue;
+      const idx=(y*w+x)*4;
+      sum += imgData[idx]*0.299 + imgData[idx+1]*0.587 + imgData[idx+2]*0.114; n++;
+    }
+  }
+  return n ? sum/n : 255;
+}
+function readAnswers(rectCanvas){
+  const w = rectCanvas.width, h = rectCanvas.height;
+  const imgData = rectCanvas.getContext("2d").getImageData(0, 0, w, h).data;
+  const set = currentExamSet();
+  const answerKey = (set && set.answerKey) || {};
+  const total = Object.keys(answerKey).length;
+  const r = EXAM_LAYOUT.bubbleR * w;
+  let score = 0;
+  const answers = {};
+  for(let q=EXAM_LAYOUT.qStart; q<=EXAM_LAYOUT.qEnd; q++){
+    const y = examRowY(q) * h;
+    const dark = EXAM_LETTERS.map((L,k)=> sampleDarkness(imgData, w, h, examOptX(k)*w, y, r));
+    const sorted = [...dark].sort((a,b)=>a-b);
+    const minVal = sorted[0], gap = sorted[1]-sorted[0];
+    // ต้องเข้มพอสมควร (ไม่ใช่วงเปล่า) และเข้มกว่าตัวเลือกรองลงมาชัดเจน ไม่งั้นถือว่าอ่านไม่ชัด/ไม่ได้ฝน
+    let chosen = null;
+    if(minVal < 165 && gap > 18) chosen = EXAM_LETTERS[dark.indexOf(minVal)];
+    answers[q] = chosen;
+    if(chosen && answerKey[q] && chosen===answerKey[q]) score++;
+  }
+  return { score, total, answers };
+}
+
+/* ---- สถานะกล้อง/การสแกน ---- */
+let scanStream=null, scanRAF=null, scanBusy=false, scanStableQueue=[], scanCurNum=1, scanFacing="environment";
+let scanProcCanvas=null, scanProcCtx=null, scanOverlayCtx=null;
+const SCAN_PROC_W = 200, SCAN_STABLE_FRAMES = 6, SCAN_STABLE_TOL = 3;
+
+function examFirstUnscanned(set){
+  for(let i=1; i<=20; i++){ if(!set.students || !set.students[i] || set.students[i].total==null) return i; }
+  return 1;
+}
+function updateScanNumUI(){ const el = qs("#scanNumCur"); if(el) el.textContent = scanCurNum; }
+
+async function startExamScan(){
+  const set = currentExamSet();
+  if(!set){ showView("view-exam"); return; }
+  if(!Object.keys(set.answerKey||{}).length){
+    toast("ตั้งเฉลยให้ครบก่อนถึงจะตรวจคะแนนได้ครับ");
+    showView("view-exam-manage");
+    return;
+  }
+  scanCurNum = examFirstUnscanned(set);
+  updateScanNumUI();
+  qs("#scanResult").style.display = "none";
+  qs("#scanStatus").textContent = "กำลังเปิดกล้อง…";
+  try{
+    scanStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode:{ideal:scanFacing}, width:{ideal:1280}, height:{ideal:960} },
+      audio: false
+    });
+  }catch(err){
+    qs("#scanStatus").textContent = "เปิดกล้องไม่สำเร็จ — ตรวจสิทธิ์การเข้าถึงกล้องในเบราว์เซอร์ (" + (err.message||"") + ")";
+    return;
+  }
+  const video = qs("#scanVideo");
+  video.srcObject = scanStream;
+  video.onloadedmetadata = ()=>{
+    const stage = qs("#scanStage");
+    if(stage && video.videoWidth && video.videoHeight) stage.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
+  };
+  try{ await video.play(); }catch(e){}
+  scanStableQueue = [];
+  scanLoop();
+}
+function stopExamScan(){
+  if(scanRAF){ cancelAnimationFrame(scanRAF); scanRAF=null; }
+  if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream=null; }
+  const video = qs("#scanVideo"); if(video) video.srcObject = null;
+  scanStableQueue = []; scanBusy = false;
+}
+document.addEventListener("visibilitychange", ()=>{
+  const inScan = qs("#view-exam-scan") && qs("#view-exam-scan").classList.contains("active");
+  if(!inScan) return;
+  if(document.hidden) stopExamScan(); else startExamScan();
+});
+
+function scanLoop(){
+  scanRAF = requestAnimationFrame(scanLoop);
+  const video = qs("#scanVideo");
+  if(!video || !video.videoWidth || scanBusy) return;
+  if(!scanProcCanvas){ scanProcCanvas = document.createElement("canvas"); scanProcCtx = scanProcCanvas.getContext("2d", {willReadFrequently:true}); }
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const pw = SCAN_PROC_W, ph = Math.max(1, Math.round(SCAN_PROC_W * vh/vw));
+  scanProcCanvas.width = pw; scanProcCanvas.height = ph;
+  scanProcCtx.drawImage(video, 0, 0, pw, ph);
+  const markers = detectMarkers(scanProcCtx, pw, ph);
+
+  const overlay = qs("#scanOverlay");
+  if(overlay){
+    if(overlay.width !== overlay.clientWidth) overlay.width = overlay.clientWidth;
+    if(overlay.height !== overlay.clientHeight) overlay.height = overlay.clientHeight;
+    if(!scanOverlayCtx) scanOverlayCtx = overlay.getContext("2d");
+    scanOverlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+    if(markers && overlay.width && overlay.height){
+      const sx = overlay.width/pw, sy = overlay.height/ph;
+      scanOverlayCtx.strokeStyle = "#34D399"; scanOverlayCtx.lineWidth = 3;
+      scanOverlayCtx.beginPath();
+      [markers.tl, markers.tr, markers.br, markers.bl, markers.tl].forEach((p,i)=>{
+        const x=p.x*sx, y=p.y*sy;
+        if(i===0) scanOverlayCtx.moveTo(x,y); else scanOverlayCtx.lineTo(x,y);
+      });
+      scanOverlayCtx.stroke();
+      scanOverlayCtx.fillStyle = "#34D399";
+      [markers.tl, markers.tr, markers.bl, markers.br].forEach(p=>{
+        scanOverlayCtx.beginPath(); scanOverlayCtx.arc(p.x*sx, p.y*sy, 6, 0, Math.PI*2); scanOverlayCtx.fill();
+      });
+    }
+  }
+
+  const statusEl = qs("#scanStatus");
+  if(!markers){
+    scanStableQueue = [];
+    if(statusEl) statusEl.textContent = "เล็งกล้องให้เห็นกระดาษคำตอบครบทั้ง 4 มุม";
+    return;
+  }
+  scanStableQueue.push(markers);
+  if(scanStableQueue.length > SCAN_STABLE_FRAMES) scanStableQueue.shift();
+  if(scanStableQueue.length < SCAN_STABLE_FRAMES){
+    if(statusEl) statusEl.textContent = "เจอกระดาษแล้ว ถือนิ่งๆ…";
+    return;
+  }
+  let maxMove = 0;
+  for(const key of ["tl","tr","bl","br"]){
+    let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
+    for(const m of scanStableQueue){ const p=m[key]; if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y; }
+    maxMove = Math.max(maxMove, maxX-minX, maxY-minY);
+  }
+  if(maxMove > SCAN_STABLE_TOL){
+    if(statusEl) statusEl.textContent = "ถือนิ่งๆ อีกนิดนะครับ";
+    return;
+  }
+  if(statusEl) statusEl.textContent = "กำลังถ่าย…";
+  scanBusy = true;
+  const finalMarkers = scanStableQueue[scanStableQueue.length-1];
+  const scaleX = vw/pw, scaleY = vh/ph;
+  const srcPts = {
+    tl:{x:finalMarkers.tl.x*scaleX, y:finalMarkers.tl.y*scaleY},
+    tr:{x:finalMarkers.tr.x*scaleX, y:finalMarkers.tr.y*scaleY},
+    bl:{x:finalMarkers.bl.x*scaleX, y:finalMarkers.bl.y*scaleY},
+    br:{x:finalMarkers.br.x*scaleX, y:finalMarkers.br.y*scaleY}
+  };
+  captureAndScore(video, srcPts).finally(()=>{ scanBusy=false; scanStableQueue=[]; });
+}
+
+async function captureAndScore(video, srcPts){
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const shot = document.createElement("canvas"); shot.width=vw; shot.height=vh;
+  shot.getContext("2d").drawImage(video, 0, 0);
+  const rectified = rectifyImage(shot, srcPts);
+  if(!rectified){
+    toast("คำนวณมุมภาพไม่สำเร็จ ลองถือกระดาษให้เห็นครบ 4 มุมอีกครั้ง");
+    const statusEl = qs("#scanStatus"); if(statusEl) statusEl.textContent = "ลองอีกครั้งครับ";
+    return;
+  }
+  const { score, total } = readAnswers(rectified);
+  const headerCanvas = cropFraction(rectified, EXAM_LAYOUT.header.x0, EXAM_LAYOUT.header.y0, EXAM_LAYOUT.header.x1, EXAM_LAYOUT.header.y1);
+  const headerBlob = await new Promise(res=> headerCanvas.toBlob(res, "image/jpeg", 0.85));
+  const set = currentExamSet(); if(!set) return;
+  const imgKey = `${set.id}_${scanCurNum}`;
+  if(headerBlob){ try{ await examDBPut(imgKey, headerBlob); }catch(e){} }
+  set.students = set.students || {};
+  set.students[scanCurNum] = { score, total, headerImage: imgKey, scannedAt: Date.now() };
+  saveExamSets();
+  showScanResult(headerBlob, score, total);
+}
+function showScanResult(headerBlob, score, total){
+  const res = qs("#scanResult"), thumb = qs("#scanResultThumb");
+  if(headerBlob){
+    if(thumb.dataset.url) URL.revokeObjectURL(thumb.dataset.url);
+    const url = URL.createObjectURL(headerBlob);
+    thumb.src = url; thumb.dataset.url = url;
+  }
+  qs("#scanResultScore").textContent = `เลขที่ ${scanCurNum} · ได้ ${score}/${total} คะแนน`;
+  res.style.display = "flex";
+  const statusEl = qs("#scanStatus"); if(statusEl) statusEl.textContent = 'ตรวจสอบผลด้านล่าง แล้วกด "ถัดไป"';
+}
+
+qs("#scanNumPrev").addEventListener("click", ()=>{
+  scanCurNum = scanCurNum>1 ? scanCurNum-1 : 20; updateScanNumUI(); qs("#scanResult").style.display="none";
+});
+qs("#scanNumNext").addEventListener("click", ()=>{
+  scanCurNum = scanCurNum<20 ? scanCurNum+1 : 1; updateScanNumUI(); qs("#scanResult").style.display="none";
+});
+qs("#scanOkBtn").addEventListener("click", ()=>{
+  renderExamManage();
+  const set = currentExamSet();
+  scanCurNum = set ? examFirstUnscanned(set) : (scanCurNum<20 ? scanCurNum+1 : 1);
+  updateScanNumUI();
+  qs("#scanResult").style.display = "none";
+  const statusEl = qs("#scanStatus"); if(statusEl) statusEl.textContent = "เล็งกล้องให้เห็นกระดาษคำตอบครบทั้ง 4 มุม";
+});
+qs("#scanRedoBtn").addEventListener("click", ()=>{
+  qs("#scanResult").style.display = "none";
+  const statusEl = qs("#scanStatus"); if(statusEl) statusEl.textContent = "เล็งกล้องให้เห็นกระดาษคำตอบครบทั้ง 4 มุม";
+});
+qs("#scanManualBtn").addEventListener("click", ()=>{
+  if(scanBusy) return;
+  const video = qs("#scanVideo");
+  if(!video || !video.videoWidth){ toast("กล้องยังไม่พร้อม"); return; }
+  // ถ่ายเองแบบไม่ยึดหมุด (เผื่อกรณีตรวจจับหมุดยาก) — ใช้กรอบภาพทั้งหมดแทน 4 มุม เหมาะกับตอนถือกระดาษให้เต็มเฟรมพอดี
+  scanBusy = true;
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const srcPts = { tl:{x:0,y:0}, tr:{x:vw,y:0}, bl:{x:0,y:vh}, br:{x:vw,y:vh} };
+  captureAndScore(video, srcPts).finally(()=>{ scanBusy=false; });
+});
+qs("#scanFlipBtn").addEventListener("click", async ()=>{
+  scanFacing = scanFacing==="environment" ? "user" : "environment";
+  stopExamScan();
+  await startExamScan();
+});
+
+/* ---- พิมพ์กระดาษคำตอบเปล่า (เปิดแท็บใหม่ ใช้ตำแหน่งพิกัดชุดเดียวกับตอนอ่านผล) ---- */
+function buildPrintSheetHTML(examName){
+  const pageWmm = 190, pageHmm = 277;
+  const mkMm = (EXAM_LAYOUT.markerFrac * pageWmm).toFixed(1);
+  const circMm = (2 * EXAM_LAYOUT.bubbleR * pageWmm).toFixed(1);
+  const rows = [];
+  for(let q=EXAM_LAYOUT.qStart; q<=EXAM_LAYOUT.qEnd; q++){
+    const yPct = (examRowY(q)*100).toFixed(2);
+    const numX = ((EXAM_LAYOUT.optX0 - 0.10)*100).toFixed(2);
+    const opts = EXAM_LETTERS.map((L,k)=>{
+      const xPct = (examOptX(k)*100).toFixed(2);
+      return `<div class="ps-bubble" style="left:${xPct}%; top:${yPct}%;"><span class="ps-circle"></span><span class="ps-letter">${L}</span></div>`;
+    }).join("");
+    rows.push(`<div class="ps-qnum" style="left:${numX}%; top:${yPct}%;">${q}</div>${opts}`);
+  }
+  return `<!DOCTYPE html><html lang="th"><head><meta charset="utf-8">
+<title>กระดาษคำตอบ${examName ? ": "+examName : ""}</title>
+<style>
+  @page{ size:A4 portrait; margin:10mm; }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:'Noto Sans Thai',Tahoma,sans-serif;}
+  .ps-page{ position:relative; width:${pageWmm}mm; height:${pageHmm}mm; margin:0 auto; background:#fff; }
+  .ps-marker{ position:absolute; width:${mkMm}mm; height:${mkMm}mm; background:#000; }
+  .ps-marker.tl{ left:0; top:0; transform:translate(-50%,-50%); }
+  .ps-marker.tr{ left:100%; top:0; transform:translate(-50%,-50%); }
+  .ps-marker.bl{ left:0; top:100%; transform:translate(-50%,-50%); }
+  .ps-marker.br{ left:100%; top:100%; transform:translate(-50%,-50%); }
+  .ps-title{ position:absolute; left:0; top:2mm; width:100%; text-align:center; font-size:15px; font-weight:700; }
+  .ps-header{ position:absolute; left:${(EXAM_LAYOUT.header.x0*100).toFixed(2)}%; top:${(EXAM_LAYOUT.header.y0*100).toFixed(2)}%;
+    width:${((EXAM_LAYOUT.header.x1-EXAM_LAYOUT.header.x0)*100).toFixed(2)}%; height:${((EXAM_LAYOUT.header.y1-EXAM_LAYOUT.header.y0)*100).toFixed(2)}%;
+    border:1.5px solid #000; border-radius:5px; display:flex; align-items:center; padding:0 3mm; font-size:13px; gap:5mm; }
+  .ps-header .ln{flex:1; border-bottom:1px solid #000; height:5mm; align-self:flex-end;}
+  .ps-header .ln.no{flex:0 0 20mm;}
+  .ps-qnum{ position:absolute; transform:translate(-100%,-50%); font-size:12px; font-weight:700; padding-right:2mm; white-space:nowrap; }
+  .ps-bubble{ position:absolute; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; gap:0.8mm; }
+  .ps-circle{ width:${circMm}mm; height:${circMm}mm; border:1.4px solid #000; border-radius:50%; display:block; }
+  .ps-letter{ font-size:9px; }
+  .ps-foot{ position:absolute; bottom:2mm; width:100%; text-align:center; font-size:10px; color:#555; }
+  .ps-noprint{ text-align:center; padding:14px; font-family:sans-serif; }
+  @media print{ .ps-noprint{display:none;} }
+</style></head>
+<body>
+  <div class="ps-noprint">
+    <button onclick="window.print()" style="font-size:16px; padding:8px 22px; cursor:pointer;">🖨 พิมพ์</button>
+    <p style="font-size:13px;color:#666">ตั้งค่าพิมพ์เป็นขนาด 100% (ไม่ใช่ Fit to page) และปิดหัว/ท้ายกระดาษของเบราว์เซอร์ เพื่อให้ตำแหน่งจุดดำ 4 มุมตรงตามจริง</p>
+  </div>
+  <div class="ps-page">
+    <div class="ps-marker tl"></div><div class="ps-marker tr"></div><div class="ps-marker bl"></div><div class="ps-marker br"></div>
+    <div class="ps-title">กระดาษคำตอบ${examName ? " — "+esc(examName) : ""}</div>
+    <div class="ps-header"><b>ชื่อ-สกุล</b><span class="ln"></span><b>เลขที่</b><span class="ln no"></span></div>
+    ${rows.join("")}
+    <div class="ps-foot">ระบายวงกลมให้เข้มและเต็มวงด้วยปากกา/ดินสอเข้ม ห้ามพับหรือทำให้จุดดำ 4 มุมเสียหาย</div>
+  </div>
+</body></html>`;
+}
+function openPrintSheet(){
+  const set = currentExamSet();
+  const html = buildPrintSheetHTML(set ? set.name : "");
+  const win = window.open("", "_blank");
+  if(!win){ toast("เบราว์เซอร์บล็อกป๊อปอัป กรุณาอนุญาตแล้วลองใหม่"); return; }
+  win.document.open(); win.document.write(html); win.document.close();
+}
+qs("#emPrintBtn").addEventListener("click", openPrintSheet);
 
 /* ================= ปุ่มขยายเต็มจอ: ยุบทุกอย่างเหลือแค่ตาราง (เลขที่/รายชื่อ/ช่องลงคะแนน/หัวตาราง)
    + ขอเข้าโหมด Fullscreen จริงของมือถือ (ซ่อนแถบที่อยู่/แถบเบราว์เซอร์ ให้เว็บกินเต็มจอจริง ๆ)
