@@ -1451,7 +1451,7 @@ function renderExamSummary(){
   for(let i=1; i<=20; i++){
     const st = set.students ? set.students[i] : null;
     const scoreTxt = (st && st.total!=null) ? `${st.score}/${st.total}` : `<span class="pend-ok" style="color:var(--ink-soft); font-weight:500;">ยังไม่มีข้อมูล</span>`;
-    const thumb = (st && st.headerImage) ? `<img class="ec-thumb" data-img-key="${esc(st.headerImage)}">` : `<div class="ec-thumb-empty">—</div>`;
+    const thumb = (st && st.headerImage) ? `<img class="ec-thumb" data-img-key="${esc(st.headerImage)}" data-full-key="${esc(st.fullImage||"")}" title="แตะดูภาพเต็ม">` : `<div class="ec-thumb-empty">—</div>`;
     rows.push(`<tr><td>${i}</td><td class="ec-thumb-cell">${thumb}</td><td>${scoreTxt}</td></tr>`);
   }
   qs("#examSumWrap").innerHTML =
@@ -1467,6 +1467,11 @@ function renderExamSummary(){
     }catch(e){ img.outerHTML = `<div class="ec-thumb-empty">—</div>`; }
   });
 }
+// แตะรูปหัวกระดาษในตารางสรุปคะแนน เพื่อดูภาพกระดาษคำตอบเต็มแผ่น (มีวงกลมคำตอบที่ตรวจแล้ว) — ผูก listener ครั้งเดียวแบบ delegation
+qs("#examSumWrap").addEventListener("click", e=>{
+  const img = e.target.closest("img.ec-thumb[data-full-key]");
+  if(img && img.dataset.fullKey) openImgView(img.dataset.fullKey);
+});
 
 /* =====================================================================
    Round 17 : Scan กระดาษคำตอบด้วยกล้อง (OMR)
@@ -1474,6 +1479,8 @@ function renderExamSummary(){
    เมื่อเจอครบ 4 มุมและถือนิ่งพอ จะถ่ายภาพ แล้วคำนวณ perspective transform (homography) ปรับมุมภาพ
    ให้กระดาษเป็นสี่เหลี่ยมตรงมาตรฐาน จากนั้นอ่านความเข้มของวงกลมคำตอบแต่ละข้อเทียบกับเฉลย ให้คะแนนอัตโนมัติ
    พร้อม crop "หัวกระดาษ" (ช่องเขียนชื่อ/เลขที่) เก็บไว้เป็นรูปให้ครูดูทวนภายหลังได้
+   นอกจากนี้ยังเก็บภาพกระดาษคำตอบเต็มแผ่นหลังปรับมุมแล้ว พร้อมวงกลมคำตอบที่ระบบอ่านได้ (เขียว=ตรงเฉลย, แดง=ไม่ตรงเฉลย)
+   ไว้เป็น "fullImage" แยกอีกชุด ให้ครูแตะรูปหัวกระดาษเพื่อเปิดดูภาพเต็มย้อนหลังได้ว่าระบบตรวจข้อไหนลงไปว่าอย่างไร
    รูปภาพที่ crop ไว้ เก็บใน IndexedDB แยกจาก localStorage (ที่เก็บแค่ชุดข้อสอบ/คะแนน) เพราะรูปภาพหนักกว่ามาก
    หมายเหตุ: อัลกอริทึมตรวจจับ/อ่านค่าเป็นแบบง่าย ปรับ threshold ได้ตามการทดสอบจริงในรอบถัดไป
    ===================================================================== */
@@ -1867,6 +1874,30 @@ function readAnswers(rectCanvas){
   return { score, total, answers, lowConfidence: !lock.ok };
 }
 
+/* ---- วาดวงกลมทับตำแหน่งคำตอบที่ระบบอ่านได้ ลงบนภาพที่ปรับมุมแล้วทั้งแผ่น (เขียว=ตรงเฉลย, แดง=ไม่ตรงเฉลย)
+   เก็บภาพนี้ไว้เป็น "fullImage" แยกจาก headerImage เพื่อให้ครูแตะดูย้อนหลังได้ว่าระบบตรวจข้อไหนว่าอย่างไร
+   หมายเหตุเรื่องขอบเขตครอป: rectified ที่ส่งเข้ามาถูกปรับมุมด้วย homography ให้พอดีกับกรอบหมุดทั้ง 6 จุดอยู่แล้ว
+   (มุม tl/tr/bl/br แม็ปตรงกับขอบภาพ 0..EXAM_RECT_W/H พอดี ไม่มีส่วนเกินขอบกระดาษหลุดเข้ามา) จึงใช้ทั้งภาพได้เลยไม่ต้อง crop ซ้ำ ---- */
+function markAnswersOnImage(rectCanvas, answers, answerKey){
+  const ctx = rectCanvas.getContext("2d");
+  const w = rectCanvas.width;
+  const r = EXAM_LAYOUT.bubbleR * w * 1.4; // วาดใหญ่กว่าวงจริงเล็กน้อยให้เห็นชัดตอนดูย้อนหลัง
+  ctx.lineWidth = Math.max(2, w*0.007);
+  for(let q=EXAM_LAYOUT.qStart; q<=EXAM_LAYOUT.qEnd; q++){
+    const chosen = answers[q];
+    if(!chosen) continue;
+    const k = EXAM_LETTERS.indexOf(chosen);
+    if(k < 0) continue;
+    const { x, y } = examBubblePos(q, k);
+    const correct = answerKey[q] && chosen === answerKey[q];
+    ctx.strokeStyle = correct ? "#1E8E3E" : "#D93025";
+    ctx.beginPath();
+    ctx.arc(x*rectCanvas.width, y*rectCanvas.height, r, 0, Math.PI*2);
+    ctx.stroke();
+  }
+  return rectCanvas;
+}
+
 /* ---- สถานะกล้อง/การสแกน ---- */
 let scanStream=null, scanRAF=null, scanBusy=false, scanStableQueue=[], scanCurNum=1, scanFacing="environment";
 let scanProcCanvas=null, scanProcCtx=null, scanOverlayCtx=null;
@@ -1921,25 +1952,16 @@ document.addEventListener("visibilitychange", ()=>{
   if(document.hidden) stopExamScan(); else startExamScan();
 });
 
-/* ---- กรอบไกด์สีเขียว (มุมทั้ง 4) แสดงตลอดเวลาตอนเปิดกล้อง ช่วยให้ผู้ใช้เล็งกระดาษให้จุดดำ 4 มุมตรงกับกรอบ
-   ก่อนที่ระบบจะตรวจจับได้จริง (ต่างจากกรอบ outline ที่ขึ้นเฉพาะตอนตรวจจับหมุดสำเร็จแล้วเท่านั้น) ---- */
-function drawGuideFrame(ctx, w, h){
-  const gw = w*0.78, gh = gw * (297/210); // สัดส่วน A4 แนวตั้ง
-  const gx = (w-gw)/2, gy = Math.max(6, (h-gh)/2);
-  const armX = gw*0.12, armY = Math.min(gh*0.12, armX*1.4);
-  ctx.strokeStyle = "rgba(52,211,153,0.85)"; ctx.lineWidth = 4; ctx.lineCap = "round";
-  const corners = [
-    {x:gx, y:gy, dx:1, dy:1},           // บนซ้าย
-    {x:gx+gw, y:gy, dx:-1, dy:1},       // บนขวา
-    {x:gx, y:gy+gh, dx:1, dy:-1},       // ล่างซ้าย
-    {x:gx+gw, y:gy+gh, dx:-1, dy:-1}    // ล่างขวา
-  ];
-  corners.forEach(c=>{
-    ctx.beginPath();
-    ctx.moveTo(c.x + armX*c.dx, c.y);
-    ctx.lineTo(c.x, c.y);
-    ctx.lineTo(c.x, c.y + armY*c.dy);
-    ctx.stroke();
+/* ---- สี่เหลี่ยมไกด์สีเขียว 4 อัน ที่ "วิ่งเข้าไปเกาะ" จุดดำ 4 มุมที่ตรวจจับได้จริงในแต่ละเฟรม
+   (เปลี่ยนจากกรอบไกด์คงที่แบบเดิมที่ค้างอยู่กับที่แล้วให้ผู้ใช้ขยับมือถือเข้าหา มาเป็นระบบช่วยตรวจจับที่ขยับตามภาพแทน)
+   วาดเฉพาะตอนตรวจจับหมุดได้แล้วเท่านั้น — ถ้ายังไม่เจอจะไม่มีกรอบใดๆ ค้างอยู่ มีแต่ข้อความสถานะบอกให้เล็งกล้อง ---- */
+function drawMarkerSquares(ctx, markers, sx, sy, w, h, color){
+  const size = Math.max(14, Math.min(w,h) * 0.06); // ขนาดกรอบสัมพัทธ์กับพื้นที่วิดีโอที่แสดง
+  ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.lineJoin = "round";
+  [markers.tl, markers.tr, markers.bl, markers.br].forEach(p=>{
+    if(!p) return;
+    const x = p.x*sx, y = p.y*sy;
+    ctx.strokeRect(x-size/2, y-size/2, size, size);
   });
 }
 
@@ -1960,25 +1982,18 @@ function scanLoop(){
     if(overlay.height !== overlay.clientHeight) overlay.height = overlay.clientHeight;
     if(!scanOverlayCtx) scanOverlayCtx = overlay.getContext("2d");
     scanOverlayCtx.clearRect(0, 0, overlay.width, overlay.height);
-    drawGuideFrame(scanOverlayCtx, overlay.width, overlay.height); // กรอบไกด์เขียว วาดทุกเฟรม ช่วยเล็งกระดาษ
     if(markers && overlay.width && overlay.height){
       const sx = overlay.width/pw, sy = overlay.height/ph;
       const hasMid = !!(markers.ml && markers.mr);
-      const outline = hasMid
-        ? [markers.tl, markers.tr, markers.mr, markers.br, markers.bl, markers.ml, markers.tl]
-        : [markers.tl, markers.tr, markers.br, markers.bl, markers.tl];
-      scanOverlayCtx.strokeStyle = hasMid ? "#34D399" : "#FBBF24"; // เขียว = เจอครบ 6 จุด, เหลือง = เจอแค่ 4 มุม (fallback)
-      scanOverlayCtx.lineWidth = 3;
-      scanOverlayCtx.beginPath();
-      outline.forEach((p,i)=>{
-        const x=p.x*sx, y=p.y*sy;
-        if(i===0) scanOverlayCtx.moveTo(x,y); else scanOverlayCtx.lineTo(x,y);
-      });
-      scanOverlayCtx.stroke();
-      scanOverlayCtx.fillStyle = scanOverlayCtx.strokeStyle;
-      Object.values(markers).forEach(p=>{
-        scanOverlayCtx.beginPath(); scanOverlayCtx.arc(p.x*sx, p.y*sy, 6, 0, Math.PI*2); scanOverlayCtx.fill();
-      });
+      const color = hasMid ? "#34D399" : "#FBBF24"; // เขียว = เจอครบ 6 จุด, เหลือง = เจอแค่ 4 มุมนอกสุด (fallback)
+      drawMarkerSquares(scanOverlayCtx, markers, sx, sy, overlay.width, overlay.height, color);
+      if(hasMid){
+        // จุดกลางซ้าย/ขวา แสดงเป็นวงกลมเล็กแทนสี่เหลี่ยม (ไม่ใช่มุมกระดาษ ไว้ช่วยดูว่าเจอครบ 6 จุด)
+        scanOverlayCtx.fillStyle = color;
+        [markers.ml, markers.mr].forEach(p=>{
+          scanOverlayCtx.beginPath(); scanOverlayCtx.arc(p.x*sx, p.y*sy, 5, 0, Math.PI*2); scanOverlayCtx.fill();
+        });
+      }
     }
   }
 
@@ -2030,30 +2045,51 @@ async function captureAndScore(video, srcPts){
     const statusEl = qs("#scanStatus"); if(statusEl) statusEl.textContent = "ลองอีกครั้งครับ";
     return;
   }
-  const { score, total, lowConfidence } = readAnswers(rectified);
+  const set = currentExamSet(); if(!set) return;
+  const { score, total, answers, lowConfidence } = readAnswers(rectified);
   const headerCanvas = cropFraction(rectified, EXAM_LAYOUT.header.x0, EXAM_LAYOUT.header.y0, EXAM_LAYOUT.header.x1, EXAM_LAYOUT.header.y1);
   const headerBlob = await new Promise(res=> headerCanvas.toBlob(res, "image/jpeg", 0.85));
-  const set = currentExamSet(); if(!set) return;
+  // วงกลมคำตอบที่ตรวจได้ลงบนภาพเต็มแผ่น (rectified) หลังจาก crop หัวกระดาษออกไปแล้ว เพื่อเก็บไว้ให้ครูแตะดูย้อนหลังได้
+  markAnswersOnImage(rectified, answers, set.answerKey || {});
+  const fullBlob = await new Promise(res=> rectified.toBlob(res, "image/jpeg", 0.85));
   const imgKey = `${set.id}_${scanCurNum}`;
+  const fullKey = `${imgKey}_full`;
   if(headerBlob){ try{ await examDBPut(imgKey, headerBlob); }catch(e){} }
+  if(fullBlob){ try{ await examDBPut(fullKey, fullBlob); }catch(e){} }
   set.students = set.students || {};
-  set.students[scanCurNum] = { score, total, headerImage: imgKey, scannedAt: Date.now() };
+  set.students[scanCurNum] = { score, total, headerImage: imgKey, fullImage: fullKey, scannedAt: Date.now() };
   saveExamSets();
   // ตัวล็อคใต้กระดาษไม่ชัด แปลว่าปรับมุมภาพอาจคลาดเคลื่อน (เอียง/เบลอ/แสงไม่พอ) — เตือนให้ครูตรวจซ้ำ ไม่บล็อกผลไว้เฉยๆ
   if(lowConfidence) toast("ภาพอาจไม่ชัดหรือมุมกระดาษเพี้ยน ลองตรวจคะแนนที่ได้เทียบกับกระดาษจริงอีกครั้ง");
-  showScanResult(headerBlob, score, total);
+  showScanResult(headerBlob, score, total, fullKey);
 }
-function showScanResult(headerBlob, score, total){
+function showScanResult(headerBlob, score, total, fullKey){
   const res = qs("#scanResult"), thumb = qs("#scanResultThumb");
   if(headerBlob){
     if(thumb.dataset.url) URL.revokeObjectURL(thumb.dataset.url);
     const url = URL.createObjectURL(headerBlob);
     thumb.src = url; thumb.dataset.url = url;
   }
+  thumb.dataset.fullKey = fullKey || "";
   qs("#scanResultScore").textContent = `เลขที่ ${scanCurNum} · ได้ ${score}/${total} คะแนน`;
   res.style.display = "flex";
-  const statusEl = qs("#scanStatus"); if(statusEl) statusEl.textContent = 'ตรวจสอบผลด้านล่าง แล้วกด "ถัดไป"';
+  const statusEl = qs("#scanStatus"); if(statusEl) statusEl.textContent = 'แตะรูปเพื่อดูภาพเต็มและตรวจทาน แล้วกด "ถัดไป"';
 }
+/* ---- เปิด modal ดูภาพกระดาษคำตอบเต็มแผ่น (พร้อมวงกลมคำตอบที่ตรวจแล้ว) จาก key ใน IndexedDB ---- */
+async function openImgView(key){
+  if(!key) return;
+  try{
+    const blob = await examDBGet(key);
+    if(!blob){ toast("ไม่พบภาพนี้ (อาจเป็นชุดข้อสอบเก่าก่อนมีฟีเจอร์นี้)"); return; }
+    const img = qs("#imgViewPic");
+    if(img.dataset.url) URL.revokeObjectURL(img.dataset.url);
+    const url = URL.createObjectURL(blob);
+    img.src = url; img.dataset.url = url;
+    qs("#modalImgView").classList.add("active");
+  }catch(e){ toast("เปิดภาพไม่สำเร็จ"); }
+}
+qs("#scanResultThumb").addEventListener("click", ()=> openImgView(qs("#scanResultThumb").dataset.fullKey));
+qsa("#modalImgView [data-close]").forEach(b=> b.addEventListener("click", ()=> qs("#modalImgView").classList.remove("active")));
 
 qs("#scanNumPrev").addEventListener("click", ()=>{
   scanCurNum = scanCurNum>1 ? scanCurNum-1 : 20; updateScanNumUI(); qs("#scanResult").style.display="none";
