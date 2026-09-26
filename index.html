@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>KruChauy</title>
 <!-- เปลี่ยนเลข v= ทุกครั้งที่อัปเดตไฟล์ เพื่อให้เบราว์เซอร์โหลดของใหม่ ไม่ใช้ของเก่าที่แคชไว้ -->
-<link rel="stylesheet" href="style.css?v=19">
+<link rel="stylesheet" href="style.css?v=20">
 </head>
 <body>
 <div id="splash"><div id="splashBg"></div><div id="splashLogo">Kru<span>Chauy</span></div><div id="splashLoading">กำลังโหลดข้อมูล...</div></div>
@@ -80,11 +80,12 @@
       <div class="tb-txt"><h2>สรุปการมาเรียน</h2><div class="sub">เลือกห้อง วิชา และวันที่เริ่มต้น</div></div>
       <span class="tb-ico">📅</span>
     </div>
-    <div class="period-bar" data-mode="full"></div>
+    <div class="period-bar" data-mode="term"></div>
     <div class="card">
       <div class="field"><label>ห้อง / ชั้นปี</label><select id="repRoom" class="room-select"></select></div>
       <div class="field"><label>วิชา</label><select id="repSubject" class="subject-select"><option value="">เลือกห้องก่อน</option></select></div>
       <div class="field"><label>ตั้งแต่วันที่ (วันสอน A)</label><input id="repStart" type="date"></div>
+      <div class="field"><label>สอนกี่คาบต่อสัปดาห์ (ใช้คำนวณ มส.)</label><input id="repHoursWeek" type="number" inputmode="numeric" min="1" max="40" step="1" placeholder="ไม่บังคับ — เว้นว่างได้ถ้าไม่ต้องการเช็ค มส."></div>
       <div id="repSourceNote" class="gen-preview" style="display:none;"></div>
       <div id="repCalcBox" style="display:none;">
         <div class="field"><label>สอนกี่คาบต่อสัปดาห์</label>
@@ -109,13 +110,14 @@
       <span class="tb-ico">📅</span>
       <button class="focus-btn" title="ขยายเต็มจอ">⤢</button>
     </div>
-    <div class="period-bar" data-mode="lock" data-compact="1"></div>
+    <div class="period-bar" data-mode="lock-term" data-compact="1"></div>
     <div class="table-toolbar">
       <div class="att-legend">
         <span class="ar ar-present">✓ มา</span><span class="ar ar-absent">ขาด</span><span class="ar ar-leave">ลา</span><span class="ar ar-late">สาย</span><span class="ar ar-none">· ยังไม่เช็ค</span>
       </div>
       <span class="score-info" id="repInfo"></span>
     </div>
+    <div id="repMsWarn" class="ms-warn" style="display:none;"></div>
     <div class="score-scroll"><div id="repTableWrap"></div></div>
   </section>
 
@@ -229,7 +231,7 @@
   <section id="view-exam-manage" class="view">
     <div class="topbar">
       <button class="back-btn" data-back="view-exam">‹</button>
-      <div class="tb-txt"><h2 id="emTitle">ชุดข้อสอบ</h2><div class="sub">เฉลย · สแกน · สรุปคะแนน</div></div>
+      <div class="tb-txt"><h2 id="emTitle">ชุดข้อสอบ</h2><div class="sub" id="emSub">เฉลย · สแกน · สรุปคะแนน</div></div>
       <span class="tb-ico">🧾</span>
     </div>
     <div class="exam-stats" id="emStats"></div>
@@ -384,7 +386,9 @@
   <div class="modal-backdrop" id="modalExamNew">
     <div class="modal-sheet">
       <h3>สร้างชุดข้อสอบใหม่</h3>
-      <div class="field"><label>ชื่อชุดข้อสอบ</label><input id="examNewName" placeholder="เช่น ม.5 กลางภาค" maxlength="40"></div>
+      <div class="field"><label>ห้อง / ชั้นปี</label><select id="examNewRoom" class="room-select"></select></div>
+      <div class="field"><label>วิชา</label><select id="examNewSubject" class="subject-select"><option value="">เลือกห้องก่อน</option></select></div>
+      <div class="field"><label>ชื่อชุดข้อสอบ</label><input id="examNewName" placeholder="เช่น กลางภาค, ใบงานที่ 1" maxlength="40"></div>
       <div class="modal-actions">
         <button class="btn btn-outline" data-close>ยกเลิก</button>
         <button id="examNewSaveBtn" class="btn btn-primary">สร้าง</button>
@@ -402,6 +406,6 @@
     </div>
   </div>
 </div>
-<script src="script.js?v=20"></script>
+<script src="script.js?v=21"></script>
 </body>
 </html>
