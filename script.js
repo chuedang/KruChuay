@@ -1,17 +1,18 @@
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbxB41G5zwGmTLLqeBYSKMhew_FVXYdLN49cbSbVBns-k6rnYsKct8OKhvPCcahz2O8i/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbxf_66eLk1N5dhpUPHjQOQIy8Az0fd-Ac87Zm5TtggxqpTtKdnrHFnwrv2P1KsDGMGT/exec"
 };
 
 const SLOT_MIN = 36; // จำนวนช่องว่างเริ่มต้นเมื่อยังไม่มีหัวคะแนน (18 สัปดาห์ x 2 คาบ) — ถ้ามีหัวแล้วจะคำนวณจาก slotTarget()
 const WEEKDAYS = ["อา","จ","อ","พ","พฤ","ศ","ส"];
 
 const state = {
-  students: [], scores: [], activities: [], attendance: [], teaching: [], config: [], examRows: [], examSetup: [],
+  students: [], scores: [], activities: [], attendance: [], teaching: [], config: [], examRows: [], examSetup: [], examKeyRows: [],
   examUi: { mc:"", es:"", vals:new Map(), dirty:false },
   attend: { room:"", subject:"", date:"", rows:[] },
   score: { tab:"beh", room:"", subject:"", headers:[], editingDate:null, pickCell:null, pending:new Map(), warned:false, scrolled:false },
   examSets: []
 };
+const EXAM_QN = 20;   // จำนวนข้อสูงสุดต่อชุดข้อสอบ — ต้องตรงกับ EXAM_KEY_QN ฝั่ง GS.txt เสมอ
 
 const qs = (s, r=document) => r.querySelector(s);
 const qsa = (s, r=document) => Array.from(r.querySelectorAll(s));
@@ -43,9 +44,10 @@ const period = (()=>{
   return { term:"1", type:"กลางภาค" };
 })();
 
-/* ================= ตรวจข้อสอบ (เก็บในเครื่องด้วย localStorage — คนละส่วนกับ Google Sheet) =================
-   ชุดข้อสอบแต่ละชุด: { id, name, answerKey:{ "1":"ก", ... }, students:{ "7":{score,total,headerImage,scannedAt}, ... } }
-   ตอนนี้เป็นโครงเริ่มต้น: สร้าง/ลบชุด + ตั้งเฉลย + ดูตารางสรุป — ส่วนกล้อง/ตรวจ OMR จริงจะเพิ่มในขั้นถัดไป */
+/* ================= ตรวจข้อสอบ (เก็บในเครื่องด้วย localStorage — เฉลย+ชื่อชุด สำรองขึ้นชีท ExamKey ด้วย) =================
+   ชุดข้อสอบแต่ละชุด: { id, name, term, level, subject, answerKey:{ "1":"ก", ... }, students:{ "7":{score,total,headerImage,scannedAt}, ... } }
+   answerKey/name/term/level/subject สำรองขึ้นชีท ExamKey (ผ่าน saveExamKey) ทุกครั้งที่สร้าง/แก้เฉลย เผื่อเปิดจากเครื่องอื่นหรือ localStorage หาย
+   students (คะแนนที่สแกนได้ + รูปหัวกระดาษ) ยังเก็บในเครื่องอย่างเดียวเหมือนเดิม ยังไม่ขึ้นชีท */
 const EXAM_SETS_KEY = "kc_examsets";
 const EXAM_LETTERS = ["ก","ข","ค","ง"];
 function loadExamSets(){
@@ -56,6 +58,28 @@ function saveExamSets(){ try{ localStorage.setItem(EXAM_SETS_KEY, JSON.stringify
 state.examSets = loadExamSets();
 let currentExamId = null;
 const currentExamSet = () => state.examSets.find(s=>s.id===currentExamId);
+/* ดึงชุดข้อสอบ (เฉลย+ห้อง+วิชา) ที่มีในชีท ExamKey แต่ยังไม่มีในเครื่องนี้ (เช่น สร้างไว้จากเครื่องอื่น) มาเพิ่มให้
+   ของในเครื่องที่มีอยู่แล้วถือเป็นตัวหลัก (ไม่ทับ) เพื่อไม่ให้ข้อมูลที่กำลังแก้ไขอยู่หายไปโดยไม่ตั้งใจ */
+function syncExamKeysFromSheet(){
+  const rows = state.examKeyRows || [];
+  let added = false;
+  rows.forEach(r=>{
+    const id = String(r["รหัสชุด"]||"").trim();
+    if(!id || state.examSets.some(s=>s.id===id)) return;
+    const answerKey = {};
+    for(let i=1;i<=EXAM_QN;i++){
+      const v = String(r["ข้อ"+i] ?? "").trim();
+      if(v) answerKey[i] = v;
+    }
+    state.examSets.push({
+      id, name: String(r["ชื่อชุดข้อสอบ"]||"").trim(),
+      term: String(r["ภาคเรียนที่"]||"").trim(), level: String(r["ระดับชั้น"]||"").trim(), subject: String(r["รายวิชา"]||"").trim(),
+      answerKey, students:{}
+    });
+    added = true;
+  });
+  if(added) saveExamSets();
+}
 /* แถวในชีทที่อยู่ในภาคเรียน+ประเภทที่เลือกอยู่ (แถวเก่าที่ช่อง ภาคเรียนที่/ประเภท ว่าง จะไม่ตรง) */
 const inPeriod = r => sameStr(r["ภาคเรียนที่"], period.term) && sameStr(r["ประเภท"], period.type);
 const scoreUnsaved = () => state.score.pending.size + (state.examUi.dirty ? 1 : 0);
@@ -63,14 +87,16 @@ const scoreUnsaved = () => state.score.pending.size + (state.examUi.dirty ? 1 : 
 function renderPeriodBars(){
   qsa(".period-bar").forEach(el=>{
     const mode = el.dataset.mode || "full";
-    el.dataset.type = mode==="term" ? "" : period.type;
+    const termOnly = mode==="term" || mode==="lock-term";   // ไม่แยกกลางภาค/ปลายภาค (เช่น สรุปการมาเรียน — เก็บข้อมูลเป็นรายภาคเรียนเท่านั้น)
+    const locked = mode==="lock" || mode==="lock-term";
+    el.dataset.type = termOnly ? "" : period.type;
     const termBtns = ["1","2"].map(n=>`<button type="button" data-term="${n}" class="${period.term===n?"on":""}">${n}</button>`).join("");
     const typeBtns = TYPES.map(x=>`<button type="button" data-type="${x}" class="${period.type===x?"on":""}">${x}</button>`).join("");
-    const now = mode==="term" ? `ภาคเรียนที่ ${period.term}` : `ภาคเรียนที่ ${period.term} · ${period.type}`;
+    const now = termOnly ? `ภาคเรียนที่ ${period.term}` : `ภาคเรียนที่ ${period.term} · ${period.type}`;
     el.innerHTML = `<div class="pb-head"><span class="pb-lbl">📌 กำลังทำงานกับ</span><b class="pb-now">${now}</b></div>` +
-      (mode==="lock" ? "" :
+      (locked ? "" :
         `<div class="pb-ctl"><div class="pb-seg pb-term"><em>ภาคเรียนที่</em>${termBtns}</div>` +
-        (mode==="term" ? "" : `<div class="pb-seg pb-type">${typeBtns}</div>`) + `</div>`);
+        (termOnly ? "" : `<div class="pb-seg pb-type">${typeBtns}</div>`) + `</div>`);
   });
 }
 function setPeriod(patch){
@@ -140,7 +166,7 @@ async function apiGet(type){
   const res = await fetch(`${CONFIG.API_URL}?type=${type}`);
   return res.json();
 }
-const GS_REQUIRED = "v6";
+const GS_REQUIRED = "v7";
 const sleep = ms => new Promise(r=>setTimeout(r, ms));
 async function apiPost(payload, tries=3){
   if(state.gsOld) return { success:false, message:"Apps Script ที่เชื่อมอยู่ยังเป็นเวอร์ชันเก่า (ไม่รองรับภาคเรียน/ประเภท) — Deploy โค้ด GS.txt ล่าสุด แล้วใส่ลิงก์ใน CONFIG.API_URL ของ script.js จากนั้นรีเฟรชแบบล้างแคช" };
@@ -178,6 +204,8 @@ async function loadAll(){
     state.config = Array.isArray(data.config) ? data.config : [];
     state.examRows = Array.isArray(data.exam) ? data.exam : [];
     state.examSetup = Array.isArray(data.examSetup) ? data.examSetup : [];
+    state.examKeyRows = Array.isArray(data.examKey) ? data.examKey : [];
+    syncExamKeysFromSheet();
   }catch(err){
     toast("โหลดข้อมูลไม่สำเร็จ ตรวจการเชื่อมต่อ");
   }
@@ -204,7 +232,7 @@ function subjectsOfRoom(room){
   return [...map].map(([name,codes])=>({ name, label: codes.size ? `${name} (${[...codes].join(", ")})` : name }));
 }
 function fillSubjectSelect(roomSel){
-  const subSel = roomSel.closest(".view").querySelector("select.subject-select");
+  const subSel = roomSel.closest(".view, .modal-sheet").querySelector("select.subject-select");
   if(!roomSel.value){ subSel.innerHTML = `<option value="">เลือกห้องก่อน</option>`; return; }
   subSel.innerHTML = `<option value="">เลือกวิชา</option>` +
     subjectsOfRoom(roomSel.value).map(s=>`<option value="${s.name}">${s.label}</option>`).join("");
@@ -802,20 +830,39 @@ qs("#teachSaveBtn").addEventListener("click", async ()=>{
   } else { hideSaving(); toast(res.message || "บันทึกไม่สำเร็จ"); }
 });
 
-/* ================= ATTENDANCE REPORT (สรุปการมาเรียน) ================= */
-const rep = { room:"", subject:"", start:"", periods:2, mode:"", dates:[] };
+/* ================= ATTENDANCE REPORT (สรุปการมาเรียน) =================
+   ข้อมูลการมาเรียนเก็บเป็นรายภาคเรียนเท่านั้น (ไม่แยกกลางภาค/ปลายภาค) — หน้านี้จึงกรองด้วย "ภาคเรียนที่" อย่างเดียว
+   ไม่ใช้ inPeriod() ที่กรองประเภทด้วยเหมือนหน้าอื่นๆ */
+const rep = { room:"", subject:"", start:"", periods:2, mode:"", dates:[], hoursWeek:0 };
 const addDays = (iso, n) => { const d = new Date(iso+"T00:00:00"); d.setDate(d.getDate()+n); return toISO(d); };
 const wdOf = iso => new Date(iso+"T00:00:00").getDay();
+const inTerm = r => sameStr(r["ภาคเรียนที่"], period.term);
 
-/* วันที่ใน Act ของห้อง+วิชานี้ ที่อยู่ในช่วง 18 สัปดาห์นับจากวันที่เริ่ม */
+/* วันที่ใน Act ของห้อง+วิชานี้ ที่อยู่ในช่วง 18 สัปดาห์นับจากวันที่เริ่ม (รวมทั้งกลางภาคและปลายภาค) */
 function actDatesFor(room, subject, from){
   const end = addDays(from, GEN_WEEKS*7 - 1), set = new Set();
   state.activities.forEach(a=>{
-    if(a["รายวิชา"]!==subject || a["ระดับชั้น"]!==room || !inPeriod(a)) return;
+    if(a["รายวิชา"]!==subject || a["ระดับชั้น"]!==room || !inTerm(a)) return;
     const k = dateKey(a["วันที่"]);
     if(k && k>=from && k<=end) set.add(k);
   });
   return [...set].sort();
+}
+/* จำระยะ "จำนวนคาบต่อสัปดาห์" ที่เคยกรอกไว้ต่อห้อง+วิชา ไว้ในเครื่อง เพื่อไม่ต้องพิมพ์ใหม่ทุกครั้ง */
+const hoursKey = (room, subject) => `kc_hoursweek_${room}||${subject}`;
+function loadHoursWeek(room, subject){
+  try{ const v = localStorage.getItem(hoursKey(room, subject)); return v ? Number(v) : ""; }catch(e){ return ""; }
+}
+function saveHoursWeek(room, subject, v){
+  try{
+    if(v>0) localStorage.setItem(hoursKey(room, subject), String(v));
+    else localStorage.removeItem(hoursKey(room, subject));
+  }catch(e){}
+}
+/* เกณฑ์ มส. (หมดสิทธิ์สอบ): คาบต่อสัปดาห์ × 18 สัปดาห์ × 20% = คาบต่อสัปดาห์ × 3.6 (ปัดเศษตามหลักคณิตศาสตร์)
+   ขาด+ลา "เกิน" ค่านี้ (ไม่ใช่เท่ากับ) ถึงจะติด มส. */
+function msThreshold(hoursWeek){
+  return hoursWeek>0 ? Math.round(hoursWeek * GEN_WEEKS * 0.2) : null;
 }
 function setRepPeriods(n){
   rep.periods = n;
@@ -838,8 +885,12 @@ function updateRepSource(){
     note.innerHTML = `<b>ไม่พบวันที่ใน Act ตั้งแต่วันนี้</b><span>ระบบจะคำนวณให้ ${GEN_WEEKS} สัปดาห์ · ระบุจำนวนคาบและวันสอนด้านล่าง</span>`;
   }
 }
+function fillRepHoursWeek(){
+  const room = qs("#repRoom").value, subject = qs("#repSubject").value;
+  qs("#repHoursWeek").value = (room && subject) ? loadHoursWeek(room, subject) : "";
+}
 qsa("#repPeriods button").forEach(b => b.addEventListener("click", ()=> setRepPeriods(Number(b.dataset.n))));
-["#repRoom","#repSubject"].forEach(s => qs(s).addEventListener("change", updateRepSource));
+["#repRoom","#repSubject"].forEach(s => qs(s).addEventListener("change", ()=>{ updateRepSource(); fillRepHoursWeek(); }));
 qs("#repStart").addEventListener("input", updateRepSource);
 
 qs("#attendReportBtn").addEventListener("click", ()=>{
@@ -850,6 +901,7 @@ qs("#attendReportBtn").addEventListener("click", ()=>{
   qs("#repStart").value = qs("#attendDate").value || todayISO();
   qs("#repDateB").value = ""; qs("#repDateC").value = "";
   setRepPeriods(rep.periods);
+  fillRepHoursWeek();
   updateRepSource();
   showView("view-attend-report-setup");
 });
@@ -873,7 +925,9 @@ qs("#repStartBtn").addEventListener("click", async ()=>{
     const bases = raw.map((d,i)=> i===0 ? d : addDays(start, (wdOf(d)-wdOf(start)+7)%7));
     dates = buildHeaderDates(bases);
   }
-  Object.assign(rep, { room, subject, start, dates });
+  const hoursWeek = Math.max(0, numOrNull(qs("#repHoursWeek").value) ?? 0);
+  saveHoursWeek(room, subject, hoursWeek);
+  Object.assign(rep, { room, subject, start, dates, hoursWeek });
   qs("#repHeadSub").textContent = `${room} · ${subject}`;
   renderPeriodBars();
   renderRepTable();
@@ -881,14 +935,14 @@ qs("#repStartBtn").addEventListener("click", async ()=>{
 });
 
 function renderRepTable(){
-  const wrap = qs("#repTableWrap");
+  const wrap = qs("#repTableWrap"), msBox = qs("#repMsWarn");
   const roster = scoreRoster(rep.room);
-  if(roster.length===0){ wrap.innerHTML = `<div class="empty-note">ไม่พบรายชื่อนักเรียนในห้องนี้</div>`; qs("#repInfo").textContent = ""; return; }
+  if(roster.length===0){ wrap.innerHTML = `<div class="empty-note">ไม่พบรายชื่อนักเรียนในห้องนี้</div>`; qs("#repInfo").textContent = ""; msBox.style.display = "none"; return; }
 
   const toSet = v => new Set(String(v||"").split(",").map(s=>s.trim()).filter(Boolean));
   const recs = new Map();   // วันที่ -> { absent, leave, late } (ถ้าเช็คซ้ำวันเดียวกัน ใช้อันล่าสุด)
   state.attendance.forEach(a=>{
-    if(!sameStr(a["ระดับชั้น"],rep.room) || !sameStr(a["รายวิชา"],rep.subject) || !inPeriod(a)) return;
+    if(!sameStr(a["ระดับชั้น"],rep.room) || !sameStr(a["รายวิชา"],rep.subject) || !inTerm(a)) return;
     const k = dateKey(a["วันที่"]); if(!k) return;
     recs.set(k, { absent:toSet(a["ขาดเรียน"]), leave:toSet(a["ลา"]), late:toSet(a["สาย"]) });
   });
@@ -898,10 +952,12 @@ function renderRepTable(){
   };
   const LBL = { present:"✓", absent:"ขาด", leave:"ลา", late:"สาย", none:"·" };
   const today = todayISO();
+  const threshold = msThreshold(rep.hoursWeek);
 
   let thead = `<tr><th class="name-head">ชื่อ</th><th class="sum">ขาด</th><th class="sum">ลา</th><th class="sum">สาย</th>` +
     rep.dates.map(d=>`<th class="${d===today?"today-col":""}">${fmtShort(d)}<small class="wd">${fmtWd(d)}</small></th>`).join("") + `</tr>`;
   let rows = "";
+  const msNames = [];
   roster.forEach(st=>{
     const cnt = { absent:0, leave:0, late:0 };
     const cells = rep.dates.map(d=>{
@@ -910,12 +966,22 @@ function renderRepTable(){
       return `<td><span class="ar ar-${s}">${LBL[s]}</span></td>`;
     }).join("");
     const sum = k => `<td class="sum"><b class="s-${k} ${cnt[k]?"on":""}">${cnt[k]}</b></td>`;
-    rows += `<tr><td class="name-cell">${snum(st.no)}${esc(st.label)}</td>${sum("absent")}${sum("leave")}${sum("late")}${cells}</tr>`;
+    const overMs = threshold!=null && (cnt.absent + cnt.leave) > threshold;
+    if(overMs) msNames.push(st.label);
+    rows += `<tr class="${overMs?"ms-row":""}"><td class="name-cell">${snum(st.no)}${esc(st.label)}${overMs?'<span class="ms-badge">มส.</span>':""}</td>${sum("absent")}${sum("leave")}${sum("late")}${cells}</tr>`;
   });
   wrap.innerHTML = `<table class="score-table"><thead>${thead}</thead><tbody>${rows}</tbody></table>`;
 
   const checked = rep.dates.filter(d=>recs.has(d)).length;
-  qs("#repInfo").textContent = `${roster.length} คน · เช็คแล้ว ${checked}/${rep.dates.length} วัน`;
+  qs("#repInfo").textContent = `${roster.length} คน · เช็คแล้ว ${checked}/${rep.dates.length} วัน` +
+    (threshold!=null ? ` · เกณฑ์ มส. > ${threshold} ครั้ง (ขาด+ลา)` : "");
+
+  if(msNames.length){
+    msBox.style.display = "";
+    msBox.innerHTML = `⚠ ${msNames.length} คน ขาด+ลา เกิน ${threshold} ครั้ง เข้าเกณฑ์ <b>มส. (หมดสิทธิ์สอบ)</b>: ${msNames.map(esc).join(", ")}`;
+  } else {
+    msBox.style.display = "none";
+  }
 }
 
 /* ================= TABS ในหน้าลงคะแนน: งาน/จิตพิสัย 1-5  |  คะแนนสอบ ================= */
@@ -1249,10 +1315,11 @@ function renderExamHome(){
   wrap.innerHTML = state.examSets.map(s=>{
     const keyCount = Object.keys(s.answerKey||{}).length;
     const stCount = Object.values(s.students||{}).filter(st=>st && st.total!=null).length;
+    const meta = (s.level || s.subject) ? `${esc(s.level||"")}${s.level && s.subject ? " · " : ""}${esc(s.subject||"")} · ` : "";
     return `<div class="examset-card" data-id="${s.id}">
       <div class="ec-main">
         <h3>${esc(s.name)}</h3>
-        <p>เฉลยแล้ว ${keyCount}/20 · สแกนแล้ว ${stCount}/20</p>
+        <p>${meta}เฉลยแล้ว ${keyCount}/${EXAM_QN} · สแกนแล้ว ${stCount}/20</p>
       </div>
       <button class="ec-del" type="button" data-id="${s.id}" title="ลบชุดข้อสอบ">🗑</button>
     </div>`;
@@ -1260,19 +1327,25 @@ function renderExamHome(){
 }
 qs("#examNewBtn").addEventListener("click", ()=>{
   qs("#examNewName").value = "";
+  fillRoomSelects(qs("#modalExamNew"));
+  qs("#examNewRoom").value = ""; fillSubjectSelect(qs("#examNewRoom"));
   qs("#modalExamNew").classList.add("active");
   setTimeout(()=> qs("#examNewName").focus(), 200);
 });
 qsa("#modalExamNew [data-close]").forEach(b=> b.addEventListener("click", ()=> qs("#modalExamNew").classList.remove("active")));
-qs("#examNewSaveBtn").addEventListener("click", ()=>{
-  const name = qs("#examNewName").value.trim();
+qs("#examNewSaveBtn").addEventListener("click", async ()=>{
+  const level = qs("#examNewRoom").value, subject = qs("#examNewSubject").value.trim(), name = qs("#examNewName").value.trim();
+  if(!level || !subject){ toast("เลือกห้องและวิชาก่อนครับ"); return; }
   if(!name){ toast("ตั้งชื่อชุดข้อสอบก่อนครับ"); return; }
-  const set = { id:"ex_"+Date.now().toString(36)+Math.random().toString(36).slice(2,6), name, answerKey:{}, students:{} };
+  const set = { id:"ex_"+Date.now().toString(36)+Math.random().toString(36).slice(2,6), name, term:period.term, level, subject, answerKey:{}, students:{} };
   state.examSets.push(set);
   saveExamSets();
   qs("#modalExamNew").classList.remove("active");
   renderExamHome();
   toast(`สร้างชุด "${name}" แล้ว`);
+  // สำรองห้อง/วิชา/ชื่อชุด ขึ้นชีท ExamKey ไว้ด้วย (เฉลยยังว่างอยู่ ค่อยอัปเดตตอนตั้งเฉลย) — ทำเบื้องหลัง ไม่บล็อกผู้ใช้
+  const res = await apiPost({ type:"saveExamKey", id:set.id, term:set.term, level:set.level, subject:set.subject, name:set.name, answerKey:set.answerKey });
+  if(!res.success) toast(res.message || "สำรองชุดข้อสอบขึ้นชีทไม่สำเร็จ (ยังใช้งานในเครื่องนี้ได้ตามปกติ)");
 });
 qs("#examSetList").addEventListener("click", async e=>{
   const del = e.target.closest(".ec-del");
@@ -1289,6 +1362,7 @@ qs("#examSetList").addEventListener("click", async e=>{
     saveExamSets();
     examDBDeletePrefix(set.id+"_"); // ลบรูปหัวกระดาษของชุดนี้ทิ้งด้วย กัน IndexedDB บวมไปเรื่อยๆ
     renderExamHome();
+    apiPost({ type:"deleteExamKey", id:set.id });   // ลบเฉลยของชุดนี้ออกจากชีท ExamKey ด้วย (เบื้องหลัง)
     return;
   }
   const card = e.target.closest(".examset-card");
@@ -1305,12 +1379,15 @@ function openExamManage(id){
 function renderExamManage(){
   const set = currentExamSet(); if(!set) return;
   qs("#emTitle").textContent = set.name;
+  qs("#emSub").textContent = (set.level || set.subject)
+    ? `${set.level||""}${set.level && set.subject ? " · " : ""}${set.subject||""} · ภาคเรียนที่ ${set.term||period.term}`
+    : "เฉลย · สแกน · สรุปคะแนน";
   const keyCount = Object.keys(set.answerKey||{}).length;
   const scanned = Object.values(set.students||{}).filter(st=>st && st.total!=null).length;
-  qs("#emKeySub").textContent = keyCount ? `เฉลยแล้ว ${keyCount}/20 ข้อ · คะแนนเต็ม ${keyCount}` : "ยังไม่ได้ตั้งเฉลย";
+  qs("#emKeySub").textContent = keyCount ? `เฉลยแล้ว ${keyCount}/${EXAM_QN} ข้อ · คะแนนเต็ม ${keyCount}` : "ยังไม่ได้ตั้งเฉลย";
   qs("#emSummarySub").textContent = scanned ? `สแกนแล้ว ${scanned}/20 คน` : "ยังไม่มีนักเรียนสแกน";
   qs("#emStats").innerHTML =
-    `<div class="es-stat"><b>${keyCount}/20</b><span>เฉลยแล้ว</span></div>
+    `<div class="es-stat"><b>${keyCount}/${EXAM_QN}</b><span>เฉลยแล้ว</span></div>
      <div class="es-stat"><b>${scanned}/20</b><span>สแกนแล้ว</span></div>`;
 }
 qs("#emKeyBtn").addEventListener("click", ()=> openExamKey());
@@ -1326,9 +1403,10 @@ function openExamKey(){
 function renderExamKey(){
   const set = currentExamSet(); if(!set) return;
   const keyCount = Object.keys(set.answerKey||{}).length;
-  qs("#ekSub").textContent = `${set.name} · เฉลยแล้ว ${keyCount}/20 ข้อ · คะแนนเต็มปัจจุบัน ${keyCount}`;
+  const meta = (set.level || set.subject) ? `${set.level||""}${set.level && set.subject ? " · " : ""}${set.subject||""} · ` : "";
+  qs("#ekSub").textContent = `${meta}${set.name} · เฉลยแล้ว ${keyCount}/${EXAM_QN} ข้อ · คะแนนเต็มปัจจุบัน ${keyCount}`;
   const rows = [];
-  for(let i=1; i<=20; i++){
+  for(let i=1; i<=EXAM_QN; i++){
     const cur = set.answerKey ? set.answerKey[i] : null;
     const opts = EXAM_LETTERS.map(L=> `<button type="button" data-v="${L}" class="${cur===L?"on":""}">${L}</button>`).join("");
     rows.push(`<div class="ek-row" data-q="${i}"><div class="ek-num">${i}</div><div class="ek-opts">${opts}</div></div>`);
@@ -1344,10 +1422,18 @@ qs("#examKeyList").addEventListener("click", e=>{
   else set.answerKey[q] = btn.dataset.v;
   renderExamKey();
 });
-qs("#examKeySaveBtn").addEventListener("click", ()=>{
-  if(!currentExamSet()) return;
+qs("#examKeySaveBtn").addEventListener("click", async ()=>{
+  const set = currentExamSet(); if(!set) return;
   saveExamSets();
-  toast("บันทึกเฉลยแล้ว");
+  if(set.level && set.subject){
+    showSaving("กำลังบันทึกเฉลยขึ้นชีท...");
+    const res = await apiPost({ type:"saveExamKey", id:set.id, term:set.term||period.term, level:set.level, subject:set.subject, name:set.name, answerKey:set.answerKey });
+    hideSaving();
+    toast(res.success ? "บันทึกเฉลยแล้ว" : (res.message || "บันทึกเฉลยขึ้นชีทไม่สำเร็จ (เก็บไว้ในเครื่องนี้แล้ว)"));
+  } else {
+    // ชุดข้อสอบที่สร้างไว้ก่อนอัปเดตนี้ ยังไม่ผูกห้อง/วิชา จึงยังไม่สำรองขึ้นชีท — เก็บในเครื่องได้ตามปกติ
+    toast("บันทึกเฉลยแล้ว (ชุดนี้สร้างไว้ก่อนหน้า ยังไม่ผูกห้อง/วิชา จึงไม่ได้สำรองขึ้นชีท)");
+  }
   renderExamManage();
   showView("view-exam-manage");
 });
@@ -1438,22 +1524,29 @@ async function examDBDeletePrefix(prefix){
   }catch(e){ /* ไม่มี IndexedDB หรือเบราว์เซอร์บล็อกไว้ — ปล่อยผ่าน ไม่ให้กระทบการลบชุดข้อสอบ */ }
 }
 
-/* ---- ผังกระดาษคำตอบ: พิกัดสัดส่วน (0-1) เทียบกับกรอบสี่เหลี่ยมที่ล้อมด้วยจุดกึ่งกลางหมุดทั้ง 4 มุม
+/* ---- ผังกระดาษคำตอบ: พิกัดสัดส่วน (0-1) เทียบกับกรอบสี่เหลี่ยมที่ล้อมด้วยจุดกึ่งกลางหมุดทั้ง 6 จุด
+   (บนซ้าย/บนขวา, กลางซ้าย/กลางขวา, ล่างซ้าย/ล่างขวา — ไม่ใช่แค่ 4 มุมแบบเดิม)
+   ค่าพิกัดด้านล่างวัดจากไฟล์ Answer.png จริง (1537x1911px) แล้วแปลงเป็นสัดส่วนเทียบกรอบหมุดนอกสุด (tl-tr-bl-br)
+   กระดาษจริงเป็น "2 คอลัมน์ x 10 แถว" (ข้อ 1-10 คอลัมน์ซ้าย, ข้อ 11-20 คอลัมน์ขวา อยู่แถวเดียวกัน) ไม่ใช่คอลัมน์เดียว 20 แถวแบบที่โค้ดเดิมสมมติไว้ (นี่คือสาเหตุหลักที่อ่านค่าคลาดเคลื่อน)
    ใช้ชุดค่าเดียวกันทั้งตอน "พิมพ์แบบฟอร์มเปล่า" และตอน "อ่านผลจากภาพที่ปรับมุมแล้ว" กันพิกัดสองฝั่งเพี้ยนไม่ตรงกัน ---- */
 const EXAM_LAYOUT = {
-  markerFrac: 0.045,                               // ขนาดหมุด (ใช้ตอนพิมพ์เท่านั้น)
-  header: { x0:0.07, y0:0.09, x1:0.93, y1:0.185 },  // กรอบหัวกระดาษ (ชื่อ/เลขที่ เขียนเอง) ที่จะ crop เก็บไว้ดู
+  markerFrac: 0.049,                                // ขนาดหมุดจริง (55px/1122px) — เก็บไว้อ้างอิงเฉยๆ ตอนนี้พิมพ์จากรูป Answer.png ตรงๆ เลยไม่ได้ใช้คำนวณ
+  header: { x0:0.064, y0:0.0, x1:0.939, y1:0.150 },  // กรอบหัวกระดาษ (ชื่อ-สกุล/ชั้น/เลขที่ เขียนเอง) ที่จะ crop เก็บไว้ดู
   qStart: 1, qEnd: 20,
-  rowY0: 0.245, rowY1: 0.955,                       // ช่วงแนวตั้งของแถวคำถามข้อ 1-20
-  optX0: 0.32, optX1: 0.91,                         // ช่วงแนวนอนของ 4 ตัวเลือก ก ข ค ง
-  bubbleR: 0.017                                    // รัศมีวงกลมคำตอบ (สัดส่วนความกว้างภาพที่ปรับมุมแล้ว)
+  rowsPerCol: 10,                                    // ข้อ 1-10 อยู่คอลัมน์ซ้าย, 11-20 อยู่คอลัมน์ขวา แถวตรงกัน
+  rowY0: 0.279, rowY1: 0.893,                        // ช่วงแนวตั้งของแถวที่ 1-10 (ใช้ร่วมกันทั้ง 2 คอลัมน์)
+  colLeft:  { x0:0.160, x1:0.362 },                  // ช่วงแนวนอนของ ก ข ค ง คอลัมน์ซ้าย (ข้อ 1-10)
+  colRight: { x0:0.641, x1:0.845 },                  // ช่วงแนวนอนของ ก ข ค ง คอลัมน์ขวา (ข้อ 11-20)
+  midYFrac: 0.5533,                                  // ตำแหน่งแนวตั้งของหมุดกลาง (ml/mr) เทียบกรอบ tl-tr-bl-br ใช้ตอนปรับมุมภาพแบบ 2 ช่วง
+  lock: { x0:0.594, x1:0.710, y0:0.902, y1:0.963 },  // กรอบของ "ตัวล็อค" (ลวดลายขั้นบันไดใต้ Test Version) ใช้ตรวจสอบความถูกต้องของการปรับมุมภาพ
+  bubbleR: 0.017                                     // รัศมีวงกลมคำตอบ (สัดส่วนความกว้างภาพที่ปรับมุมแล้ว)
 };
-function examRowY(q){ // q = 1..20 -> สัดส่วนแนวตั้ง 0-1
-  const n = EXAM_LAYOUT.qEnd - EXAM_LAYOUT.qStart;
-  return EXAM_LAYOUT.rowY0 + (q - EXAM_LAYOUT.qStart) * (EXAM_LAYOUT.rowY1 - EXAM_LAYOUT.rowY0) / n;
-}
-function examOptX(k){ // k = 0..3 (ก ข ค ง) -> สัดส่วนแนวนอน 0-1
-  return EXAM_LAYOUT.optX0 + k * (EXAM_LAYOUT.optX1 - EXAM_LAYOUT.optX0) / (EXAM_LETTERS.length - 1);
+function examBubblePos(q, k){ // q = 1..20, k = 0..3 (ก ข ค ง) -> {x,y} สัดส่วน 0-1
+  const rowIdx = (q - EXAM_LAYOUT.qStart) % EXAM_LAYOUT.rowsPerCol;      // 0..9 ภายในคอลัมน์
+  const col = (q - EXAM_LAYOUT.qStart) < EXAM_LAYOUT.rowsPerCol ? EXAM_LAYOUT.colLeft : EXAM_LAYOUT.colRight;
+  const y = EXAM_LAYOUT.rowY0 + rowIdx * (EXAM_LAYOUT.rowY1 - EXAM_LAYOUT.rowY0) / (EXAM_LAYOUT.rowsPerCol - 1);
+  const x = col.x0 + k * (col.x1 - col.x0) / (EXAM_LETTERS.length - 1);
+  return { x, y };
 }
 const EXAM_RECT_W = 700, EXAM_RECT_H = Math.round(700 * 297/210); // ภาพหลังปรับมุม ~700x990 (สัดส่วน A4 แนวตั้ง)
 
@@ -1501,10 +1594,13 @@ function applyH(h, x, y){
   return { x: (h[0]*x + h[1]*y + h[2]) / w, y: (h[3]*x + h[4]*y + h[5]) / w };
 }
 
-/* ---- ตรวจจับหมุด 4 มุมจากเฟรมวิดีโอปัจจุบัน (ทำงานบนภาพที่ย่อเล็กแล้ว เพื่อความเร็ว) ----
+/* ---- ตรวจจับหมุด 6 จุดจากเฟรมวิดีโอปัจจุบัน (ทำงานบนภาพที่ย่อเล็กแล้ว เพื่อความเร็ว) ----
    วิธีคร่าวๆ: แบ่งภาพเป็นตารางช่องเล็กๆ, หาว่าช่องไหน "มืด" กว่าค่าเฉลี่ยทั้งภาพมากพอ,
    รวมกลุ่มช่องมืดที่ติดกัน (flood fill), กรองเอาก้อนที่ทรงเหมือนสี่เหลี่ยมจัตุรัสและขนาดสมเหตุสมผล,
-   แล้วเลือกก้อนที่ใหญ่สุดในแต่ละ 1 ใน 4 โซนของภาพ (บนซ้าย/บนขวา/ล่างซ้าย/ล่างขวา) ---- */
+   แล้วจัดกลุ่มเป็น 3 แถว (บน/กลาง/ล่าง) ตามช่องว่างแนวตั้งที่ห่างที่สุด 2 จุด (แทนที่จะหารครึ่งภาพตายตัว
+   เพราะกระดาษอาจเอียง/ไม่เต็มเฟรม) แล้วแยกซ้าย/ขวาในแต่ละแถวด้วยตำแหน่ง x
+   ถ้าหาครบ 6 จุดไม่ได้ (เช่น หมุดกลางโดนนิ้ว/เงาบัง) จะ fallback ใช้แค่ 4 มุมนอกสุดแทน เพื่อให้ยังสแกนได้
+   แม้จะแม่นน้อยกว่า ---- */
 function detectMarkers(procCtx, w, h){
   const img = procCtx.getImageData(0, 0, w, h).data;
   let sum = 0, n0 = 0;
@@ -1562,46 +1658,107 @@ function detectMarkers(procCtx, w, h){
     area: (c.maxX-c.minX+1) * (c.maxY-c.minY+1)
   }));
   if(candidates.length < 4) return null;
-  const midX = w/2, midY = h/2;
-  const zones = { tl:null, tr:null, bl:null, br:null };
-  for(const c of candidates){
-    const key = (c.cy<midY ? "t" : "b") + (c.cx<midX ? "l" : "r");
-    if(!zones[key] || c.area > zones[key].area) zones[key] = c;
+
+  // จัดกลุ่มเป็นแถวตามช่องว่างแนวตั้งที่มากที่สุด (รองรับกระดาษเอียง/ไม่เต็มเฟรม ดีกว่าหารครึ่งภาพตายตัว)
+  function splitByLargestGaps(items, nGroups, key){
+    const sorted = [...items].sort((a,b)=> a[key]-b[key]);
+    const gaps = [];
+    for(let i=1;i<sorted.length;i++) gaps.push({i, gap: sorted[i][key]-sorted[i-1][key]});
+    gaps.sort((a,b)=> b.gap-a.gap);
+    const cuts = gaps.slice(0, nGroups-1).map(g=>g.i).sort((a,b)=>a-b);
+    const groups = []; let start=0;
+    for(const c of cuts){ groups.push(sorted.slice(start,c)); start=c; }
+    groups.push(sorted.slice(start));
+    return groups;
   }
-  if(!zones.tl || !zones.tr || !zones.bl || !zones.br) return null;
+  function pickLR(group){ // ในแต่ละแถว เลือกก้อนที่ใหญ่สุดฝั่งซ้ายและฝั่งขวา
+    if(group.length < 2) return null;
+    const byX = [...group].sort((a,b)=> a.cx-b.cx);
+    const leftHalf = byX.slice(0, Math.ceil(byX.length/2));
+    const rightHalf = byX.slice(Math.ceil(byX.length/2));
+    const L = leftHalf.reduce((best,c)=> (!best||c.area>best.area)?c:best, null);
+    const R = rightHalf.reduce((best,c)=> (!best||c.area>best.area)?c:best, null);
+    if(!L || !R || L===R) return null;
+    return {L, R};
+  }
+
+  // พยายามหาครบ 6 จุดก่อน (บน/กลาง/ล่าง)
+  if(candidates.length >= 6){
+    const rows3 = splitByLargestGaps(candidates, 3, "cy");
+    if(rows3.length === 3){
+      const top = pickLR(rows3[0]), mid = pickLR(rows3[1]), bot = pickLR(rows3[2]);
+      if(top && mid && bot){
+        return {
+          tl:{x:top.L.cx,y:top.L.cy}, tr:{x:top.R.cx,y:top.R.cy},
+          ml:{x:mid.L.cx,y:mid.L.cy}, mr:{x:mid.R.cx,y:mid.R.cy},
+          bl:{x:bot.L.cx,y:bot.L.cy}, br:{x:bot.R.cx,y:bot.R.cy}
+        };
+      }
+    }
+  }
+  // Fallback: หาไม่ครบ 6 จุด (เช่น หมุดกลางโดนบัง) → ใช้แค่ 4 มุมนอกสุด ยังสแกนได้แต่แม่นน้อยกว่า
+  const rows2 = splitByLargestGaps(candidates, 2, "cy");
+  if(rows2.length !== 2) return null;
+  const top = pickLR(rows2[0]), bot = pickLR(rows2[1]);
+  if(!top || !bot) return null;
   return {
-    tl:{x:zones.tl.cx, y:zones.tl.cy}, tr:{x:zones.tr.cx, y:zones.tr.cy},
-    bl:{x:zones.bl.cx, y:zones.bl.cy}, br:{x:zones.br.cx, y:zones.br.cy}
+    tl:{x:top.L.cx,y:top.L.cy}, tr:{x:top.R.cx,y:top.R.cy},
+    bl:{x:bot.L.cx,y:bot.L.cy}, br:{x:bot.R.cx,y:bot.R.cy}
   };
 }
 
-/* ---- ปรับมุมภาพ (perspective correction) จาก 4 จุดหมุดที่ตรวจเจอ ให้เป็นสี่เหลี่ยมมาตรฐาน EXAM_RECT_W x EXAM_RECT_H ---- */
+/* ---- ปรับมุมภาพ (perspective correction) จากจุดหมุดที่ตรวจเจอ ให้เป็นสี่เหลี่ยมมาตรฐาน EXAM_RECT_W x EXAM_RECT_H
+   ถ้ามีหมุดกลาง (ml/mr) ครบ จะปรับมุมแบบ "2 ช่วง" (บน: tl-tr-ml-mr, ล่าง: ml-mr-bl-br) แยกกัน
+   ช่วยแก้ปัญหากระดาษโค้ง/งอตรงกลางตอนถ่ายด้วยมือ ซึ่ง homography เดียวจากแค่ 4 มุมนอกสุดแก้ไม่ได้
+   ถ้าหาหมุดกลางไม่เจอ จะ fallback เป็น homography เดียวแบบเดิม ---- */
 function rectifyImage(srcCanvas, srcPts){
-  const dst = [{x:0,y:0}, {x:EXAM_RECT_W,y:0}, {x:0,y:EXAM_RECT_H}, {x:EXAM_RECT_W,y:EXAM_RECT_H}];
-  const src = [srcPts.tl, srcPts.tr, srcPts.bl, srcPts.br];
-  const H = computeHomography(src, dst);
-  if(!H) return null;
-  const Hinv = invertHomography(H);
-  if(!Hinv) return null;
   const sw = srcCanvas.width, sh = srcCanvas.height;
   const srcImg = srcCanvas.getContext("2d").getImageData(0, 0, sw, sh).data;
   const out = document.createElement("canvas");
   out.width = EXAM_RECT_W; out.height = EXAM_RECT_H;
   const octx = out.getContext("2d");
   const outImg = octx.createImageData(EXAM_RECT_W, EXAM_RECT_H);
-  for(let y=0; y<EXAM_RECT_H; y++){
-    for(let x=0; x<EXAM_RECT_W; x++){
-      const p = applyH(Hinv, x, y);
-      const sx = Math.round(p.x), sy = Math.round(p.y);
-      const di = (y*EXAM_RECT_W+x)*4;
-      if(sx>=0 && sx<sw && sy>=0 && sy<sh){
-        const si = (sy*sw+sx)*4;
-        outImg.data[di]=srcImg[si]; outImg.data[di+1]=srcImg[si+1]; outImg.data[di+2]=srcImg[si+2]; outImg.data[di+3]=255;
-      } else {
-        outImg.data[di]=255; outImg.data[di+1]=255; outImg.data[di+2]=255; outImg.data[di+3]=255;
+  function sampleInto(Hinv, y0, y1){
+    for(let y=y0; y<y1; y++){
+      for(let x=0; x<EXAM_RECT_W; x++){
+        const p = applyH(Hinv, x, y);
+        const sx = Math.round(p.x), sy = Math.round(p.y);
+        const di = (y*EXAM_RECT_W+x)*4;
+        if(sx>=0 && sx<sw && sy>=0 && sy<sh){
+          const si = (sy*sw+sx)*4;
+          outImg.data[di]=srcImg[si]; outImg.data[di+1]=srcImg[si+1]; outImg.data[di+2]=srcImg[si+2]; outImg.data[di+3]=255;
+        } else {
+          outImg.data[di]=255; outImg.data[di+1]=255; outImg.data[di+2]=255; outImg.data[di+3]=255;
+        }
       }
     }
   }
+  const midY = Math.round(EXAM_RECT_H * EXAM_LAYOUT.midYFrac);
+  if(srcPts.ml && srcPts.mr){
+    const Htop = computeHomography(
+      [srcPts.tl, srcPts.tr, srcPts.ml, srcPts.mr],
+      [{x:0,y:0}, {x:EXAM_RECT_W,y:0}, {x:0,y:midY}, {x:EXAM_RECT_W,y:midY}]
+    );
+    const Hbot = computeHomography(
+      [srcPts.ml, srcPts.mr, srcPts.bl, srcPts.br],
+      [{x:0,y:midY}, {x:EXAM_RECT_W,y:midY}, {x:0,y:EXAM_RECT_H}, {x:EXAM_RECT_W,y:EXAM_RECT_H}]
+    );
+    const HtopInv = Htop && invertHomography(Htop), HbotInv = Hbot && invertHomography(Hbot);
+    if(HtopInv && HbotInv){
+      sampleInto(HtopInv, 0, midY);
+      sampleInto(HbotInv, midY, EXAM_RECT_H);
+      octx.putImageData(outImg, 0, 0);
+      return out;
+    }
+    // ถ้าคำนวณ homography ช่วงใดช่วงหนึ่งไม่ได้ (จุดเรียงเสีย) ให้ตกไป fallback ด้านล่าง
+  }
+  const dst = [{x:0,y:0}, {x:EXAM_RECT_W,y:0}, {x:0,y:EXAM_RECT_H}, {x:EXAM_RECT_W,y:EXAM_RECT_H}];
+  const src = [srcPts.tl, srcPts.tr, srcPts.bl, srcPts.br];
+  const H = computeHomography(src, dst);
+  if(!H) return null;
+  const Hinv = invertHomography(H);
+  if(!Hinv) return null;
+  sampleInto(Hinv, 0, EXAM_RECT_H);
   octx.putImageData(outImg, 0, 0);
   return out;
 }
@@ -1627,6 +1784,24 @@ function sampleDarkness(imgData, w, h, cx, cy, r){
   }
   return n ? sum/n : 255;
 }
+/* ตรวจสอบ "ตัวล็อค" (ลวดลายขั้นบันไดใต้ Test Version) หลังปรับมุมภาพแล้ว — ควรมีทั้งส่วนมืดและสว่างปนกันมาก
+   (ค่าเบี่ยงเบนมาตรฐานของความสว่างในกรอบนี้สูง) ถ้าออกมาเรียบๆ (ขาวล้วน/เข้มล้วน) แปลว่าปรับมุมภาพพลาด/เอียง/เบลอ
+   ใช้เป็นตัวเช็คความมั่นใจก่อนเชื่อผลอ่าน ไม่ใช่แค่พึ่งจำนวนหมุดที่เจอ ---- */
+function checkLockMark(imgData, w, h){
+  const x0 = Math.round(EXAM_LAYOUT.lock.x0*w), x1 = Math.round(EXAM_LAYOUT.lock.x1*w);
+  const y0 = Math.round(EXAM_LAYOUT.lock.y0*h), y1 = Math.round(EXAM_LAYOUT.lock.y1*h);
+  let sum=0, sum2=0, n=0;
+  for(let y=Math.max(0,y0); y<Math.min(h,y1); y++){
+    for(let x=Math.max(0,x0); x<Math.min(w,x1); x++){
+      const idx=(y*w+x)*4;
+      const v = imgData[idx]*0.299 + imgData[idx+1]*0.587 + imgData[idx+2]*0.114;
+      sum+=v; sum2+=v*v; n++;
+    }
+  }
+  if(!n) return { ok:false, std:0 };
+  const mean = sum/n, variance = Math.max(0, sum2/n - mean*mean), std = Math.sqrt(variance);
+  return { ok: std > 35, std }; // ลวดลายขั้นบันไดจริงมีคอนทราสต์สูง std ควรเกิน ~35 ชัดเจน
+}
 function readAnswers(rectCanvas){
   const w = rectCanvas.width, h = rectCanvas.height;
   const imgData = rectCanvas.getContext("2d").getImageData(0, 0, w, h).data;
@@ -1634,20 +1809,37 @@ function readAnswers(rectCanvas){
   const answerKey = (set && set.answerKey) || {};
   const total = Object.keys(answerKey).length;
   const r = EXAM_LAYOUT.bubbleR * w;
+
+  // ปรับ threshold ตามความสว่างจริงของกระดาษ (แสง/กล้องแต่ละครั้งไม่เท่ากัน) แทนค่าคงที่ตายตัว:
+  // เก็บความเข้มของทุกวงกลมทั้งแผ่นก่อน แล้วใช้ "วงที่ขาวสุด" เป็นเส้นฐานของกระดาษเปล่า
+  const allDark = [];
+  for(let q=EXAM_LAYOUT.qStart; q<=EXAM_LAYOUT.qEnd; q++){
+    for(let k=0;k<EXAM_LETTERS.length;k++){
+      const {x,y} = examBubblePos(q,k);
+      allDark.push(sampleDarkness(imgData, w, h, x*w, y*h, r));
+    }
+  }
+  const blankLevel = allDark.reduce((mx,v)=> v>mx?v:mx, 0) || 255; // วงที่สว่างสุด ≈ กระดาษเปล่า/วงไม่ได้ฝน
+  const absMax = Math.min(200, blankLevel * 0.72);                 // ต้องเข้มกว่าพื้นกระดาษเปล่าพอสมควรถึงนับว่าฝน
+
+  const lock = checkLockMark(imgData, w, h);
+
   let score = 0;
   const answers = {};
   for(let q=EXAM_LAYOUT.qStart; q<=EXAM_LAYOUT.qEnd; q++){
-    const y = examRowY(q) * h;
-    const dark = EXAM_LETTERS.map((L,k)=> sampleDarkness(imgData, w, h, examOptX(k)*w, y, r));
+    const dark = EXAM_LETTERS.map((L,k)=>{
+      const {x,y} = examBubblePos(q,k);
+      return sampleDarkness(imgData, w, h, x*w, y*h, r);
+    });
     const sorted = [...dark].sort((a,b)=>a-b);
     const minVal = sorted[0], gap = sorted[1]-sorted[0];
     // ต้องเข้มพอสมควร (ไม่ใช่วงเปล่า) และเข้มกว่าตัวเลือกรองลงมาชัดเจน ไม่งั้นถือว่าอ่านไม่ชัด/ไม่ได้ฝน
     let chosen = null;
-    if(minVal < 165 && gap > 18) chosen = EXAM_LETTERS[dark.indexOf(minVal)];
+    if(minVal < absMax && gap > 18) chosen = EXAM_LETTERS[dark.indexOf(minVal)];
     answers[q] = chosen;
     if(chosen && answerKey[q] && chosen===answerKey[q]) score++;
   }
-  return { score, total, answers };
+  return { score, total, answers, lowConfidence: !lock.ok };
 }
 
 /* ---- สถานะกล้อง/การสแกน ---- */
@@ -1723,15 +1915,20 @@ function scanLoop(){
     scanOverlayCtx.clearRect(0, 0, overlay.width, overlay.height);
     if(markers && overlay.width && overlay.height){
       const sx = overlay.width/pw, sy = overlay.height/ph;
-      scanOverlayCtx.strokeStyle = "#34D399"; scanOverlayCtx.lineWidth = 3;
+      const hasMid = !!(markers.ml && markers.mr);
+      const outline = hasMid
+        ? [markers.tl, markers.tr, markers.mr, markers.br, markers.bl, markers.ml, markers.tl]
+        : [markers.tl, markers.tr, markers.br, markers.bl, markers.tl];
+      scanOverlayCtx.strokeStyle = hasMid ? "#34D399" : "#FBBF24"; // เขียว = เจอครบ 6 จุด, เหลือง = เจอแค่ 4 มุม (fallback)
+      scanOverlayCtx.lineWidth = 3;
       scanOverlayCtx.beginPath();
-      [markers.tl, markers.tr, markers.br, markers.bl, markers.tl].forEach((p,i)=>{
+      outline.forEach((p,i)=>{
         const x=p.x*sx, y=p.y*sy;
         if(i===0) scanOverlayCtx.moveTo(x,y); else scanOverlayCtx.lineTo(x,y);
       });
       scanOverlayCtx.stroke();
-      scanOverlayCtx.fillStyle = "#34D399";
-      [markers.tl, markers.tr, markers.bl, markers.br].forEach(p=>{
+      scanOverlayCtx.fillStyle = scanOverlayCtx.strokeStyle;
+      Object.values(markers).forEach(p=>{
         scanOverlayCtx.beginPath(); scanOverlayCtx.arc(p.x*sx, p.y*sy, 6, 0, Math.PI*2); scanOverlayCtx.fill();
       });
     }
@@ -1740,7 +1937,7 @@ function scanLoop(){
   const statusEl = qs("#scanStatus");
   if(!markers){
     scanStableQueue = [];
-    if(statusEl) statusEl.textContent = "เล็งกล้องให้เห็นกระดาษคำตอบครบทั้ง 4 มุม";
+    if(statusEl) statusEl.textContent = "เล็งกล้องให้เห็นกระดาษคำตอบครบ (จุดดำ 6 จุด)";
     return;
   }
   scanStableQueue.push(markers);
@@ -1749,8 +1946,10 @@ function scanLoop(){
     if(statusEl) statusEl.textContent = "เจอกระดาษแล้ว ถือนิ่งๆ…";
     return;
   }
+  // เทียบเฉพาะ key ที่มีอยู่ในทุกเฟรมของคิว (กันเคสสลับไปมาระหว่างเจอ 6 จุด/4 จุด)
+  const commonKeys = Object.keys(scanStableQueue[scanStableQueue.length-1]).filter(k=> scanStableQueue.every(m=>m[k]));
   let maxMove = 0;
-  for(const key of ["tl","tr","bl","br"]){
+  for(const key of commonKeys){
     let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
     for(const m of scanStableQueue){ const p=m[key]; if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y; }
     maxMove = Math.max(maxMove, maxX-minX, maxY-minY);
@@ -1763,11 +1962,12 @@ function scanLoop(){
   scanBusy = true;
   const finalMarkers = scanStableQueue[scanStableQueue.length-1];
   const scaleX = vw/pw, scaleY = vh/ph;
+  const scalePt = p=> ({x:p.x*scaleX, y:p.y*scaleY});
   const srcPts = {
-    tl:{x:finalMarkers.tl.x*scaleX, y:finalMarkers.tl.y*scaleY},
-    tr:{x:finalMarkers.tr.x*scaleX, y:finalMarkers.tr.y*scaleY},
-    bl:{x:finalMarkers.bl.x*scaleX, y:finalMarkers.bl.y*scaleY},
-    br:{x:finalMarkers.br.x*scaleX, y:finalMarkers.br.y*scaleY}
+    tl: scalePt(finalMarkers.tl), tr: scalePt(finalMarkers.tr),
+    bl: scalePt(finalMarkers.bl), br: scalePt(finalMarkers.br),
+    ml: finalMarkers.ml ? scalePt(finalMarkers.ml) : null,
+    mr: finalMarkers.mr ? scalePt(finalMarkers.mr) : null
   };
   captureAndScore(video, srcPts).finally(()=>{ scanBusy=false; scanStableQueue=[]; });
 }
@@ -1782,7 +1982,7 @@ async function captureAndScore(video, srcPts){
     const statusEl = qs("#scanStatus"); if(statusEl) statusEl.textContent = "ลองอีกครั้งครับ";
     return;
   }
-  const { score, total } = readAnswers(rectified);
+  const { score, total, lowConfidence } = readAnswers(rectified);
   const headerCanvas = cropFraction(rectified, EXAM_LAYOUT.header.x0, EXAM_LAYOUT.header.y0, EXAM_LAYOUT.header.x1, EXAM_LAYOUT.header.y1);
   const headerBlob = await new Promise(res=> headerCanvas.toBlob(res, "image/jpeg", 0.85));
   const set = currentExamSet(); if(!set) return;
@@ -1791,6 +1991,8 @@ async function captureAndScore(video, srcPts){
   set.students = set.students || {};
   set.students[scanCurNum] = { score, total, headerImage: imgKey, scannedAt: Date.now() };
   saveExamSets();
+  // ตัวล็อคใต้กระดาษไม่ชัด แปลว่าปรับมุมภาพอาจคลาดเคลื่อน (เอียง/เบลอ/แสงไม่พอ) — เตือนให้ครูตรวจซ้ำ ไม่บล็อกผลไว้เฉยๆ
+  if(lowConfidence) toast("ภาพอาจไม่ชัดหรือมุมกระดาษเพี้ยน ลองตรวจคะแนนที่ได้เทียบกับกระดาษจริงอีกครั้ง");
   showScanResult(headerBlob, score, total);
 }
 function showScanResult(headerBlob, score, total){
@@ -1839,59 +2041,39 @@ qs("#scanFlipBtn").addEventListener("click", async ()=>{
   await startExamScan();
 });
 
-/* ---- พิมพ์กระดาษคำตอบเปล่า (เปิดแท็บใหม่ ใช้ตำแหน่งพิกัดชุดเดียวกับตอนอ่านผล) ---- */
+/* ---- พิมพ์กระดาษคำตอบเปล่า ----
+   ใช้ไฟล์ภาพ Answer.png ตัวจริงเป็นแบบฟอร์มพิมพ์โดยตรง (ไม่ใช้ CSS วาดจุด/วงกลมเองแบบเดิมอีกต่อไป)
+   เหตุผล: EXAM_LAYOUT ทั้งหมดด้านบน (ตำแหน่งหมุด 6 จุด/แถว/คอลัมน์/ตัวล็อค) คำนวณมาจากการวัดพิกเซลจริงของไฟล์นี้
+   ถ้าให้เบราว์เซอร์ประกอบหน้าพิมพ์เองใหม่ด้วย CSS/font จะเสี่ยงคลาดเคลื่อนเล็กน้อยตามแต่ละเครื่อง/เบราว์เซอร์
+   (ระยะขอบ, การเรนเดอร์ฟอนต์, ขนาดพิกเซลตอนพิมพ์) ซึ่งพอสะสมแล้วมีผลต่อความแม่นยำตอนสแกนอ่านค่ากลับ
+   การพิมพ์รูปเดิมตรงๆ จึงรับประกันได้ว่ากระดาษที่พิมพ์ออกมาตรงกับพิกัดที่ใช้คำนวณในระบบสแกน 100%
+   ครูต้องนำไฟล์ Answer.png ไปวางไว้โฟลเดอร์เดียวกับ KruChuay.html/script.js (หรือแก้ ANSWER_SHEET_IMG ด้านล่างเป็น URL อื่น) ---- */
+const ANSWER_SHEET_IMG = "Answer.png";
 function buildPrintSheetHTML(examName){
-  const pageWmm = 190, pageHmm = 277;
-  const mkMm = (EXAM_LAYOUT.markerFrac * pageWmm).toFixed(1);
-  const circMm = (2 * EXAM_LAYOUT.bubbleR * pageWmm).toFixed(1);
-  const rows = [];
-  for(let q=EXAM_LAYOUT.qStart; q<=EXAM_LAYOUT.qEnd; q++){
-    const yPct = (examRowY(q)*100).toFixed(2);
-    const numX = ((EXAM_LAYOUT.optX0 - 0.10)*100).toFixed(2);
-    const opts = EXAM_LETTERS.map((L,k)=>{
-      const xPct = (examOptX(k)*100).toFixed(2);
-      return `<div class="ps-bubble" style="left:${xPct}%; top:${yPct}%;"><span class="ps-circle"></span><span class="ps-letter">${L}</span></div>`;
-    }).join("");
-    rows.push(`<div class="ps-qnum" style="left:${numX}%; top:${yPct}%;">${q}</div>${opts}`);
-  }
   return `<!DOCTYPE html><html lang="th"><head><meta charset="utf-8">
 <title>กระดาษคำตอบ${examName ? ": "+examName : ""}</title>
 <style>
-  @page{ size:A4 portrait; margin:10mm; }
+  @page{ size:A4 portrait; margin:8mm; }
   *{box-sizing:border-box;}
   body{margin:0; font-family:'Noto Sans Thai',Tahoma,sans-serif;}
-  .ps-page{ position:relative; width:${pageWmm}mm; height:${pageHmm}mm; margin:0 auto; background:#fff; }
-  .ps-marker{ position:absolute; width:${mkMm}mm; height:${mkMm}mm; background:#000; }
-  .ps-marker.tl{ left:0; top:0; transform:translate(-50%,-50%); }
-  .ps-marker.tr{ left:100%; top:0; transform:translate(-50%,-50%); }
-  .ps-marker.bl{ left:0; top:100%; transform:translate(-50%,-50%); }
-  .ps-marker.br{ left:100%; top:100%; transform:translate(-50%,-50%); }
-  .ps-title{ position:absolute; left:0; top:2mm; width:100%; text-align:center; font-size:15px; font-weight:700; }
-  .ps-header{ position:absolute; left:${(EXAM_LAYOUT.header.x0*100).toFixed(2)}%; top:${(EXAM_LAYOUT.header.y0*100).toFixed(2)}%;
-    width:${((EXAM_LAYOUT.header.x1-EXAM_LAYOUT.header.x0)*100).toFixed(2)}%; height:${((EXAM_LAYOUT.header.y1-EXAM_LAYOUT.header.y0)*100).toFixed(2)}%;
-    border:1.5px solid #000; border-radius:5px; display:flex; align-items:center; padding:0 3mm; font-size:13px; gap:5mm; }
-  .ps-header .ln{flex:1; border-bottom:1px solid #000; height:5mm; align-self:flex-end;}
-  .ps-header .ln.no{flex:0 0 20mm;}
-  .ps-qnum{ position:absolute; transform:translate(-100%,-50%); font-size:12px; font-weight:700; padding-right:2mm; white-space:nowrap; }
-  .ps-bubble{ position:absolute; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; gap:0.8mm; }
-  .ps-circle{ width:${circMm}mm; height:${circMm}mm; border:1.4px solid #000; border-radius:50%; display:block; }
-  .ps-letter{ font-size:9px; }
-  .ps-foot{ position:absolute; bottom:2mm; width:100%; text-align:center; font-size:10px; color:#555; }
+  .ps-title{ text-align:center; font-size:14px; font-weight:700; margin:2mm 0; }
+  .ps-page{ width:100%; }
+  .ps-page img{ display:block; width:100%; height:auto; }
+  .ps-foot{ text-align:center; font-size:9px; color:#666; margin-top:1mm; }
   .ps-noprint{ text-align:center; padding:14px; font-family:sans-serif; }
+  .ps-noprint .err{ color:#b91c1c; font-size:13px; }
   @media print{ .ps-noprint{display:none;} }
 </style></head>
 <body>
   <div class="ps-noprint">
     <button onclick="window.print()" style="font-size:16px; padding:8px 22px; cursor:pointer;">🖨 พิมพ์</button>
-    <p style="font-size:13px;color:#666">ตั้งค่าพิมพ์เป็นขนาด 100% (ไม่ใช่ Fit to page) และปิดหัว/ท้ายกระดาษของเบราว์เซอร์ เพื่อให้ตำแหน่งจุดดำ 4 มุมตรงตามจริง</p>
+    <button onclick="window.close()" style="font-size:16px; padding:8px 22px; cursor:pointer; margin-left:8px;">‹ ปิดหน้านี้</button>
+    <p style="font-size:13px;color:#666">ตั้งค่าพิมพ์เป็นขนาด 100% (ไม่ใช่ Fit to page) เพื่อให้ตำแหน่งจุดดำตรงตามที่ระบบสแกนคำนวณไว้</p>
+    <p class="err" id="psImgErr" style="display:none">โหลดรูป ${esc(ANSWER_SHEET_IMG)} ไม่สำเร็จ — วางไฟล์นี้ไว้โฟลเดอร์เดียวกับหน้าเว็บ แล้วรีเฟรชอีกครั้ง</p>
   </div>
-  <div class="ps-page">
-    <div class="ps-marker tl"></div><div class="ps-marker tr"></div><div class="ps-marker bl"></div><div class="ps-marker br"></div>
-    <div class="ps-title">กระดาษคำตอบ${examName ? " — "+esc(examName) : ""}</div>
-    <div class="ps-header"><b>ชื่อ-สกุล</b><span class="ln"></span><b>เลขที่</b><span class="ln no"></span></div>
-    ${rows.join("")}
-    <div class="ps-foot">ระบายวงกลมให้เข้มและเต็มวงด้วยปากกา/ดินสอเข้ม ห้ามพับหรือทำให้จุดดำ 4 มุมเสียหาย</div>
-  </div>
+  ${examName ? `<div class="ps-title">${esc(examName)}</div>` : ""}
+  <div class="ps-page"><img src="${esc(ANSWER_SHEET_IMG)}" alt="กระดาษคำตอบ" onerror="document.getElementById('psImgErr').style.display='block'"></div>
+  <div class="ps-foot">ระบายวงกลมให้เข้มและเต็มวงด้วยปากกา/ดินสอเข้ม ห้ามพับหรือทำให้จุดดำเสียหาย</div>
 </body></html>`;
 }
 function openPrintSheet(){
