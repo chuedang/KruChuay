@@ -298,7 +298,7 @@
     </div>
 
     <div class="scan-result" id="scanResult" style="display:none">
-      <img id="scanResultThumb" class="scan-result-thumb" alt="หัวกระดาษที่สแกน">
+      <img id="scanResultThumb" class="scan-result-thumb" alt="หัวกระดาษที่สแกน แตะเพื่อดูภาพเต็ม">
       <div class="scan-result-info">
         <div class="scan-result-score" id="scanResultScore"></div>
         <div class="scan-result-actions">
@@ -392,6 +392,18 @@
       <div class="modal-actions">
         <button class="btn btn-outline" data-close>ยกเลิก</button>
         <button id="examNewSaveBtn" class="btn btn-primary">สร้าง</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ดูภาพกระดาษคำตอบเต็มแผ่น (วงกลมเขียว/แดงคือคำตอบที่ระบบตรวจจับ) -->
+  <div class="modal-backdrop" id="modalImgView">
+    <div class="modal-sheet img-view-sheet">
+      <h3>ภาพกระดาษคำตอบ</h3>
+      <div class="img-view-wrap"><img id="imgViewPic" alt="กระดาษคำตอบที่สแกน"></div>
+      <p class="hint">🟢 วงกลมเขียว = ตรวจว่าตรงเฉลย · 🔴 วงกลมแดง = ตรวจว่าไม่ตรงเฉลย (ไม่วงกลม = อ่านไม่ชัด/ไม่ได้ฝน)</p>
+      <div class="modal-actions">
+        <button class="btn btn-primary" data-close>ปิด</button>
       </div>
     </div>
   </div>
