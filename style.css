@@ -427,6 +427,11 @@ table.score-table thead th .head-badge:not(.noname):not(.slot){color:var(--c-ink
 .ar-leave{background:var(--leave); color:#fff;}
 .ar-late{background:var(--late); color:#fff;}
 .ar-none{background:transparent; color:#B8C0D2; font-weight:500;}
+/* มส. (หมดสิทธิ์สอบ) — ขาด+ลา เกินเกณฑ์ที่คำนวณจากคาบต่อสัปดาห์ */
+#view-attend-report tr.ms-row td, #view-attend-report tr.ms-row td.name-cell{background:#FFF1BF !important;}
+#view-attend-report tr.ms-row td.name-cell{box-shadow:2px 0 0 #F5D36B, inset 4px 0 0 #F59E0B;}
+.ms-badge{display:inline-block; margin-left:6px; padding:1px 7px; border-radius:10px; background:#F59E0B; color:#fff; font-size:10.5px; font-weight:800; vertical-align:middle;}
+.ms-warn{background:#FDECEC; color:#B42318; border-radius:12px; padding:9px 12px; font-size:12.5px; font-weight:500; line-height:1.55; margin-bottom:10px;}
 td.sum b{font-weight:600; color:#C3CBDB;}
 td.sum b.s-absent.on{color:var(--absent); font-weight:700;}
 td.sum b.s-leave.on{color:var(--leave); font-weight:700;}
