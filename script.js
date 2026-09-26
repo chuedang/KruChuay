@@ -1476,8 +1476,9 @@ qs("#examSumWrap").addEventListener("click", e=>{
 /* =====================================================================
    Round 17 : Scan กระดาษคำตอบด้วยกล้อง (OMR)
    ไอเดีย: กระดาษคำตอบมีจุดดำทึบสี่เหลี่ยม (marker) อยู่ 4 มุม → ใช้หาตำแหน่งกระดาษในภาพจากกล้อง
-   เมื่อเจอครบ 4 มุมและถือนิ่งพอ จะถ่ายภาพ แล้วคำนวณ perspective transform (homography) ปรับมุมภาพ
-   ให้กระดาษเป็นสี่เหลี่ยมตรงมาตรฐาน จากนั้นอ่านความเข้มของวงกลมคำตอบแต่ละข้อเทียบกับเฉลย ให้คะแนนอัตโนมัติ
+   เมื่อเจอครบ 4 มุมและถือนิ่งพอ จะถ่ายภาพ แล้วครอปเฉพาะกรอบที่ล้อมกระดาษออกมาก่อนแบบหยาบ (ตัดพื้นหลัง/สิ่งของสีดำอื่นๆ
+   นอกกระดาษทิ้งไป กันปนกับการตรวจจับ) ตรวจจับหมุดซ้ำในภาพที่ครอปแล้วให้แม่นขึ้น แล้วค่อยคำนวณ perspective transform
+   (homography) ปรับมุมภาพให้กระดาษเป็นสี่เหลี่ยมตรงมาตรฐาน จากนั้นอ่านความเข้มของวงกลมคำตอบแต่ละข้อเทียบกับเฉลย ให้คะแนนอัตโนมัติ
    พร้อม crop "หัวกระดาษ" (ช่องเขียนชื่อ/เลขที่) เก็บไว้เป็นรูปให้ครูดูทวนภายหลังได้
    นอกจากนี้ยังเก็บภาพกระดาษคำตอบเต็มแผ่นหลังปรับมุมแล้ว พร้อมวงกลมคำตอบที่ระบบอ่านได้ (เขียว=ตรงเฉลย, แดง=ไม่ตรงเฉลย)
    ไว้เป็น "fullImage" แยกอีกชุด ให้ครูแตะรูปหัวกระดาษเพื่อเปิดดูภาพเต็มย้อนหลังได้ว่าระบบตรวจข้อไหนลงไปว่าอย่างไร
@@ -2035,11 +2036,66 @@ function scanLoop(){
   captureAndScore(video, srcPts).finally(()=>{ scanBusy=false; scanStableQueue=[]; });
 }
 
+/* ---- ครอปภาพแบบหยาบจากกรอบสี่เหลี่ยมที่ล้อมจุดหมุดทั้งหมดที่ตรวจเจอ (มีขอบเผื่อเล็กน้อย) ก่อนปรับมุมภาพแบบละเอียด
+   เหตุผล: การตรวจจับหมุดตอนเล็งกล้อง (detectMarkers) ทำงานบนเฟรมที่ย่อเล็กมาก (SCAN_PROC_W=200px) เพื่อความเร็ว
+   ถ้าเอาพิกัดหมุดที่ได้จากตรงนั้นไปคำนวณปรับมุมภาพ (perspective) กับเฟรมเต็มความละเอียดสูงทันทีเลย ตำแหน่งหมุดอาจคลาดเคลื่อนได้
+   (โดยเฉพาะตอนถือมือถือเอียง) แถมพื้นหลังนอกกระดาษที่มีของสีดำอื่นๆ (เช่น เงา/ปากกา/เก้าอี้) ยังปนอยู่เต็มเฟรม
+   ทำให้ระบบตรวจจับ/อ่านค่าคลาดเคลื่อนไปตรวจจับสิ่งอื่นที่ไม่ใช่หมุดจริงของเราปนเข้ามาได้
+   วิธีแก้: ครอปเฉพาะกรอบที่ล้อมกระดาษออกมาก่อน (ตัดพื้นหลังทิ้ง) แล้วค่อยตรวจจับหมุดซ้ำในภาพที่ครอปแล้ว (ดูโค้ดใน captureAndScore)
+   ซึ่งหมุดจะดูใหญ่ขึ้นชัดขึ้นเทียบกับเฟรม ทำให้ตำแหน่งหมุดที่ได้แม่นกว่า ก่อนจะนำไปปรับมุมภาพ (rectifyImage) จริงในขั้นสุดท้าย ---- */
+function roughCropToMarkers(srcCanvas, pts){
+  const all = [pts.tl, pts.tr, pts.bl, pts.br, pts.ml, pts.mr].filter(Boolean);
+  if(all.length < 4) return null;
+  let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
+  all.forEach(p=>{ if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y; });
+  const bw = maxX-minX, bh = maxY-minY;
+  if(bw<=0 || bh<=0) return null;
+  const padX = bw*0.08, padY = bh*0.08; // เผื่อขอบไว้เล็กน้อย กันหมุดโดนตัดขอบพอดี
+  const x0 = Math.max(0, Math.floor(minX-padX)), y0 = Math.max(0, Math.floor(minY-padY));
+  const x1 = Math.min(srcCanvas.width, Math.ceil(maxX+padX)), y1 = Math.min(srcCanvas.height, Math.ceil(maxY+padY));
+  const cw = x1-x0, ch = y1-y0;
+  if(cw<=0 || ch<=0) return null;
+  const out = document.createElement("canvas"); out.width = cw; out.height = ch;
+  out.getContext("2d").drawImage(srcCanvas, x0, y0, cw, ch, 0, 0, cw, ch);
+  // แปลงพิกัดจุดหมุดเดิมให้อ้างอิงกับภาพที่ครอปแล้ว (ลบออฟเซ็ตมุมครอปออก) แทนภาพเต็มแบบเดิม
+  const shift = p=> p ? {x:p.x-x0, y:p.y-y0} : null;
+  return { canvas: out, pts: { tl:shift(pts.tl), tr:shift(pts.tr), bl:shift(pts.bl), br:shift(pts.br), ml:shift(pts.ml), mr:shift(pts.mr) } };
+}
+
 async function captureAndScore(video, srcPts){
   const vw = video.videoWidth, vh = video.videoHeight;
   const shot = document.createElement("canvas"); shot.width=vw; shot.height=vh;
   shot.getContext("2d").drawImage(video, 0, 0);
-  const rectified = rectifyImage(shot, srcPts);
+
+  // ---- ขั้นที่ 1: ครอปกระดาษออกมาก่อนแบบหยาบจากกรอบที่ล้อมจุดหมุด (ตัดพื้นหลัง/สิ่งของสีดำอื่นๆนอกกระดาษทิ้งไป)
+  //      แล้วตรวจจับหมุดซ้ำในภาพที่ครอปแล้ว (ขยายให้ชัดขึ้น หมุดดูใหญ่ขึ้นเทียบเฟรม แม่นกว่าตรวจจับจากเฟรมเต็มตรงๆ
+  //      โดยเฉพาะตอนมือถือเอียง) ก่อนค่อยปรับมุมภาพแบบละเอียดในขั้นที่ 2 ---- */
+  const rough = roughCropToMarkers(shot, srcPts);
+  const cropCanvas = rough ? rough.canvas : shot;
+  let finalPts = rough ? rough.pts : srcPts;
+  if(rough){
+    const RECHECK_W = 500;
+    const reCanvas = document.createElement("canvas");
+    reCanvas.width = RECHECK_W;
+    reCanvas.height = Math.max(1, Math.round(RECHECK_W * cropCanvas.height / cropCanvas.width));
+    const reCtx = reCanvas.getContext("2d", {willReadFrequently:true});
+    reCtx.drawImage(cropCanvas, 0, 0, reCanvas.width, reCanvas.height);
+    const reMarkers = detectMarkers(reCtx, reCanvas.width, reCanvas.height);
+    if(reMarkers){
+      const rsx = cropCanvas.width/reCanvas.width, rsy = cropCanvas.height/reCanvas.height;
+      const scaleBack = p=> p ? {x:p.x*rsx, y:p.y*rsy} : null;
+      finalPts = {
+        tl: scaleBack(reMarkers.tl), tr: scaleBack(reMarkers.tr),
+        bl: scaleBack(reMarkers.bl), br: scaleBack(reMarkers.br),
+        ml: reMarkers.ml ? scaleBack(reMarkers.ml) : null,
+        mr: reMarkers.mr ? scaleBack(reMarkers.mr) : null
+      };
+    }
+    // ตรวจซ้ำไม่เจอ (เช่นครอปพลาดหมุดบางจุดไปนิดหน่อย) ก็ยังใช้ finalPts จากขั้นแรก (rough.pts) ต่อได้ตามเดิม ไม่บล็อกการทำงาน
+  }
+
+  // ---- ขั้นที่ 2: ปรับมุมภาพ (perspective correction) แบบละเอียดจากภาพที่ครอปแล้วในขั้นที่ 1 ---- //
+  const rectified = rectifyImage(cropCanvas, finalPts);
   if(!rectified){
     toast("คำนวณมุมภาพไม่สำเร็จ ลองถือกระดาษให้เห็นครบ 4 มุมอีกครั้ง");
     const statusEl = qs("#scanStatus"); if(statusEl) statusEl.textContent = "ลองอีกครั้งครับ";
