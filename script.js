@@ -1681,6 +1681,28 @@ function detectMarkers(procCtx, w, h){
     if(!L || !R || L===R) return null;
     return {L, R};
   }
+  // ตรวจสอบรูปทรงว่าสมเหตุสมผลกับ "กระดาษคำตอบจริง" ก่อนเชื่อ — กันเคสหลุดไปจับจุดดำ/เงาจากพื้นหลัง
+  // นอกกระดาษ แล้วเอาไปครอป/ปรับมุมภาพผิดที่ (บทเรียนจากรอบก่อน: ต้องเช็คทรง ไม่ใช่แค่ "เจอครบจำนวนจุด")
+  function validQuad(p, w, h){
+    const {tl,tr,bl,br} = p;
+    for(const pt of [tl,tr,bl,br]) if(!pt || !isFinite(pt.x) || !isFinite(pt.y)) return false;
+    if(tl.x>=tr.x || bl.x>=br.x || tl.y>=bl.y || tr.y>=br.y) return false; // มุมต้องเรียงถูกทิศ ไม่ไขว้กัน
+    const minX=Math.min(tl.x,bl.x), maxX=Math.max(tr.x,br.x);
+    const minY=Math.min(tl.y,tr.y), maxY=Math.max(bl.y,br.y);
+    const bw=maxX-minX, bh=maxY-minY;
+    if(bw < w*0.25 || bh < h*0.25) return false;      // เล็กเกินไป — น่าจะเป็นจุดดำ/สิ่งอื่นที่ไม่ใช่ตัวกระดาษเต็มแผ่น
+    const ratio = bw/bh;
+    if(ratio < 0.35 || ratio > 1.3) return false;      // กระดาษ A4 แนวตั้งถ่ายเอียงยังไงก็ไม่ควรหลุดช่วงนี้
+    if(Math.abs(tl.x-bl.x) > bw*0.5) return false;     // ขอบซ้าย (tl-bl) ควรตั้งฉากคร่าวๆ ไม่เอียงมาก
+    if(Math.abs(tr.x-br.x) > bw*0.5) return false;     // ขอบขวา (tr-br) เช่นกัน
+    if(p.ml && p.mr){
+      if(p.ml.x > p.mr.x) return false;                // ml ต้องอยู่ซ้ายของ mr เสมอ
+      if(Math.abs(p.ml.y - p.mr.y) > bh*0.25) return false; // หมุดกลางสองจุดควรสูงใกล้เคียงกัน
+      const loY = minY + bh*0.25, hiY = minY + bh*0.85;
+      if(p.ml.y < loY || p.ml.y > hiY || p.mr.y < loY || p.mr.y > hiY) return false; // ต้องอยู่แถวกลางจริงๆ ไม่ใช่หลุดไปแถวบน/ล่าง
+    }
+    return true;
+  }
 
   // พยายามหาครบ 6 จุดก่อน (บน/กลาง/ล่าง)
   if(candidates.length >= 6){
@@ -1688,23 +1710,26 @@ function detectMarkers(procCtx, w, h){
     if(rows3.length === 3){
       const top = pickLR(rows3[0]), mid = pickLR(rows3[1]), bot = pickLR(rows3[2]);
       if(top && mid && bot){
-        return {
+        const pts6 = {
           tl:{x:top.L.cx,y:top.L.cy}, tr:{x:top.R.cx,y:top.R.cy},
           ml:{x:mid.L.cx,y:mid.L.cy}, mr:{x:mid.R.cx,y:mid.R.cy},
           bl:{x:bot.L.cx,y:bot.L.cy}, br:{x:bot.R.cx,y:bot.R.cy}
         };
+        if(validQuad(pts6, w, h)) return pts6;
       }
     }
   }
-  // Fallback: หาไม่ครบ 6 จุด (เช่น หมุดกลางโดนบัง) → ใช้แค่ 4 มุมนอกสุด ยังสแกนได้แต่แม่นน้อยกว่า
+  // Fallback: หาไม่ครบ 6 จุด (เช่น หมุดกลางโดนบัง) หรือรูปทรง 6 จุดข้างบนไม่ผ่านการตรวจสอบ
+  // → ใช้แค่ 4 มุมนอกสุด ยังสแกนได้แต่แม่นน้อยกว่า
   const rows2 = splitByLargestGaps(candidates, 2, "cy");
   if(rows2.length !== 2) return null;
   const top = pickLR(rows2[0]), bot = pickLR(rows2[1]);
   if(!top || !bot) return null;
-  return {
+  const pts4 = {
     tl:{x:top.L.cx,y:top.L.cy}, tr:{x:top.R.cx,y:top.R.cy},
     bl:{x:bot.L.cx,y:bot.L.cy}, br:{x:bot.R.cx,y:bot.R.cy}
   };
+  return validQuad(pts4, w, h) ? pts4 : null;
 }
 
 /* ---- ปรับมุมภาพ (perspective correction) จากจุดหมุดที่ตรวจเจอ ให้เป็นสี่เหลี่ยมมาตรฐาน EXAM_RECT_W x EXAM_RECT_H
@@ -1896,6 +1921,28 @@ document.addEventListener("visibilitychange", ()=>{
   if(document.hidden) stopExamScan(); else startExamScan();
 });
 
+/* ---- กรอบไกด์สีเขียว (มุมทั้ง 4) แสดงตลอดเวลาตอนเปิดกล้อง ช่วยให้ผู้ใช้เล็งกระดาษให้จุดดำ 4 มุมตรงกับกรอบ
+   ก่อนที่ระบบจะตรวจจับได้จริง (ต่างจากกรอบ outline ที่ขึ้นเฉพาะตอนตรวจจับหมุดสำเร็จแล้วเท่านั้น) ---- */
+function drawGuideFrame(ctx, w, h){
+  const gw = w*0.78, gh = gw * (297/210); // สัดส่วน A4 แนวตั้ง
+  const gx = (w-gw)/2, gy = Math.max(6, (h-gh)/2);
+  const armX = gw*0.12, armY = Math.min(gh*0.12, armX*1.4);
+  ctx.strokeStyle = "rgba(52,211,153,0.85)"; ctx.lineWidth = 4; ctx.lineCap = "round";
+  const corners = [
+    {x:gx, y:gy, dx:1, dy:1},           // บนซ้าย
+    {x:gx+gw, y:gy, dx:-1, dy:1},       // บนขวา
+    {x:gx, y:gy+gh, dx:1, dy:-1},       // ล่างซ้าย
+    {x:gx+gw, y:gy+gh, dx:-1, dy:-1}    // ล่างขวา
+  ];
+  corners.forEach(c=>{
+    ctx.beginPath();
+    ctx.moveTo(c.x + armX*c.dx, c.y);
+    ctx.lineTo(c.x, c.y);
+    ctx.lineTo(c.x, c.y + armY*c.dy);
+    ctx.stroke();
+  });
+}
+
 function scanLoop(){
   scanRAF = requestAnimationFrame(scanLoop);
   const video = qs("#scanVideo");
@@ -1913,6 +1960,7 @@ function scanLoop(){
     if(overlay.height !== overlay.clientHeight) overlay.height = overlay.clientHeight;
     if(!scanOverlayCtx) scanOverlayCtx = overlay.getContext("2d");
     scanOverlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+    drawGuideFrame(scanOverlayCtx, overlay.width, overlay.height); // กรอบไกด์เขียว วาดทุกเฟรม ช่วยเล็งกระดาษ
     if(markers && overlay.width && overlay.height){
       const sx = overlay.width/pw, sy = overlay.height/ph;
       const hasMid = !!(markers.ml && markers.mr);
