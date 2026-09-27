@@ -1803,19 +1803,33 @@ function cropFraction(canvas, x0, y0, x1, y1){
   return out;
 }
 
-/* ---- อ่านวงกลมคำตอบ 20 ข้อ x 4 ตัวเลือก จากภาพที่ปรับมุมแล้ว เทียบกับเฉลย ---- */
-function sampleDarkness(imgData, w, h, cx, cy, r){
-  let sum=0, n=0; const r2=r*r;
+/* ---- อ่านวงกลมคำตอบ 20 ข้อ x 4 ตัวเลือก จากภาพที่ปรับมุมแล้ว เทียบกับเฉลย ----
+   ปรับปรุงรอบนี้ (แก้ปัญหาฝนไม่เข้ม/ฝนไม่เต็มวงแล้วระบบอ่านไม่ออก):
+   เดิมใช้ "ความสว่างเฉลี่ยทั้งวง" เทียบกับ "วงที่สว่างสุดในกระดาษทั้งแผ่น" เป็นเส้นฐานเดียวทั้งแผ่น
+   ปัญหา 2 อย่าง:
+   1) ถ้านักเรียนฝนไม่เต็มวง/ฝนเบา ค่าเฉลี่ยทั้งวงจะถูกพิกเซลขาวรอบๆ รอยฝนดึงขึ้นมาจนไม่ผ่าน threshold
+   2) แสงบนกระดาษไม่สม่ำเสมอทั้งแผ่น (เงา/มุมกล้อง/ไฟส่องเฉียง) ทำให้ "วงที่สว่างสุดทั้งแผ่น" ใช้เป็นเส้นฐานรวมไม่แม่น
+      บางแถวมืดกว่าแถวอื่นทั้งแถวโดยธรรมชาติ (ไม่เกี่ยวกับมีรอยฝนหรือไม่)
+   แก้ใหม่:
+   - หาเส้นฐาน "กระดาษเปล่า" แยกเป็นรายข้อ (เฉลี่ย 3 ตัวเลือกที่สว่างสุดในข้อนั้น สมมติฝนจริงไม่เกิน 1 ข้อ)
+     แทนเส้นฐานรวมทั้งแผ่น ทนต่อแสง/เงาที่ไม่สม่ำเสมอในแต่ละส่วนของกระดาษได้ดีกว่า
+   - เพิ่มการนับ "สัดส่วนพิกเซลในวงที่เข้มกว่าเส้นฐานอย่างมีนัยสำคัญ" (darkRatio) ควบคู่กับค่าเฉลี่ย
+     จับรอยฝนที่ไม่เต็มวง/ฝนเบา/ฝนมุมเดียวได้ดีกว่าดูแค่ค่าเฉลี่ยทั้งวง
+   - ขยายรัศมีเก็บค่าเล็กน้อย ทนต่อการเยื้องศูนย์เล็กน้อยจากการปรับมุมภาพ (perspective) ---- */
+function sampleBubble(imgData, w, h, cx, cy, r){
+  const r2=r*r;
   const x0=Math.max(0,Math.floor(cx-r)), x1=Math.min(w-1,Math.ceil(cx+r));
   const y0=Math.max(0,Math.floor(cy-r)), y1=Math.min(h-1,Math.ceil(cy+r));
+  let sum=0, n=0; const vals=[];
   for(let y=y0; y<=y1; y++){
     for(let x=x0; x<=x1; x++){
       const dx=x-cx, dy=y-cy; if(dx*dx+dy*dy>r2) continue;
       const idx=(y*w+x)*4;
-      sum += imgData[idx]*0.299 + imgData[idx+1]*0.587 + imgData[idx+2]*0.114; n++;
+      const v = imgData[idx]*0.299 + imgData[idx+1]*0.587 + imgData[idx+2]*0.114;
+      sum+=v; n++; vals.push(v);
     }
   }
-  return n ? sum/n : 255;
+  return { mean: n?sum/n:255, vals };
 }
 /* ตรวจสอบ "ตัวล็อค" (ลวดลายขั้นบันไดใต้ Test Version) หลังปรับมุมภาพแล้ว — ควรมีทั้งส่วนมืดและสว่างปนกันมาก
    (ค่าเบี่ยงเบนมาตรฐานของความสว่างในกรอบนี้สูง) ถ้าออกมาเรียบๆ (ขาวล้วน/เข้มล้วน) แปลว่าปรับมุมภาพพลาด/เอียง/เบลอ
@@ -1841,34 +1855,38 @@ function readAnswers(rectCanvas){
   const set = currentExamSet();
   const answerKey = (set && set.answerKey) || {};
   const total = Object.keys(answerKey).length;
-  const r = EXAM_LAYOUT.bubbleR * w;
-
-  // ปรับ threshold ตามความสว่างจริงของกระดาษ (แสง/กล้องแต่ละครั้งไม่เท่ากัน) แทนค่าคงที่ตายตัว:
-  // เก็บความเข้มของทุกวงกลมทั้งแผ่นก่อน แล้วใช้ "วงที่ขาวสุด" เป็นเส้นฐานของกระดาษเปล่า
-  const allDark = [];
-  for(let q=EXAM_LAYOUT.qStart; q<=EXAM_LAYOUT.qEnd; q++){
-    for(let k=0;k<EXAM_LETTERS.length;k++){
-      const {x,y} = examBubblePos(q,k);
-      allDark.push(sampleDarkness(imgData, w, h, x*w, y*h, r));
-    }
-  }
-  const blankLevel = allDark.reduce((mx,v)=> v>mx?v:mx, 0) || 255; // วงที่สว่างสุด ≈ กระดาษเปล่า/วงไม่ได้ฝน
-  const absMax = Math.min(200, blankLevel * 0.72);                 // ต้องเข้มกว่าพื้นกระดาษเปล่าพอสมควรถึงนับว่าฝน
+  const r = EXAM_LAYOUT.bubbleR * w * 1.15; // ขยายรัศมีเก็บค่าเล็กน้อย ทนต่อการเยื้องศูนย์เล็กน้อยจากการปรับมุมภาพ
 
   const lock = checkLockMark(imgData, w, h);
 
   let score = 0;
   const answers = {};
   for(let q=EXAM_LAYOUT.qStart; q<=EXAM_LAYOUT.qEnd; q++){
-    const dark = EXAM_LETTERS.map((L,k)=>{
+    const samples = EXAM_LETTERS.map((L,k)=>{
       const {x,y} = examBubblePos(q,k);
-      return sampleDarkness(imgData, w, h, x*w, y*h, r);
+      return sampleBubble(imgData, w, h, x*w, y*h, r);
     });
-    const sorted = [...dark].sort((a,b)=>a-b);
-    const minVal = sorted[0], gap = sorted[1]-sorted[0];
-    // ต้องเข้มพอสมควร (ไม่ใช่วงเปล่า) และเข้มกว่าตัวเลือกรองลงมาชัดเจน ไม่งั้นถือว่าอ่านไม่ชัด/ไม่ได้ฝน
+    const means = samples.map(s=>s.mean);
+
+    // เส้นฐาน "กระดาษเปล่า" ของข้อนี้โดยเฉพาะ = ค่าเฉลี่ยของ 3 ตัวเลือกที่สว่างที่สุดในข้อเดียวกัน
+    // (สมมติว่าฝนจริงไม่เกิน 1 ข้อ) แทนเส้นฐานรวมทั้งแผ่น เพื่อทนต่อแสง/เงาที่ไม่สม่ำเสมอในแต่ละจุดของกระดาษ
+    const orderByMean = means.map((v,i)=>i).sort((a,b)=>means[a]-means[b]);
+    const rowBlank = (means[orderByMean[1]] + means[orderByMean[2]] + means[orderByMean[3]]) / 3;
+    const darkCut = rowBlank - 30; // พิกเซลเข้มกว่าเส้นฐานของข้อนี้เกิน 30 ระดับ ถือว่าเป็น "หมึก" ของรอยฝน
+
+    // สัดส่วนพิกเซลในวงที่เข้มกว่าเส้นฐานอย่างมีนัยสำคัญ (จับรอยฝนไม่เต็มวง/ฝนเบาได้ดีกว่าดูแค่ค่าเฉลี่ยทั้งวง)
+    const darkRatios = samples.map(s=> s.vals.length ? s.vals.filter(v=>v<darkCut).length/s.vals.length : 0);
+    const orderByRatio = darkRatios.map((v,i)=>i).sort((a,b)=>darkRatios[b]-darkRatios[a]);
+    const topIdx = orderByRatio[0], secondIdx = orderByRatio[1];
+    const topRatio = darkRatios[topIdx], secondRatio = darkRatios[secondIdx];
+    const fillDrop = rowBlank - means[topIdx]; // ตัวเลือกที่ฝนต้องเข้มกว่าเส้นฐานของข้อนี้ชัดเจนด้วย (กันรอยเปื้อน/เงาเล็กๆ)
+
+    // เงื่อนไขฟันธงว่า "ฝนข้อนี้": (1) มีสัดส่วนหมึกในวงมากพอ (2) เข้มกว่าเส้นฐานของข้อนี้จริง (3) ทิ้งห่างจากตัวเลือกอันดับ 2
+    // ชัดเจน ไม่งั้นถือว่าอ่านไม่ชัด/ไม่ได้ฝน (ปล่อยว่างให้ครูตรวจเองดีกว่าฟันธงผิด)
     let chosen = null;
-    if(minVal < absMax && gap > 18) chosen = EXAM_LETTERS[dark.indexOf(minVal)];
+    if(topRatio > 0.30 && fillDrop > 20 && (topRatio - secondRatio) > 0.15){
+      chosen = EXAM_LETTERS[topIdx];
+    }
     answers[q] = chosen;
     if(chosen && answerKey[q] && chosen===answerKey[q]) score++;
   }
