@@ -1653,13 +1653,38 @@ function detectMarkers(procCtx, w, h){
     comps.push({minX,maxX,minY,maxY,count});
   }
   const minCells = 3, maxCells = Math.max(cols, rows) * 0.28;
+  // ---- ตัวกรองเสริม: แยก "สี่เหลี่ยมทึบจริง" ออกจาก "วงกลมคำตอบที่ฝนเต็ม" ----
+  // ปัญหาที่พบจริง: กระดาษที่ฝนคำตอบแล้วมีวงกลมดำเข้มกระจายอยู่ทั่วแผ่น (20 ข้อ) ซึ่งวงกลมที่ฝนเต็มก็ผ่านเกณฑ์
+  // ขนาด/สัดส่วน/ความหนาแน่นด้านบนได้เหมือนกัน (วงกลมเต็มมีความหนาแน่นในกรอบสี่เหลี่ยมล้อมรอบสูงถึง ~0.785)
+  // ทำให้ระบบสับสนระหว่างหมุดจริง 6 จุด กับวงกลมคำตอบที่ฝนแล้วนับสิบจุด แล้วจัดกลุ่มแถว/เลือกซ้าย-ขวาผิดไปหมด
+  // (นี่คือสาเหตุหลักที่ภาพออกมาบิดเบี้ยวมากทั้งที่มีหมุดครบ ไม่ใช่แค่ความคลาดเคลื่อนเล็กน้อย)
+  // จุดแยกที่ชัดเจน: สี่เหลี่ยมทึบมี "มุมทั้ง 4" ของกรอบมืดสนิท ส่วนวงกลมที่แนบสนิทกับกรอบสี่เหลี่ยมของตัวเอง
+  // จะมี "มุมทั้ง 4" ว่างเป็นสีขาวเสมอ (เรขาคณิตของวงกลมในกรอบสี่เหลี่ยม) ใช้เช็คมุมเป็นตัวตัดสินหลัก
+  function cornerDarkFrac(c){
+    const cw = c.maxX-c.minX+1, ch = c.maxY-c.minY+1;
+    const cs = Math.max(1, Math.round(Math.min(cw,ch)*0.3));
+    function blockFrac(x0,y0){
+      let s=0,n=0;
+      for(let y=y0; y<y0+cs; y++){
+        for(let x=x0; x<x0+cs; x++){
+          if(x<0||x>=cols||y<0||y>=rows) continue;
+          s += dark[y*cols+x]; n++;
+        }
+      }
+      return n ? s/n : 0;
+    }
+    const tl = blockFrac(c.minX, c.minY), tr = blockFrac(c.maxX-cs+1, c.minY);
+    const bl = blockFrac(c.minX, c.maxY-cs+1), br = blockFrac(c.maxX-cs+1, c.maxY-cs+1);
+    return (tl+tr+bl+br)/4;
+  }
   const candidates = comps.filter(c=>{
     const cw = c.maxX-c.minX+1, ch = c.maxY-c.minY+1;
     if(cw<minCells || ch<minCells || cw>maxCells || ch>maxCells) return false;
     const ratio = cw/ch;
     if(ratio<0.5 || ratio>2) return false;
     const fill = c.count/(cw*ch);
-    return fill >= 0.55; // สี่เหลี่ยมทึบควรมีความหนาแน่นพิกเซลมืดสูง
+    if(fill < 0.55) return false; // สี่เหลี่ยมทึบควรมีความหนาแน่นพิกเซลมืดสูง
+    return cornerDarkFrac(c) >= 0.6; // มุมทั้ง 4 ต้องมืดด้วย — กันวงกลมคำตอบที่ฝนเต็มหลุดมาปนเป็น "หมุด" ปลอม
   }).map(c=> ({
     cx: ((c.minX+c.maxX)/2 + 0.5) * cell,
     cy: ((c.minY+c.maxY)/2 + 0.5) * cell,
