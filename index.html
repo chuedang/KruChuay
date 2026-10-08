@@ -2,13 +2,14 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8">
+<meta name="theme-color" content="#d7defc">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>KruChauy</title>
 <!-- เปลี่ยนเลข v= ทุกครั้งที่อัปเดตไฟล์ เพื่อให้เบราว์เซอร์โหลดของใหม่ ไม่ใช้ของเก่าที่แคชไว้ -->
-<link rel="stylesheet" href="style.css?v=20">
+<link rel="stylesheet" href="style.css?v=27">
 </head>
 <body>
-<div id="splash"><div id="splashBg"></div><div id="splashLogo">Kru<span>Chauy</span></div><div id="splashLoading">กำลังโหลดข้อมูล...</div></div>
+<div id="splash"><div id="splashBg"></div><div id="splashLogo">Kru<span>Chauy</span></div><div id="splashLoading"><span class="mini-balls"><i></i><i></i><i></i></span>กำลังโหลดข้อมูล...</div></div>
 <div id="app">
 
   <!-- HOME -->
@@ -29,12 +30,17 @@
         <span class="txt"><h3>ลงคะแนน</h3><p>สร้างตารางคะแนนรายสัปดาห์ พร้อมมอบหมายงานรายวัน</p></span>
         <span class="arrow">›</span>
       </button>
-      <button class="menu-item c-yellow" data-go="teaching" style="--i:2">
+      <button class="menu-item c-rose" data-go="homeroom" style="--i:2">
+        <span class="ico">🏫</span>
+        <span class="txt"><h3>ครูประจำชั้น</h3><p>รายชื่อนักเรียน รูป เบอร์โทร · เช็คเอกสาร · เงินอุดหนุน</p></span>
+        <span class="arrow">›</span>
+      </button>
+      <button class="menu-item c-yellow" data-go="teaching" style="--i:3">
         <span class="ico">📝</span>
         <span class="txt"><h3>บันทึกหลังการสอน</h3><p>ข้อสังเกต แนวทางแก้ไข และผลการพัฒนา</p></span>
         <span class="arrow">›</span>
       </button>
-      <button class="menu-item c-purple" data-go="exam" style="--i:3">
+      <button class="menu-item c-purple" data-go="exam" style="--i:4">
         <span class="ico">🧾</span>
         <span class="txt"><h3>ตรวจข้อสอบ</h3><p>สร้างชุดข้อสอบ ตั้งเฉลย แล้วสแกนกระดาษคำตอบด้วยกล้อง</p></span>
         <span class="arrow">›</span>
@@ -136,6 +142,7 @@
     <button id="scoreStartBtn" class="btn btn-primary">เข้าสู่ตารางคะแนน</button>
     <button id="scorePendingBtn" class="btn btn-outline btn-block" style="margin-top:12px;">📋 สรุปงานค้างนักเรียน</button>
     <button id="scoreSummaryBtn" class="btn btn-outline btn-block" style="margin-top:10px;">📈 สรุปคะแนน / ตัดเกรด</button>
+    <button id="blockedBtn" class="btn btn-outline btn-block" style="margin-top:10px;">🚫 รายชื่อ มส. / ติด 0 (ทุกห้อง)</button>
   </section>
 
   <!-- SCORES TABLE -->
@@ -155,6 +162,7 @@
     <div class="pane" id="behPane">
       <div class="table-toolbar">
         <button id="genHeaderBtn" class="btn btn-gold btn-sm">✨ สร้างหัวคะแนน</button>
+        <button id="addHeaderBtn" class="btn btn-outline btn-sm">＋ เพิ่มวันที่</button>
         <span class="score-info" id="scoreInfo"></span>
       </div>
       <div class="score-scroll"><div id="scoreTableWrap"></div></div>
@@ -180,8 +188,20 @@
     </div>
     <div class="period-bar" data-mode="term" data-compact="1"></div>
     <div class="w-card" id="sumWeights"></div>
+    <div class="w-card" id="sumChart"></div>
     <div id="sumStats" class="sum-stats"></div>
     <div class="score-scroll"><div id="sumTableWrap"></div></div>
+  </section>
+
+  <!-- มส. / ติด 0 : รายชื่อนักเรียนทุกห้อง แยกรายวิชา (อ่าน/เขียนที่ชีท Blocked) -->
+  <section id="view-blocked" class="view">
+    <div class="topbar">
+      <button class="back-btn" data-back="view-scores-setup">‹</button>
+      <div class="tb-txt"><h2>มส. / ติด 0</h2><div class="sub" id="blkHeadSub">นักเรียนทุกห้อง · แยกรายวิชา · ติด 0 คิดจากคะแนนจริง</div></div>
+      <span class="tb-ico">🚫</span>
+    </div>
+    <div class="blk-filters" id="blkFilters"></div>
+    <div id="blkWrap"></div>
   </section>
 
   <!-- PENDING WORK (สรุปงานค้าง — ไม่โชว์คะแนน) -->
@@ -193,7 +213,7 @@
       <button class="focus-btn" title="ขยายเต็มจอ">⤢</button>
     </div>
     <div class="period-bar" data-mode="full" data-compact="1"></div>
-    <div class="table-toolbar"><span class="score-info" id="pendInfo"></span></div>
+    <div class="table-toolbar"><span class="score-info" id="pendInfo"></span><label class="sw"><input type="checkbox" id="pendOnly"><span class="sw-track"></span>เฉพาะคนที่มีงานค้าง</label></div>
     <div class="score-scroll"><div id="pendTableWrap"></div></div>
   </section>
 
@@ -214,6 +234,125 @@
       <div class="field"><label>ผลการพัฒนา</label><textarea id="teachDev"></textarea></div>
     </div>
     <button id="teachSaveBtn" class="btn btn-primary">บันทึก</button>
+  </section>
+
+  <!-- ================= ครูประจำชั้น (Homeroom) ================= -->
+  <!-- HOMEROOM: รายชื่อนักเรียนห้องประจำชั้น -->
+  <section id="view-homeroom" class="view">
+    <div class="topbar">
+      <button class="back-btn" data-back="view-home">‹</button>
+      <div class="tb-txt"><h2>ครูประจำชั้น</h2><div class="sub" id="hrHeadSub">Homeroom</div></div>
+      <span class="tb-ico">🏫</span>
+    </div>
+    <div id="hrEmpty" style="display:none;"></div>
+    <div id="hrBody">
+      <div class="hr-rooms" id="hrRooms"></div>
+      <div class="exam-stats" id="hrStats"></div>
+      <div class="hr-tiles">
+        <button type="button" class="hr-tile docs" id="hrGoDocs">
+          <span class="t-ico">📄</span><b>เช็คเอกสาร</b><small>ติดตามการส่งเอกสาร</small>
+        </button>
+        <button type="button" class="hr-tile sub" id="hrGoSubsidy">
+          <span class="t-ico">💰</span><b>เงินอุดหนุน</b><small>สั่งชุดนักเรียน · สรุปยอด</small>
+        </button>
+      </div>
+      <div class="hr-search"><input id="hrSearch" type="search" placeholder="ค้นหาชื่อ / ชื่อเล่น / เลขที่" autocomplete="off"></div>
+      <div class="hr-legend"><span><i class="dot gdn"></i>โทรผู้ปกครอง</span><span><i class="dot stu"></i>โทรนักเรียน</span><span class="hr-legend-tip">แตะชื่อเพื่อดู/แก้ข้อมูล</span></div>
+      <div class="hr-list" id="hrList"></div>
+    </div>
+  </section>
+
+  <!-- HOMEROOM: ข้อมูลนักเรียนรายคน -->
+  <section id="view-hr-detail" class="view">
+    <div class="topbar">
+      <button class="back-btn" id="hrdBack">‹</button>
+      <div class="tb-txt"><h2 id="hrdTitle">นักเรียน</h2><div class="sub" id="hrdSub"></div></div>
+      <button type="button" class="tb-ico hr-edit-btn" id="hrdEditBtn" title="แก้ไขข้อมูล">✏️</button>
+    </div>
+    <div id="hrdBody"></div>
+    <div class="hr-savebar" id="hrdSaveBar" style="display:none;">
+      <button type="button" class="btn btn-outline" id="hrdCancelBtn">ยกเลิก</button>
+      <button type="button" class="btn btn-primary" id="hrdSaveBtn" disabled>บันทึก</button>
+    </div>
+    <input type="file" id="hrCamInput" accept="image/*" capture="environment" hidden>
+    <input type="file" id="hrFileInput" accept="image/*" hidden>
+  </section>
+
+  <!-- HOMEROOM: เช็คเอกสาร -->
+  <section id="view-hr-docs" class="view">
+    <div class="topbar">
+      <button class="back-btn" id="hrdocsBack">‹</button>
+      <div class="tb-txt"><h2>เช็คเอกสาร</h2><div class="sub" id="hrdocsSub"></div></div>
+      <span class="tb-ico">📄</span>
+      <button class="focus-btn" title="ขยายเต็มจอ">⤢</button>
+    </div>
+    <div class="period-bar" data-mode="term" data-compact="1"></div>
+    <div class="table-toolbar">
+      <button id="hrdocsAddBtn" class="btn btn-gold btn-sm">＋ เพิ่มหัวข้อเอกสาร</button>
+      <span class="score-info" id="hrdocsInfo"></span>
+    </div>
+    <div class="score-scroll"><div id="hrdocsWrap"></div></div>
+    <div class="actions-fixed"><button id="hrdocsSaveBtn" class="btn btn-primary" disabled>บันทึกเอกสาร</button></div>
+  </section>
+
+  <!-- HOMEROOM: เงินอุดหนุน (รายคน) -->
+  <section id="view-hr-orders" class="view">
+    <div class="topbar">
+      <button class="back-btn" id="hrordersBack">‹</button>
+      <div class="tb-txt"><h2>เงินอุดหนุน</h2><div class="sub" id="hroSub"></div></div>
+      <span class="tb-ico">💰</span>
+    </div>
+    <div class="period-bar" data-mode="term" data-compact="1"></div>
+    <div class="card hr-sub-card">
+      <div class="field">
+        <label>เงินอุดหนุนต่อคน (บาท)</label>
+        <div class="money-row">
+          <div class="money"><span>฿</span><input id="hroSubInput" type="number" inputmode="numeric" min="0" step="1" value="550"></div>
+          <button type="button" class="btn btn-gold btn-sm" id="hroSubSave" style="display:none;">บันทึก</button>
+        </div>
+      </div>
+    </div>
+    <div class="exam-stats" id="hroStats"></div>
+    <button id="hroSummaryBtn" class="btn btn-outline btn-block" style="margin-bottom:14px;">📊 ดูสรุปรวมทั้งห้อง</button>
+    <div class="hr-legend"><span class="hr-legend-tip">แตะชื่อนักเรียนเพื่อลงรายการสั่งซื้อ</span></div>
+    <div class="hr-list" id="hroList"></div>
+  </section>
+
+  <!-- HOMEROOM: ฟอร์มสั่งซื้อรายคน -->
+  <section id="view-hr-order" class="view">
+    <div class="topbar">
+      <button class="back-btn" id="hroBack">‹</button>
+      <div class="tb-txt"><h2>รายการสั่งซื้อ</h2><div class="sub" id="hroTitle2"></div></div>
+      <span class="tb-ico">🛍️</span>
+    </div>
+    <div class="hr-who" id="hroWho"></div>
+    <div class="so-list" id="hroItems"></div>
+    <div class="so-bar">
+      <div class="so-sum">
+        <div><span>รวม</span><b id="hroTotal">฿0</b></div>
+        <div><span>เงินอุดหนุน</span><b id="hroSubTxt">฿550</b></div>
+        <div class="so-extra"><span>ชำระเพิ่ม</span><b id="hroExtra">฿0</b></div>
+      </div>
+      <button type="button" class="btn btn-primary" id="hroSaveBtn">บันทึกรายการสั่งซื้อ</button>
+    </div>
+  </section>
+
+  <!-- HOMEROOM: สรุปรวมเงินอุดหนุน -->
+  <section id="view-hr-summary" class="view">
+    <div class="topbar">
+      <button class="back-btn" id="hrsBack">‹</button>
+      <div class="tb-txt"><h2>สรุปเงินอุดหนุน</h2><div class="sub" id="hrsSub"></div></div>
+      <span class="tb-ico">📊</span>
+      <button class="focus-btn" title="ขยายเต็มจอ">⤢</button>
+    </div>
+    <div class="period-bar" data-mode="lock-term" data-compact="1"></div>
+    <div class="score-tabs" id="hrsTabs">
+      <button type="button" data-t="table" class="on">👥 รายคน</button>
+      <button type="button" data-t="total">📦 ยอดสั่งรวม</button>
+      <button type="button" id="hrsCsv" class="tab-sum">⬇ CSV</button>
+    </div>
+    <div class="score-scroll" id="hrsPaneTable"><div id="hrsTableWrap"></div></div>
+    <div class="hrs-total" id="hrsPaneTotal" style="display:none;"></div>
   </section>
 
   <!-- EXAM: หน้าแรก — รายการชุดข้อสอบ -->
@@ -408,16 +547,37 @@
     </div>
   </div>
 
+  <!-- MODAL: หัวข้อเอกสาร (ครูประจำชั้น) -->
+  <div class="modal-backdrop hr-modal" id="modalHrDoc">
+    <div class="modal-sheet">
+      <h3 id="hrDocTitle">เพิ่มหัวข้อเอกสาร</h3>
+      <div class="field"><label>ชื่อหัวข้อเอกสาร</label><input id="hrDocName" maxlength="60" placeholder="เช่น สำเนาบัตรประชาชน"></div>
+      <div class="so-chips hr-suggest" id="hrDocSuggest"></div>
+      <div id="hrDocTools" style="display:none;">
+        <div class="hr-doc-tools">
+          <button type="button" class="btn btn-outline btn-sm" id="hrDocAll">✓ ติ๊กส่งครบทุกคน</button>
+          <button type="button" class="btn btn-outline btn-sm" id="hrDocNone">ล้างที่ติ๊กทั้งหมด</button>
+          <button type="button" class="btn btn-danger btn-sm" id="hrDocDel">🗑 ลบหัวข้อ</button>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" data-close>ยกเลิก</button>
+        <button class="btn btn-primary" id="hrDocOk">เพิ่มหัวข้อ</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <!-- SAVING OVERLAY -->
   <div class="loading-overlay" id="savingOverlay">
     <div class="loading-box">
-      <div class="spinner"></div>
-      <div class="loading-msg" id="savingMsg">กำลังบันทึกข้อมูล...</div>
+      <div class="lo-balls"><span class="lo-ball"><i></i><b></b></span><span class="lo-ball"><i></i><b></b></span><span class="lo-ball"><i></i><b></b></span></div>
+      <div class="loading-msg" id="savingMsg">กำลังบันทึกข้อมูล</div>
+      <div class="lo-sub" id="savingSub">กำลังเชื่อมต่อ Google Sheet</div>
     </div>
   </div>
 </div>
-<script src="script.js?v=21"></script>
+<script src="script.js?v=35"></script>
 </body>
 </html>
