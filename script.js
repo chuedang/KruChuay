@@ -242,19 +242,34 @@ function showView(id){
   if(id==="view-exam-scan") startExamScan();
 }
 
-async function apiGet(type){
-  const res = await fetch(`${CONFIG.API_URL}?type=${type}&_=${Date.now()}`, { cache:"no-store" });
-  const txt = await res.text();
-  try{ return JSON.parse(txt); }
-  catch(e){
-    /* Apps Script ตอบเป็นหน้าเว็บ (หน้า error / ขอสิทธิ์ / ล็อกอิน) → ดึงข้อความในหน้านั้นมาบอกผู้ใช้ */
-    const title = ((txt.match(/<title>([\s\S]*?)<\/title>/i) || [])[1] || "").trim();
-    const body = txt.replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>|<title>[\s\S]*?<\/title>/gi, " ")
-      .replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim().slice(0, 260);
-    const err = new Error("SERVER_HTML");
-    err.detail = [title, body].filter(Boolean).join(" | ");
-    throw err;
+async function apiGet(type, tries=4){
+  /* Google ตอบหน้า error ("ไม่พบเพจ / ไดรฟ์ไม่สามารถเปิดไฟล์ได้ในเวลานี้") ได้เป็นพักๆ โดยเฉพาะตอน Apps Script เพิ่งตื่น (cold start)
+     หรือเน็ตมือถือสะดุด — ลองใหม่อัตโนมัติ (รอเพิ่มทีละนิด) + ตัดการรอเกิน 30 วินาที แล้วค่อยแจ้ง error จริง */
+  let lastErr;
+  for(let i=0; i<tries; i++){
+    const ctrl = (typeof AbortController!=="undefined") ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(()=>ctrl.abort(), 30000) : null;
+    try{
+      const res = await fetch(`${CONFIG.API_URL}?type=${type}&_=${Date.now()}`, { cache:"no-store", signal: ctrl ? ctrl.signal : undefined });
+      const txt = await res.text();
+      if(timer) clearTimeout(timer);
+      try{ return JSON.parse(txt); }
+      catch(e){
+        /* Apps Script ตอบเป็นหน้าเว็บ (หน้า error / ขอสิทธิ์ / ล็อกอิน) → ดึงข้อความในหน้านั้นมาบอกผู้ใช้ */
+        const title = ((txt.match(/<title>([\s\S]*?)<\/title>/i) || [])[1] || "").trim();
+        const body = txt.replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>|<title>[\s\S]*?<\/title>/gi, " ")
+          .replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim().slice(0, 260);
+        const err = new Error("SERVER_HTML");
+        err.detail = [title, body].filter(Boolean).join(" | ");
+        throw err;
+      }
+    }catch(err){
+      if(timer) clearTimeout(timer);
+      lastErr = err;
+      if(i < tries-1) await new Promise(r=>setTimeout(r, 1200*(i+1)));
+    }
   }
+  throw lastErr;
 }
 const GS_REQUIRED = "v13";
 const sleep = ms => new Promise(r=>setTimeout(r, ms));
