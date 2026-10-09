@@ -6,7 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>KruChauy</title>
 <!-- เปลี่ยนเลข v= ทุกครั้งที่อัปเดตไฟล์ เพื่อให้เบราว์เซอร์โหลดของใหม่ ไม่ใช้ของเก่าที่แคชไว้ -->
-<link rel="stylesheet" href="style.css?v=27">
+<script>
+/* โหมดหน้าจอ: pc / mobile (จำค่าที่เลือกไว้ ถ้ายังไม่เคยเลือกจะเดาจากความกว้างจอ) — ตั้งก่อนวาดหน้าเพื่อกันภาพกระพริบ */
+(function(){var m="mobile";try{var s=localStorage.getItem("kc_mode");m=(s==="pc"||s==="mobile")?s:(window.innerWidth>=900?"pc":"mobile");}catch(e){}document.documentElement.classList.add("mode-"+m);})();
+</script>
+<link rel="stylesheet" href="style.css?v=32">
 </head>
 <body>
 <div id="splash"><div id="splashBg"></div><div id="splashLogo">Kru<span>Chauy</span></div><div id="splashLoading"><span class="mini-balls"><i></i><i></i><i></i></span>กำลังโหลดข้อมูล...</div></div>
@@ -18,6 +22,10 @@
       <div class="mark">Kru<span>Chauy</span></div>
       <div class="rule"></div>
       <div class="tag">ผู้ช่วยครูประจำวัน</div>
+      <div class="mode-switch" id="modeSwitch" role="group" aria-label="เลือกขนาดหน้าจอ">
+        <button type="button" data-mode="mobile">📱 มือถือ</button>
+        <button type="button" data-mode="pc">💻 PC</button>
+      </div>
     </div>
     <div class="menu">
       <button class="menu-item c-blue" data-go="attend" style="--i:0">
@@ -257,7 +265,7 @@
         </button>
       </div>
       <div class="hr-search"><input id="hrSearch" type="search" placeholder="ค้นหาชื่อ / ชื่อเล่น / เลขที่" autocomplete="off"></div>
-      <div class="hr-legend"><span><i class="dot gdn"></i>โทรผู้ปกครอง</span><span><i class="dot stu"></i>โทรนักเรียน</span><span class="hr-legend-tip">แตะชื่อเพื่อดู/แก้ข้อมูล</span></div>
+      <div class="hr-legend"><span><i class="dot stu"></i>โทรนักเรียน</span><span class="hr-legend-tip">แตะชื่อเพื่อดูข้อมูล / โทรผู้ปกครอง</span></div>
       <div class="hr-list" id="hrList"></div>
     </div>
   </section>
@@ -326,8 +334,14 @@
       <span class="tb-ico">🛍️</span>
     </div>
     <div class="hr-who" id="hroWho"></div>
+    <div class="so-card so-cash" id="hroCashCard">
+      <div class="so-head"><span class="so-ico">💵</span>
+        <div class="so-nm"><b>รับเงินสด (ไม่ต้องสั่งของ)</b><small>ติ๊กไว้ถ้านักเรียนคนนี้รับเงินอุดหนุนเป็นเงินสด</small></div>
+        <label class="sw"><input type="checkbox" id="hroCash"><span class="sw-track"></span></label></div>
+    </div>
+    <div class="so-cash-note" id="hroCashNote" style="display:none;">นักเรียนคนนี้รับเป็นเงินสด จึงไม่ต้องเลือกรายการสินค้า (ถ้าเคยบันทึกรายการสั่งซื้อไว้ จะถูกล้างเมื่อกดบันทึก)</div>
     <div class="so-list" id="hroItems"></div>
-    <div class="so-bar">
+    <div class="so-bar" id="hroBar">
       <div class="so-sum">
         <div><span>รวม</span><b id="hroTotal">฿0</b></div>
         <div><span>เงินอุดหนุน</span><b id="hroSubTxt">฿550</b></div>
@@ -548,6 +562,26 @@
   </div>
 
   <!-- MODAL: หัวข้อเอกสาร (ครูประจำชั้น) -->
+  <div class="modal-backdrop hr-modal" id="modalHrRcv">
+    <div class="modal-sheet">
+      <h3 id="hrRcvTitle">รับของแล้ว</h3>
+      <div class="rcv-who" id="hrRcvWho"></div>
+      <div class="rcv-step">
+        <button type="button" id="hrRcvMinus" aria-label="ลด">−</button>
+        <div class="rcv-num"><b id="hrRcvNum">0</b><small id="hrRcvOf"></small></div>
+        <button type="button" id="hrRcvPlus" aria-label="เพิ่ม">＋</button>
+      </div>
+      <div class="hr-doc-tools" style="justify-content:center;">
+        <button type="button" class="btn btn-outline btn-sm" id="hrRcvNone">ยังไม่รับ</button>
+        <button type="button" class="btn btn-outline btn-sm" id="hrRcvAll">✓ รับครบ</button>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" data-close>ยกเลิก</button>
+        <button class="btn btn-primary" id="hrRcvOk">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-backdrop hr-modal" id="modalHrDoc">
     <div class="modal-sheet">
       <h3 id="hrDocTitle">เพิ่มหัวข้อเอกสาร</h3>
@@ -578,6 +612,6 @@
     </div>
   </div>
 </div>
-<script src="script.js?v=35"></script>
+<script src="script.js?v=40"></script>
 </body>
 </html>
