@@ -220,25 +220,29 @@ body.ready .menu-item{animation:rise .55s cubic-bezier(.2,.8,.2,1) backwards; an
   position:absolute; left:0; bottom:0; width:24px; height:24px; border-radius:50%;
   background:radial-gradient(circle at 32% 28%, #fff 0 18%, var(--bc) 62%, var(--bd) 100%);
   box-shadow:0 8px 16px -4px rgba(26,18,80,.55), 0 0 18px 2px var(--bg2);
-  transform-origin:50% 100%;
-  animation:loBounce .55s cubic-bezier(.33,.66,.5,1) var(--d) infinite alternate;
+  transform-origin:50% 100%; will-change:transform;
+  animation:loBounce 1.15s linear var(--d) infinite;
 }
 .lo-ball i{ /* เงาบนพื้น */
   position:absolute; left:-4px; right:-4px; bottom:-14px; height:8px; border-radius:50%;
-  background:rgba(24,16,76,.5); filter:blur(3px);
-  animation:loShadow .55s cubic-bezier(.33,.66,.5,1) var(--d) infinite alternate;
+  background:rgba(24,16,76,.5); filter:blur(3px); will-change:transform,opacity;
+  animation:loShadow 1.15s linear var(--d) infinite;
 }
 .lo-ball:nth-child(1){--bc:#C7D2FE; --bd:#6F86FF; --bg2:rgba(199,210,254,.65); --d:0s;}
-.lo-ball:nth-child(2){--bc:#FFE08A; --bd:#F5B731; --bg2:rgba(255,224,138,.7);  --d:.16s;}
-.lo-ball:nth-child(3){--bc:#FFC2DD; --bd:#EC6BAA; --bg2:rgba(255,194,221,.65); --d:.32s;}
+.lo-ball:nth-child(2){--bc:#FFE08A; --bd:#F5B731; --bg2:rgba(255,224,138,.7);  --d:-.16s;}
+.lo-ball:nth-child(3){--bc:#FFC2DD; --bd:#EC6BAA; --bg2:rgba(255,194,221,.65); --d:-.32s;}
+/* เด้งแบบมีแรงโน้มถ่วง: ขาขึ้นช้าลงเรื่อยๆ ขาลงเร็วขึ้นเรื่อยๆ + ยืดตอนวิ่ง บี้ตอนกระทบพื้น (ไม่หยุดนิ่งตรงสุดทาง) */
 @keyframes loBounce{
-  0%  {transform:translateY(0) scale(1.55,.4);}
-  40% {transform:translateY(-14px) scale(1,1);}
-  100%{transform:translateY(-62px) scale(1,1);}
+  0%   {transform:translate3d(0,0,0) scale(1.55,.45);     animation-timing-function:cubic-bezier(.16,.84,.3,1);}
+  11%  {transform:translate3d(0,-14px,0) scale(.94,1.08);  animation-timing-function:cubic-bezier(.3,.7,.4,1);}
+  50%  {transform:translate3d(0,-62px,0) scale(1,1);       animation-timing-function:cubic-bezier(.6,0,.7,.3);}
+  89%  {transform:translate3d(0,-14px,0) scale(.95,1.07);  animation-timing-function:cubic-bezier(.6,0,.84,.3);}
+  100% {transform:translate3d(0,0,0) scale(1.55,.45);}
 }
 @keyframes loShadow{
-  0%  {transform:scale(1.5,1); opacity:.7;}
-  100%{transform:scale(.45,.6); opacity:.14;}
+  0%   {transform:scale(1.5,1); opacity:.7; animation-timing-function:cubic-bezier(.16,.84,.3,1);}
+  50%  {transform:scale(.5,.62); opacity:.16; animation-timing-function:cubic-bezier(.6,0,.7,.3);}
+  100% {transform:scale(1.5,1); opacity:.7;}
 }
 
 /* ข้อความ */
@@ -249,7 +253,7 @@ body.ready .menu-item{animation:rise .55s cubic-bezier(.2,.8,.2,1) backwards; an
 .lo-sub.swap{opacity:0; transform:translateY(5px);}
 
 @media (prefers-reduced-motion:reduce){
-  .lo-ball b,.lo-ball i{animation-duration:1.6s!important}
+  .lo-ball b,.lo-ball i{animation-duration:2.2s!important}
 }
 
 /* ลูกบอลจิ๋วในหน้า Splash */
@@ -257,12 +261,16 @@ body.ready .menu-item{animation:rise .55s cubic-bezier(.2,.8,.2,1) backwards; an
 .mini-balls i{
   width:7px; height:7px; border-radius:50%; background:#fff;
   box-shadow:0 3px 6px rgba(26,18,80,.4);
-  transform-origin:50% 100%;
-  animation:miniBounce .5s cubic-bezier(.33,.66,.5,1) infinite alternate;
+  transform-origin:50% 100%; will-change:transform;
+  animation:miniBounce .95s linear infinite;
 }
-.mini-balls i:nth-child(2){background:#FFE08A; animation-delay:.12s;}
-.mini-balls i:nth-child(3){background:#FFC2DD; animation-delay:.24s;}
-@keyframes miniBounce{0%{transform:translateY(0) scale(1.4,.6)}100%{transform:translateY(-9px) scale(1,1)}}
+.mini-balls i:nth-child(2){background:#FFE08A; animation-delay:-.13s;}
+.mini-balls i:nth-child(3){background:#FFC2DD; animation-delay:-.26s;}
+@keyframes miniBounce{
+  0%   {transform:translate3d(0,0,0) scale(1.5,.5);  animation-timing-function:cubic-bezier(.16,.84,.3,1);}
+  50%  {transform:translate3d(0,-9px,0) scale(1,1);  animation-timing-function:cubic-bezier(.6,0,.7,.3);}
+  100% {transform:translate3d(0,0,0) scale(1.5,.5);}
+}
 
 /* ===== Scores: save bar (ค้างด้านล่างเสมอ) ===== */
 #scoreSaveBtn:disabled{opacity:.45; cursor:not-allowed;}
@@ -1242,3 +1250,53 @@ table.hr-sum tfoot td.sub-total,table.hr-sum tfoot td.sub-extra{background:#FFE9
   .hr-av{width:48px; height:48px; font-size:20px;}
   .so-cols{grid-template-columns:1fr;}
 }
+/* ---- เงินอุดหนุน: รับเงินสด (ไม่ต้องสั่งของ) ---- */
+.so-cash{margin-bottom:12px;}
+.so-cash small{display:block; line-height:1.35;}
+.o-chip.cash{background:#FFF4D6; color:#9A6A00;}
+.so-bar.cash .so-sum{display:none;}
+.so-cash-note{margin:0 0 14px; padding:12px 14px; border-radius:16px; background:#FFF8E6; color:#8A6100; font-size:13px; line-height:1.5;}
+
+/* ===== ปุ่มเลือกโหมดหน้าจอ (หน้าแรก) ===== */
+.mode-switch{display:inline-flex; gap:4px; margin-top:18px; padding:4px; background:#fff; border-radius:999px; box-shadow:0 1px 2px rgba(27,34,51,.06), 0 8px 18px -12px rgba(27,34,51,.35);}
+.mode-switch button{border:none; background:transparent; font:inherit; font-size:12.5px; font-weight:600; padding:8px 15px; border-radius:999px; color:var(--ink-soft); cursor:pointer; transition:background .2s, color .2s, box-shadow .2s;}
+.mode-switch button.on{background:var(--gold); color:#fff; box-shadow:0 6px 12px -6px rgba(79,107,245,.8);}
+
+/* ===== โหมด PC: หน้ากว้าง จัดการ์ดเป็นหลายคอลัมน์ (โหมดมือถือคือหน้าตาเดิมทั้งหมด) ===== */
+html.mode-pc #app{max-width:1180px;}
+html.mode-pc .view{padding:28px 40px 44px;}
+html.mode-pc .brand{padding:56px 0 36px;}
+html.mode-pc .menu{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px;}
+html.mode-pc .roster{display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:12px;}
+html.mode-pc .hr-list{display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:12px;}
+html.mode-pc .hr-tiles{grid-template-columns:repeat(4,minmax(0,1fr));}
+html.mode-pc .so-list{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; align-items:start;}
+html.mode-pc .exam-stats{max-width:720px;}
+html.mode-pc .modal-backdrop{align-items:center;}
+html.mode-pc .modal-sheet{max-width:560px; border-radius:24px; max-height:88vh;}
+html.mode-pc .topbar{padding:14px 18px;}
+html.mode-pc .topbar h2{font-size:20px;}
+html.mode-pc .so-bar{max-width:760px; margin-left:auto; margin-right:auto; width:100%;}
+html.mode-pc body.focus-mode #app{max-width:none;}
+@media (max-width:760px){
+  html.mode-pc .menu,html.mode-pc .so-list{grid-template-columns:1fr;}
+  html.mode-pc .hr-tiles{grid-template-columns:1fr 1fr;}
+  html.mode-pc .view{padding:16px;}
+}
+
+/* ---- สรุปเงินอุดหนุน: แตะช่องเพื่อบันทึกการรับของ ---- */
+table.hr-sum tbody td.rcv-td{cursor:pointer; transition:background .15s;}
+table.hr-sum tbody td.rcv-td:active{background:#EEF2FF;}
+table.hr-sum tbody td.rcv-td.done{background:#EAF7F0;}
+table.hr-sum tbody td.rcv-td.part{background:#FFF7E3;}
+.rcv-tag{display:inline-block; margin-top:3px; font-style:normal; text-decoration:none; font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:999px; background:#EEF1F7; color:var(--ink-soft); align-self:flex-start;}
+table.hr-sum tbody td.rcv-td.done .rcv-tag{background:#CFEEDD; color:#13794F;}
+table.hr-sum tbody td.rcv-td.part .rcv-tag{background:#FFE7A8; color:#9A6A00;}
+.rcv-who{font-size:13px; color:var(--ink-soft); margin:-8px 0 14px; line-height:1.5;}
+.rcv-step{display:flex; align-items:center; justify-content:center; gap:22px; margin:6px 0 16px;}
+.rcv-step button{width:54px; height:54px; border-radius:50%; border:1.5px solid #E1E7F3; background:#fff; font:inherit; font-size:26px; font-weight:700; line-height:1; color:var(--ink); cursor:pointer; padding:0;}
+.rcv-step button:active:not(:disabled){background:var(--gold); border-color:var(--gold); color:#fff;}
+.rcv-step button:disabled{opacity:.35; cursor:not-allowed;}
+.rcv-num{text-align:center; min-width:96px;}
+.rcv-num b{display:block; font-size:44px; font-weight:800; line-height:1.1;}
+.rcv-num small{font-size:12px; color:var(--ink-soft);}
