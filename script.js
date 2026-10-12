@@ -3232,13 +3232,17 @@ const HR_FIELDS = [
   { k:"ที่อยู่", ico:"📍", area:true, rows:3 },
   { k:"งานอดิเรก", ico:"🎨", area:true }
 ];
-/* เลขบัตรประชาชน 13 หลัก: เก็บในชีทเป็นตัวเลขล้วน แสดงเป็น 1-2345-67890-12-3 */
+/* เลขบัตรประชาชนไทย 13 หลัก: เก็บในชีทเป็นตัวเลขล้วน แสดงเป็น 1-2345-67890-12-3
+   ถ้าค่าไม่ใช่เลขบัตร 13 หลัก (เช่น นร.แลกเปลี่ยนต่างชาติ รหัสพาสปอร์ต/รหัสอื่น) → แสดงและเก็บตามที่พิมพ์/ที่อยู่ในชีทเลย */
+const isThaiId = v => { const s = String(v ?? "").trim(); return /^[\d\s-]+$/.test(s) && s.replace(/\D/g, "").length === 13; };
 function fmtId(v){
-  const d = String(v ?? "").replace(/\D/g, "").slice(0, 13); let i = 0; const out = [];
+  const s = String(v ?? "").trim();
+  if(!isThaiId(s)) return s;
+  const d = s.replace(/\D/g, ""); let i = 0; const out = [];
   [1,4,5,2,1].forEach(n=>{ const p = d.slice(i, i+n); if(p) out.push(p); i += n; });
   return out.join("-");
 }
-const hrNorm = (f, v) => f.idcard ? String(v ?? "").replace(/\D/g, "") : String(v ?? "").trim();
+const hrNorm = (f, v) => f.idcard ? (isThaiId(v) ? String(v).replace(/\D/g, "") : String(v ?? "").trim()) : String(v ?? "").trim();
 const hrOrig = (st, f) => f.phone ? (f.k==="เบอร์โทรนักเรียน" ? st.sphone : st.pphone) : f.idcard ? hrNorm(f, st.get(f.k)) : st.get(f.k);
 const hrDirty = st => HR_FIELDS.some(f => f.k in hr.draft && hrNorm(f, hr.draft[f.k]) !== hrOrig(st, f));
 
@@ -3262,7 +3266,7 @@ function renderHrDetail(){
     const call = (f.phone && orig && !hr.edit) ? `<a class="hr-call ${f.k==="เบอร์โทรนักเรียน"?"stu":"gdn"} sm" href="tel:${esc(orig)}" title="โทร">${PHONE_SVG}</a>` : "";
     const input = f.area
       ? `<textarea data-f="${f.k}" rows="${f.rows||2}" placeholder="เพิ่ม${f.k}">${esc(cur)}</textarea>`
-      : `<input data-f="${f.k}" value="${esc(cur)}" placeholder="เพิ่ม${f.k}" ${f.phone ? `type="tel" inputmode="tel" maxlength="14"` : f.idcard ? `inputmode="numeric" maxlength="17" autocomplete="off"` : `inputmode="${f.inputmode||"text"}"`}>`;
+      : `<input data-f="${f.k}" value="${esc(cur)}" placeholder="เพิ่ม${f.k}" ${f.phone ? `type="tel" inputmode="tel" maxlength="14"` : f.idcard ? `inputmode="text" maxlength="30" autocomplete="off"` : `inputmode="${f.inputmode||"text"}"`}>`;
     return `<div class="hr-f"><div class="hr-f-ico">${f.ico}</div><div class="hr-f-main"><label>${f.k}</label>${showInput ? input : `<div class="hr-f-val">${esc(val)}</div>`}</div>${call}</div>`;
   }).join("");
   qs("#hrdBody").innerHTML = `
@@ -3315,7 +3319,6 @@ qs("#hrdSaveBtn")?.addEventListener("click", async ()=>{
   for(const f of HR_FIELDS){
     if(!(f.k in hr.draft)) continue;
     let v = hrNorm(f, hr.draft[f.k]);
-    if(f.idcard && v && v.length !== 13){ toast("เลขบัตรประชาชนต้องมี 13 หลัก"); return; }
     if(f.phone){
       v = v.replace(/[^\d+]/g, "");
       if(v && !/^\+?\d{8,13}$/.test(v)){ toast(`${f.k} ไม่ถูกต้อง (ต้องเป็นตัวเลข 8-13 หลัก)`); return; }
