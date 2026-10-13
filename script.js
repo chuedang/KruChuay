@@ -271,7 +271,7 @@ async function apiGet(type, tries=4){
   }
   throw lastErr;
 }
-const GS_REQUIRED = "v15";
+const GS_REQUIRED = "v17";
 const sleep = ms => new Promise(r=>setTimeout(r, ms));
 async function apiPost(payload, tries=3){
   if(state.gsOld) return { success:false, message:"Apps Script ที่เชื่อมอยู่ยังเป็นเวอร์ชันเก่า (ไม่รองรับภาคเรียน/ประเภท) — Deploy โค้ด GS.txt ล่าสุด แล้วใส่ลิงก์ใน CONFIG.API_URL ของ script.js จากนั้นรีเฟรชแบบล้างแคช" };
@@ -296,32 +296,43 @@ async function apiPost(payload, tries=3){
 window.addEventListener("error", e=>{ hideSaving(); toast("เกิดข้อผิดพลาด: " + (e.message || "ไม่ทราบสาเหตุ") + " (ลองรีเฟรชแบบล้างแคช)"); });
 window.addEventListener("unhandledrejection", e=>{ hideSaving(); toast("เกิดข้อผิดพลาด: " + ((e.reason && e.reason.message) || e.reason || "ไม่ทราบสาเหตุ")); });
 
-async function loadAll(){
+/* โหลดข้อมูลจาก Google Sheet "เฉพาะส่วนที่ต้องใช้" — ส่ง only=... ไปให้ Apps Script อ่านเฉพาะชีทเหล่านั้น (ไม่อ่านทุกชีทอีกแล้ว)
+   loadAll()              = ชุดหลักตอนเปิดแอป (CORE_PARTS)
+   loadAll(["scores"])    = โหลดเฉพาะคะแนน ส่วนอื่นใน state คงเดิม
+   ชื่อส่วนที่ใช้ได้: config students activities attendance scores exam examSetup examKey blocked hrDocs hrOrders hrSetup
+   (ไม่มี teaching เพราะหน้าเว็บไม่เคยอ่านค่าจากชีทหลังการสอน — มีแต่เขียน) */
+const CORE_PARTS = ["config","students","activities","attendance","scores","exam","examSetup"];
+const HR_PARTS = ["hrDocs","hrOrders","hrSetup"];
+const STATE_KEY = { config:"config", students:"students", activities:"activities", attendance:"attendance", scores:"scores", exam:"examRows", examSetup:"examSetup",
+  examKey:"examKeyRows", blocked:"blocked", hrDocs:"hrDocs", hrOrders:"hrOrders", hrSetup:"hrSetup" };
+const loadedParts = new Set();
+async function loadAll(parts){
+  const want = (Array.isArray(parts) && parts.length) ? parts : CORE_PARTS;
   try{
-    const data = await apiGet("all");
+    const data = await apiGet("all&only=" + want.join(","));
     state.loadErr = "";
-    state.cfgMsg = (data && data.config && !Array.isArray(data.config)) ? String(data.config.message || "ชีท Config อ่านไม่ได้") : "";
     state.gsOld = (data.gsVersion !== GS_REQUIRED);   // Deploy เก่า/คนละลิงก์ = บล็อกการบันทึก กันข้อมูลเข้าชีทผิดรูปแบบ
     if(state.gsOld) toast("Apps Script ยังเป็นเวอร์ชันเก่า — ต้อง Deploy GS.txt ล่าสุดและใช้ลิงก์ใหม่ก่อนบันทึกครับ");
-    state.students = data.students || [];
-    state.scores = data.scores || [];
-    state.activities = data.activities || [];
-    state.attendance = data.attendance || [];
-    state.teaching = data.teaching || [];
-    state.config = Array.isArray(data.config) ? data.config : [];
-    state.examRows = Array.isArray(data.exam) ? data.exam : [];
-    state.examSetup = Array.isArray(data.examSetup) ? data.examSetup : [];
-    state.examKeyRows = Array.isArray(data.examKey) ? data.examKey : [];
-    state.blocked = Array.isArray(data.blocked) ? data.blocked : [];
-    state.hrDocs = Array.isArray(data.hrDocs) ? data.hrDocs : [];
-    state.hrOrders = Array.isArray(data.hrOrders) ? data.hrOrders : [];
-    state.hrSetup = Array.isArray(data.hrSetup) ? data.hrSetup : [];
-    syncExamKeysFromSheet();
+    if(want.includes("config")) state.cfgMsg = (data && data.config && !Array.isArray(data.config)) ? String(data.config.message || "ชีท Config อ่านไม่ได้") : "";
+    want.forEach(k=>{
+      const v = data[k];
+      state[STATE_KEY[k]] = Array.isArray(v) ? v : [];
+      if(Array.isArray(v)) loadedParts.add(k);
+    });
+    if(want.includes("examKey")) syncExamKeysFromSheet();
   }catch(err){
     state.loadErr = String((err && err.message) || err || "ไม่ทราบสาเหตุ");
     state.loadDetail = (err && err.detail) || "";
     toast("โหลดข้อมูลไม่สำเร็จ ตรวจการเชื่อมต่อ");
   }
+}
+/* โหลดเฉพาะส่วนที่ยังไม่เคยโหลด (เช่น เข้าห้องประจำชั้น / ตรวจข้อสอบ ครั้งแรก) — ถ้าโหลดแล้วจะไม่ยิงซ้ำ */
+const _inflight = {};
+function ensureLoaded(parts){
+  const need = parts.filter(k=>!loadedParts.has(k));
+  if(!need.length) return Promise.resolve();
+  const key = need.join(",");
+  return _inflight[key] || (_inflight[key] = loadAll(need).finally(()=>{ delete _inflight[key]; }));
 }
 
 function uniqueRooms(){
@@ -370,7 +381,7 @@ qsa(".menu-item[data-go]").forEach(btn=>{
     if(go==="attend"){ fillRoomSelects(); qs("#attendDate").value = todayISO(); showView("view-attend-setup"); }
     if(go==="scores"){ fillRoomSelects(); showView("view-scores-setup"); }
     if(go==="teaching"){ fillRoomSelects(); qs("#teachDate").value = todayISO(); showView("view-teaching"); }
-    if(go==="exam"){ renderExamHome(); showView("view-exam"); }
+    if(go==="exam"){ renderExamHome(); showView("view-exam"); ensureLoaded(["examKey"]).then(()=>{ if(qs("#view-exam").classList.contains("active")) renderExamHome(); }); }   // เฉลยในชีท ExamKey โหลดตอนเข้าเมนูนี้ ไม่โหลดตอนเปิดแอป
     if(go==="homeroom"){ openHomeroom(); }
   });
 });
@@ -476,13 +487,13 @@ qs("#attendSaveBtn").addEventListener("click", async ()=>{
   const res = await apiPost({ type:"addAttendance", term, ptype:type, level:room, subject, absent, leave, late, date, absentNo:nos("absent"), leaveNo:nos("leave"), lateNo:nos("late") });
   qs("#attendSaveBtn").disabled = false;
   if(res.success){
-    await loadAll();
+    await loadAll(["attendance"]);
     hideSaving();
     toast(state.attend.existing ? "แก้ไขการเช็คชื่อเดิมของวันนี้แล้ว" : "บันทึกการเช็คชื่อแล้ว");
     showView("view-home");
   } else if(res.network){
     // เน็ตสะดุดตอนรอผล แต่ addAttendance เป็น upsert — โหลดชีทมาเช็คก่อนว่าวันนี้ถูกบันทึกไปแล้วหรือยัง
-    await loadAll();
+    await loadAll(["attendance"]);
     const ok = state.attendance.some(a => sameStr(a["รายวิชา"],subject) && sameStr(a["ระดับชั้น"],room) && dateKey(a["วันที่"])===date && inPeriod(a));
     hideSaving();
     if(ok){ toast("การเชื่อมต่อสะดุดแต่บันทึกสำเร็จแล้ว ✓ (ตรวจกับชีทให้แล้ว)"); showView("view-home"); }
@@ -517,12 +528,12 @@ qs("#scoreStartBtn").addEventListener("click", ()=>{
 async function refreshScoreData(){
   const room = state.score.room, subject = state.score.subject;
   try{
-    const [acts, scores, exRows, exSetup] = await Promise.all([apiGet("activities"), apiGet("scores"), apiGet("exam"), apiGet("examSetup")]);
+    const d = await apiGet("all&only=activities,scores,exam,examSetup");   // ครั้งเดียว (เดิมยิง 4 คำขอ แต่ละคำขอประกอบข้อมูลจาก NameList ซ้ำ)
     if(room!==state.score.room || subject!==state.score.subject) return;
-    if(Array.isArray(acts)) state.activities = acts;
-    if(Array.isArray(scores)) state.scores = scores;
-    if(Array.isArray(exRows)) state.examRows = exRows;
-    if(Array.isArray(exSetup)) state.examSetup = exSetup;
+    if(Array.isArray(d.activities)) state.activities = d.activities;
+    if(Array.isArray(d.scores)) state.scores = d.scores;
+    if(Array.isArray(d.exam)) state.examRows = d.exam;
+    if(Array.isArray(d.examSetup)) state.examSetup = d.examSetup;
     syncHeadersWithActivities();
     if(qs("#view-scores-table").classList.contains("active")){
       renderScoreTable();
@@ -556,7 +567,7 @@ function findActivity(date){
 }
 function findScore(name, date){
   if(!date) return null;
-  return state.scores.find(s => s["ระดับชั้น"]===state.score.room && inPeriod(s) && s["ชื่อ"]===name && dateKey(s["วันที่"])===date);
+  return state.scores.find(s => s["ระดับชั้น"]===state.score.room && inPeriod(s) && sameStr(s["รายวิชา"], state.score.subject) && s["ชื่อ"]===name && dateKey(s["วันที่"])===date);
 }
 function pendingKey(name, date){ return `${name}|${date}`; }
 /* คะแนนที่บันทึกไว้ในชีทแล้ว (ตัวเลข) หรือ null ถ้ายังไม่มี */
@@ -675,7 +686,7 @@ qs("#scoreSaveBtn").addEventListener("click", async ()=>{
   const items = [...state.score.pending.entries()].map(([key, score])=>{
     const { name, date } = splitPendingKey(key);
     return {
-      term: period.term, type: period.type, level: state.score.room, name, date, no: noOf.get(name),
+      term: period.term, type: period.type, subject: state.score.subject, level: state.score.room, name, date, no: noOf.get(name),
       assignment: findActivity(date)?.["งาน"] || fmtShort(date),
       score
     };
@@ -686,13 +697,13 @@ qs("#scoreSaveBtn").addEventListener("click", async ()=>{
   qs("#scoreSaveBtn").disabled = false;
   if(res.success){
     state.score.pending.clear();
-    await loadAll();
+    await loadAll(["scores"]);
     hideSaving();
     toast("บันทึกคะแนนแล้ว ✓");
     renderScoreTable();
   } else if(res.network){
     // เน็ตสะดุดตอนรอผล แต่คำสั่งเป็น upsert — โหลดชีทมาเช็คว่ารายการที่ค้างอยู่เข้าไปจริงหรือยังก่อนฟันธงว่าพัง
-    await loadAll();
+    await loadAll(["scores"]);
     const stillPending = items.some(it => findScore(it.name, it.date) === null);
     hideSaving();
     if(!stillPending){ state.score.pending.clear(); toast("การเชื่อมต่อสะดุดแต่บันทึกสำเร็จแล้ว ✓ (ตรวจกับชีทให้แล้ว)"); }
@@ -819,7 +830,7 @@ qs("#genConfirmBtn").addEventListener("click", async ()=>{
   if(res.success || res.network){
     // res.network = เน็ตหลุดตอนรอผลลัพธ์ แต่ Apps Script อาจเขียนสำเร็จไปแล้วฝั่งหลังบ้าน (มือถือเจอบ่อย) —
     // โหลดข้อมูลจริงจากชีทมาตรวจก่อน ถ้าจำนวนแถวตรงกับที่ควรจะเป็นก็ถือว่าสำเร็จ ไม่ต้องให้ผู้ใช้เข้าใจผิดว่าพัง
-    await loadAll();
+    await loadAll(["activities","scores"]);
     state.score.scrolled = false;
     syncHeadersWithActivities();
     hideSaving();
@@ -865,12 +876,12 @@ qs("#actSaveBtn").addEventListener("click", async ()=>{
   });
   if(res.success){
     const movedWithScores = !!oldDate && newDate!==oldDate &&
-      state.scores.some(s=>s["ระดับชั้น"]===state.score.room && inPeriod(s) && s["ชื่อ"] && dateKey(s["วันที่"])===oldDate);
-    await loadAll();
+      state.scores.some(s=>s["ระดับชั้น"]===state.score.room && inPeriod(s) && sameStr(s["รายวิชา"], state.score.subject) && s["ชื่อ"] && dateKey(s["วันที่"])===oldDate);
+    await loadAll(["activities","scores"]);
     syncHeadersWithActivities();
     hideSaving();
     toast(movedWithScores
-      ? "ย้ายวันที่แล้ว (คะแนนเดิมของวันเก่ายังอยู่ในชีท แต่จะไม่แสดงในคอลัมน์นี้อีก)"
+      ? "ย้ายวันที่แล้ว (คะแนนย้ายตามคอลัมน์ไปด้วย)"
       : (!oldDate && existedInAct ? "วันที่นี้มีในชีท Act อยู่แล้ว จึงแก้ทับแถวเดิมให้ (ไม่เพิ่มแถวใหม่)" : "บันทึกหัวตารางแล้ว"));
     qs("#modalAssignment").classList.remove("active");
     renderScoreTable();
@@ -937,8 +948,7 @@ qs("#teachSaveBtn").addEventListener("click", async ()=>{
   showSaving("กำลังบันทึกข้อมูล...");
   const res = await apiPost(payload);
   if(res.success){
-    await loadAll();
-    hideSaving();
+    hideSaving();   // หลังการสอนมีแต่เขียนลงชีท หน้าเว็บไม่อ่านกลับ จึงไม่ต้องโหลดข้อมูลใหม่
     toast("บันทึกหลังการสอนแล้ว");
     ["teachSubject","teachObs","teachSolution","teachDev"].forEach(id=> qs("#"+id).value="");
     showView("view-home");
@@ -1026,7 +1036,7 @@ qs("#repStartBtn").addEventListener("click", async ()=>{
   const room = qs("#repRoom").value, subject = qs("#repSubject").value.trim(), start = qs("#repStart").value;
   if(!room || !subject || !start){ toast("เลือกห้อง วิชา และวันที่เริ่มต้นให้ครบก่อนครับ"); return; }
   showSaving("กำลังโหลดข้อมูลการเช็คชื่อ...");
-  await loadAll();                       // ดึง Act + การเช็คชื่อล่าสุด
+  await loadAll(["activities","attendance"]);   // ดึง Act + การเช็คชื่อล่าสุด
   hideSaving();
   updateRepSource();
   let dates;
@@ -1291,13 +1301,13 @@ qs("#examSaveBtn").addEventListener("click", async ()=>{
   showSaving("กำลังบันทึกคะแนนสอบ...");
   const res = await apiPost({ type:"saveExam", term:period.term, ptype:period.type, subject, level:room, fullMc:fm, fullEs:fe, wMc:wm, wEs:we, fullBeh:fb, items });
   if(res.success){
-    await loadAll();
+    await loadAll(["exam","examSetup"]);
     loadExamUi(); renderExam();
     hideSaving();
     toast("บันทึกคะแนนสอบแล้ว ✓");
   } else if(res.network){
     // เน็ตสะดุดตอนรอผล แต่ saveExam เป็น upsert — โหลดชีทมาเช็คก่อนว่าบันทึกไปแล้วจริงหรือยัง
-    await loadAll();
+    await loadAll(["exam","examSetup"]);
     const s = findExamSetup(period.term, period.type, room, subject);
     const ok = s && numOrNull(s["คะแนนเต็มปรนัย"])===fm && numOrNull(s["คะแนนเต็มอัตนัย"])===fe && numOrNull(s["สัดส่วนปรนัย"])===wm && numOrNull(s["สัดส่วนอัตนัย"])===we && numOrNull(s["คะแนนเต็มจิตพิสัย"])===fb;
     hideSaving();
@@ -1336,7 +1346,7 @@ function computeSummary(w, ov){
   });
   const smap = new Map();
   state.scores.forEach(s=>{
-    if(!sameStr(s["ระดับชั้น"],room) || !sameStr(s["ภาคเรียนที่"],term)) return;
+    if(!sameStr(s["ระดับชั้น"],room) || !sameStr(s["ภาคเรียนที่"],term) || !sameStr(s["รายวิชา"],subject)) return;
     const d = dateKey(s["วันที่"]), v = numOrNull(s["คะแนน"]);
     if(!d || v===null) return;
     smap.set(`${T(s["ประเภท"])}|${T(s["ชื่อ"])}|${d}`, v);
@@ -1584,7 +1594,7 @@ function openBehEdit(i, t){
             wMc:numOrNull(s?.["สัดส่วนปรนัย"]), wEs:numOrNull(s?.["สัดส่วนอัตนัย"]),
             fullBeh: full>0 ? full : numOrNull(s?.["คะแนนเต็มจิตพิสัย"]),
             items:[{ name:key, beh:v, mc:numOrNull(r?.["ปรนัย"]), es:numOrNull(r?.["อัตนัย"]) }] });
-          if(res && res.success){ await loadAll(); hideSaving(); renderSumTable(); toast("บันทึกจิตพิสัยแล้ว ✓"); }
+          if(res && res.success){ await loadAll(["exam","examSetup"]); hideSaving(); renderSumTable(); toast("บันทึกจิตพิสัยแล้ว ✓"); }
           else { hideSaving(); toast((res && res.message) || "บันทึกไม่สำเร็จ"); }
       } }
     ]
@@ -1771,7 +1781,7 @@ async function openSummary(room, subject, back){
   if(back==="view-scores-table" && scoreUnsaved()>0) toast("คะแนนที่ยังไม่ได้บันทึกจะยังไม่ถูกรวมในสรุป");
   sumBack = back;
   showSaving("กำลังโหลดคะแนนล่าสุด...");
-  await loadAll();
+  await loadAll(["activities","attendance","scores","exam","examSetup"]);
   hideSaving();
   renderPeriodBars();
   renderSummary();
@@ -1823,7 +1833,7 @@ async function openPending(room, subject){
     state.score.room = room; state.score.subject = subject; state.score.pending = new Map(); state.examUi.dirty = false;
   }
   showSaving("กำลังโหลดข้อมูลล่าสุด...");
-  await loadAll();
+  await loadAll(["activities","scores"]);
   hideSaving();
   renderPeriodBars();
   renderPending();
@@ -2019,7 +2029,7 @@ qs("#blkWrap").addEventListener("click", async e=>{
 async function openBlocked(){
   exitFocusMode();
   showSaving("กำลังโหลดรายชื่อล่าสุด...");
-  await loadAll();
+  await loadAll(["activities","attendance","scores","exam","examSetup","blocked"]);
   hideSaving();
   blk.filter = "all";
   renderBlocked();
@@ -3151,6 +3161,7 @@ const hrLabel = st => st.nick ? `${st.nick} (${st.name})` : st.name;
 /* ================= หน้าหลัก: รายชื่อห้องประจำชั้น ================= */
 function openHomeroom(){
   exitFocusMode();
+  ensureLoaded(HR_PARTS);   // เอกสาร/ใบสั่งซื้อ/เงินอุดหนุน โหลดตอนเข้าห้องประจำชั้น (เบื้องหลัง) ไม่โหลดตอนเปิดแอป
   hr.q = ""; const s = qs("#hrSearch"); if(s) s.value = "";
   renderHomeroom();
   showView("view-homeroom");
@@ -3385,8 +3396,9 @@ function hrDocsFromState(){
 const hrdSerialize = () => JSON.stringify(hrd.docs.map(d=>[d.title, [...d.set].sort()]));
 const hrdDirty = () => qs("#view-hr-docs").classList.contains("active") && hrdSerialize() !== hrd.snap;
 
-function openHrDocs(){
+async function openHrDocs(){
   exitFocusMode();
+  if(HR_PARTS.some(k=>!loadedParts.has(k))){ showSaving("กำลังโหลดข้อมูล..."); await ensureLoaded(HR_PARTS); hideSaving(); }
   hrd.docs = hrDocsFromState(); hrd.snap = hrdSerialize();
   renderPeriodBars(); renderHrDocs();
   showView("view-hr-docs");
@@ -3542,8 +3554,9 @@ const rowsTotal = rows => rows.reduce((a,r)=> a + (Number(r["รวม"])||0), 0
 const extraPay = (total, sub) => Math.max(0, total - sub);
 
 /* ---------- หน้ารายคน ---------- */
-function openHrOrders(){
+async function openHrOrders(){
   exitFocusMode();
+  if(HR_PARTS.some(k=>!loadedParts.has(k))){ showSaving("กำลังโหลดข้อมูล..."); await ensureLoaded(HR_PARTS); hideSaving(); }
   renderPeriodBars(); renderHrOrders();
   showView("view-hr-orders");
 }
@@ -3708,7 +3721,7 @@ qs("#hroSaveBtn")?.addEventListener("click", async ()=>{
   const res = await apiPost({ type:"saveSubsidyOrder", term:period.term, level:hr.room, no:st.no, name:st.name, cash:hro.cash, lines });
   qs("#hroSaveBtn").disabled = false;
   if(res.success){
-    await loadAll(); hideSaving();
+    await loadAll(["hrOrders"]); hideSaving();
     hro.snap = hroSerialize();
     renderHrOrders(); showView("view-hr-orders"); toast(hro.cash ? "บันทึกแล้ว · รับเงินสด ✓" : "บันทึกรายการสั่งซื้อแล้ว ✓");
   } else { hideSaving(); toast(res.message || "บันทึกไม่สำเร็จ"); }
