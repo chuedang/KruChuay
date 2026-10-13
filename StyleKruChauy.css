@@ -1,0 +1,1302 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap');
+
+:root{
+  --bg:#F4F6FB; --surface:#FFFFFF; --ink:#1B2233; --ink-soft:#5F6B85;
+  --gold:#4F6BF5; --gold-soft:#C7D2FE; --line:#E3E8F3;
+  --present:#1E9E6A; --absent:#E5484D; --leave:#8B5CF6; --late:#F59E0B;
+  --radius-lg:24px; --radius-md:16px; --radius-sm:12px;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:'Noto Sans Thai',sans-serif; -webkit-font-smoothing:antialiased;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+#app{max-width:430px; margin:0 auto; min-height:100dvh; display:flex; flex-direction:column; position:relative;}
+.view{display:none; flex:1; flex-direction:column; padding:20px 20px 32px;}
+.view.active{display:flex;}
+h1,h2,h3{font-family:'Noto Serif Thai',serif; margin:0; color:var(--ink); font-weight:600;}
+
+/* ---- Home ---- */
+.brand{text-align:center; padding:48px 0 32px;}
+.brand .mark{font-family:'Noto Serif Thai',serif; font-size:38px; font-weight:700; letter-spacing:.5px;}
+.brand .mark span{color:var(--gold);}
+.brand .rule{width:52px; height:2px; background:var(--gold); margin:14px auto 0; border-radius:2px;}
+.brand .tag{margin-top:12px; font-size:13px; color:var(--ink-soft); letter-spacing:.3px;}
+
+.menu{display:flex; flex-direction:column; gap:14px; margin-top:8px;}
+.menu-item{
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-lg);
+  padding:22px 22px; text-align:left; cursor:pointer; transition:transform .15s ease, border-color .15s ease;
+}
+.menu-item:active{transform:scale(.98);}
+.menu-item:hover{border-color:var(--gold-soft);}
+.menu-item h3{font-size:19px;}
+.menu-item p{margin:6px 0 0; font-size:13.5px; color:var(--ink-soft); line-height:1.5;}
+.menu-item.disabled{opacity:.5; cursor:default;}
+.menu-item.disabled:active{transform:none;}
+
+/* ---- Top bar ---- */
+.topbar{display:flex; align-items:center; gap:12px; margin-bottom:22px;}
+.back-btn{
+  width:38px; height:38px; border-radius:50%; border:1px solid var(--line); background:var(--surface);
+  display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; color:var(--ink);
+}
+.topbar h2{font-size:20px; flex:1;}
+.topbar .sub{font-size:12px; color:var(--ink-soft); margin-top:2px;}
+
+/* ---- Form ---- */
+.field{margin-bottom:16px;}
+.field label{display:block; font-size:13px; color:var(--ink-soft); margin-bottom:6px;}
+.field input, .field select, .field textarea{
+  width:100%; padding:13px 14px; border:1px solid var(--line); border-radius:var(--radius-sm);
+  background:var(--surface); font-family:inherit; font-size:15px; color:var(--ink);
+}
+.field textarea{min-height:84px; resize:vertical;}
+.field input:focus, .field select:focus, .field textarea:focus{outline:2px solid var(--gold-soft); border-color:var(--gold);}
+
+.btn{
+  border:none; border-radius:var(--radius-sm); padding:14px 18px; font-family:inherit; font-size:15px;
+  font-weight:600; cursor:pointer; text-align:center;
+}
+.btn-primary{background:var(--ink); color:#fff; width:100%;}
+.btn-primary:active{opacity:.85;}
+.btn-outline{background:transparent; border:1px solid var(--line); color:var(--ink);}
+.btn-gold{background:var(--gold); color:#fff;}
+.btn-sm{padding:9px 14px; font-size:13px; border-radius:10px;}
+.btn-block{width:100%;}
+
+/* ---- Attendance list ---- */
+.roster{display:flex; flex-direction:column; gap:10px; overflow-y:auto;}
+.roster-row{
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-md);
+  padding:12px 14px; display:flex; align-items:center; gap:10px;
+}
+.roster-row .name{flex:1; font-size:14.5px;}
+.roster-row .no{font-size:12px; color:var(--ink-soft); width:22px;}
+.chip-group{display:flex; gap:6px;}
+.chip{
+  border:1px solid var(--line); background:#fff; border-radius:20px; padding:6px 10px; font-size:12px;
+  cursor:pointer; color:var(--ink-soft);
+}
+.chip[data-status="present"].active{background:var(--present); border-color:var(--present); color:#fff;}
+.chip[data-status="absent"].active{background:var(--absent); border-color:var(--absent); color:#fff;}
+.chip[data-status="leave"].active{background:var(--leave); border-color:var(--leave); color:#fff;}
+.chip[data-status="late"].active{background:var(--late); border-color:var(--late); color:#fff;}
+
+.actions-fixed{margin-top:16px;}
+
+/* ---- Scores table ---- */
+.table-toolbar{display:flex; gap:10px; margin-bottom:14px;}
+.score-scroll{flex:1; overflow:auto; border:1px solid var(--line); border-radius:var(--radius-md); background:var(--surface);}
+table.score-table{border-collapse:collapse; font-size:12.5px; min-width:100%;}
+table.score-table th, table.score-table td{border-bottom:1px solid var(--line); border-right:1px solid var(--line); padding:8px 6px; text-align:center; white-space:nowrap;}
+table.score-table th{background:#F7F9FE; font-weight:600; cursor:pointer; color:var(--ink);}
+table.score-table td.name-cell, table.score-table th.name-head{
+  position:sticky; left:0; background:#F7F9FE; text-align:left; z-index:1; min-width:110px; font-weight:500;
+}
+.score-circle{
+  width:28px; height:28px; border-radius:50%; border:1.5px solid var(--line); background:#fff;
+  display:inline-flex; align-items:center; justify-content:center; font-size:12px; cursor:pointer; color:var(--ink-soft);
+}
+.score-circle.filled{background:var(--gold); border-color:var(--gold); color:#fff; font-weight:600;}
+.head-badge{display:block; font-size:10px; color:var(--gold); margin-top:2px; max-width:70px; overflow:hidden; text-overflow:ellipsis;}
+
+/* ---- Modal ---- */
+.modal-backdrop{
+  position:fixed; inset:0; background:rgba(27,34,51,.45); display:none; align-items:flex-end; justify-content:center; z-index:50;
+}
+.modal-backdrop.active{display:flex;}
+.modal-sheet{
+  background:var(--surface); width:100%; max-width:430px; border-radius:24px 24px 0 0;
+  padding:22px 20px calc(22px + env(safe-area-inset-bottom,0px)); max-height:85vh; overflow-y:auto;
+}
+.modal-sheet h3{margin-bottom:16px;}
+.weekday-grid{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;}
+.weekday-grid label{
+  border:1px solid var(--line); border-radius:10px; padding:8px 12px; font-size:13px; cursor:pointer; color:var(--ink-soft);
+}
+.weekday-grid input{display:none;}
+.weekday-grid input:checked + span{color:var(--gold); font-weight:700;}
+.weekday-grid label:has(input:checked){border-color:var(--gold); background:#EEF2FF;}
+.score-pick{display:flex; gap:10px; justify-content:center; margin-bottom:18px;}
+.score-pick button{
+  width:46px; height:46px; border-radius:50%; border:1.5px solid var(--line); background:#fff; font-size:16px; font-weight:600; cursor:pointer;
+}
+.score-pick button:active{background:var(--gold); color:#fff; border-color:var(--gold);}
+.modal-actions{display:flex; gap:10px;}
+.modal-actions .btn{flex:1;}
+
+.toast{
+  position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff;
+  padding:12px 20px; border-radius:12px; font-size:13.5px; z-index:99; opacity:0; pointer-events:none; transition:opacity .25s;
+}
+.toast.show{opacity:1;}
+.empty-note{color:var(--ink-soft); font-size:13.5px; text-align:center; padding:30px 10px;}
+
+/* ===== Modern theme ===== */
+h1,h2,h3,.brand .mark{font-family:'Noto Sans Thai',sans-serif; font-weight:700;}
+body{background:#F4F6FB linear-gradient(180deg,#E8EEFF 0,#F4F6FB 260px) no-repeat;}
+.brand .mark{font-size:40px; letter-spacing:-.5px;}
+.brand .rule{width:64px; background:linear-gradient(90deg,#4285F4 0 25%,#EA4335 25% 50%,#FBBC04 50% 75%,#34A853 75%);}
+
+/* Menu: horizontal colorful blocks */
+.menu{gap:14px;}
+.menu-item{
+  display:flex; align-items:center; gap:16px; width:100%; padding:18px; border:none; border-radius:22px;
+  background:var(--c-bg); color:var(--c-ink); font-family:inherit;
+  box-shadow:0 1px 2px rgba(27,34,51,.06), 0 8px 18px -10px var(--c-sh);
+}
+.menu-item:hover{border-color:transparent; transform:translateY(-2px);}
+.menu-item h3{color:var(--c-ink); font-size:18px;}
+.menu-item p{color:var(--c-ink); opacity:.72;}
+.menu-item .ico{width:54px; height:54px; flex-shrink:0; border-radius:17px; background:var(--c-main); display:flex; align-items:center; justify-content:center; font-size:26px; box-shadow:0 8px 16px -8px var(--c-sh);}
+.menu-item .txt{flex:1; min-width:0;}
+.menu-item .arrow{font-size:28px; line-height:1; color:var(--c-main);}
+.c-blue{--c-bg:#E8F0FE; --c-main:#4285F4; --c-ink:#174EA6; --c-sh:rgba(66,133,244,.7);}
+.c-green{--c-bg:#E6F4EA; --c-main:#34A853; --c-ink:#0D652D; --c-sh:rgba(52,168,83,.7);}
+.c-yellow{--c-bg:#FEF3D0; --c-main:#FBBC04; --c-ink:#7A4F00; --c-sh:rgba(251,188,4,.8);}
+.c-purple{--c-bg:#F3E8FD; --c-main:#A142F4; --c-ink:#6B21A8; --c-sh:rgba(161,66,244,.7);}
+
+/* Splash: logo กลางจอ แล้ววิ่งขึ้นไปที่ตำแหน่งหัวเว็บ */
+#splash{position:fixed; inset:0; z-index:200;}
+#splashBg{position:absolute; inset:0; background:linear-gradient(135deg,#4F6BF5,#8B5CF6 55%,#EC6BAA); transition:opacity .9s ease;}
+#splashBg.fade{opacity:0;}
+#splashLogo{
+  position:absolute; left:50%; top:50%; font-family:'Noto Sans Thai',sans-serif; font-weight:700; font-size:40px; letter-spacing:-.5px;
+  color:#fff; white-space:nowrap; opacity:0; transform:translate(-50%,-50%) scale(1.7);
+  transition:transform 1s cubic-bezier(.65,0,.2,1), opacity .6s ease, color .8s ease;
+}
+#splashLogo span{color:#FFE08A; transition:color .8s ease;}
+#splashLogo.show{opacity:1;}
+#splashLogo.go{color:var(--ink);}
+#splashLogo.go span{color:var(--gold);}
+
+#splashLoading{
+  position:absolute; left:50%; top:calc(50% + 46px); transform:translate(-50%,0);
+  color:#fff; font-size:13px; letter-spacing:.3px; opacity:0; transition:opacity .4s ease;
+  display:flex; align-items:center; gap:8px;
+}
+#splashLoading.show{opacity:.9;}
+
+@keyframes rise{from{opacity:0; transform:translateY(18px);}}
+body:not(.ready) .brand .mark, body:not(.ready) .brand .rule, body:not(.ready) .brand .tag, body:not(.ready) .menu-item{opacity:0;}
+body.ready .brand .rule, body.ready .brand .tag{animation:rise .6s ease backwards .1s;}
+body.ready .menu-item{animation:rise .55s cubic-bezier(.2,.8,.2,1) backwards; animation-delay:calc(.15s + var(--i,0) * .09s);}
+@media (prefers-reduced-motion:reduce){ body.ready .menu-item, body.ready .brand .rule, body.ready .brand .tag{animation:none;} }
+
+/* ===== Scores: locked cells / hint ===== */
+.score-circle.locked{opacity:.4; background:#F1F3F9; cursor:not-allowed;}
+.head-badge.empty{color:var(--ink-soft); opacity:.65;}
+.hint{font-size:12.5px; color:var(--ink-soft); line-height:1.5; margin:0 0 16px;}
+
+/* score circle: pending (ยังไม่ได้กดบันทึก) */
+.score-circle.pending{
+  background:#fff; border:1.5px dashed var(--gold); color:var(--gold); font-weight:700;
+  box-shadow:0 0 0 3px rgba(79,107,245,.12);
+}
+
+/* ===== Global loading / saving overlay (v3: ลูกบอลเด้ง 3 ลูก + เงา) ===== */
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading-overlay{
+  position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:300;
+  background:linear-gradient(135deg,rgba(79,107,245,.96),rgba(139,92,246,.96) 55%,rgba(236,107,170,.96));
+  backdrop-filter:blur(10px) saturate(130%); -webkit-backdrop-filter:blur(10px) saturate(130%);
+  overflow:hidden;
+}
+.loading-overlay.active{display:flex; animation:loFade .35s ease both;}
+@keyframes loFade{from{opacity:0}to{opacity:1}}
+
+.loading-box{
+  position:relative; width:min(86vw,320px); display:flex; flex-direction:column; align-items:center;
+  gap:12px; text-align:center; color:#fff;
+}
+
+/* ลูกบอล 3 ลูก */
+.lo-balls{display:flex; justify-content:center; gap:34px; height:96px; align-items:flex-end; padding-bottom:14px; margin-bottom:6px;}
+.lo-ball{position:relative; width:24px; height:24px;}
+.lo-ball b{
+  position:absolute; left:0; bottom:0; width:24px; height:24px; border-radius:50%;
+  background:radial-gradient(circle at 32% 28%, #fff 0 18%, var(--bc) 62%, var(--bd) 100%);
+  box-shadow:0 8px 16px -4px rgba(26,18,80,.55), 0 0 18px 2px var(--bg2);
+  transform-origin:50% 100%; will-change:transform;
+  animation:loBounce 1.15s linear var(--d) infinite;
+}
+.lo-ball i{ /* เงาบนพื้น */
+  position:absolute; left:-4px; right:-4px; bottom:-14px; height:8px; border-radius:50%;
+  background:rgba(24,16,76,.5); filter:blur(3px); will-change:transform,opacity;
+  animation:loShadow 1.15s linear var(--d) infinite;
+}
+.lo-ball:nth-child(1){--bc:#C7D2FE; --bd:#6F86FF; --bg2:rgba(199,210,254,.65); --d:0s;}
+.lo-ball:nth-child(2){--bc:#FFE08A; --bd:#F5B731; --bg2:rgba(255,224,138,.7);  --d:-.16s;}
+.lo-ball:nth-child(3){--bc:#FFC2DD; --bd:#EC6BAA; --bg2:rgba(255,194,221,.65); --d:-.32s;}
+/* เด้งแบบมีแรงโน้มถ่วง: ขาขึ้นช้าลงเรื่อยๆ ขาลงเร็วขึ้นเรื่อยๆ + ยืดตอนวิ่ง บี้ตอนกระทบพื้น (ไม่หยุดนิ่งตรงสุดทาง) */
+@keyframes loBounce{
+  0%   {transform:translate3d(0,0,0) scale(1.55,.45);     animation-timing-function:cubic-bezier(.16,.84,.3,1);}
+  11%  {transform:translate3d(0,-14px,0) scale(.94,1.08);  animation-timing-function:cubic-bezier(.3,.7,.4,1);}
+  50%  {transform:translate3d(0,-62px,0) scale(1,1);       animation-timing-function:cubic-bezier(.6,0,.7,.3);}
+  89%  {transform:translate3d(0,-14px,0) scale(.95,1.07);  animation-timing-function:cubic-bezier(.6,0,.84,.3);}
+  100% {transform:translate3d(0,0,0) scale(1.55,.45);}
+}
+@keyframes loShadow{
+  0%   {transform:scale(1.5,1); opacity:.7; animation-timing-function:cubic-bezier(.16,.84,.3,1);}
+  50%  {transform:scale(.5,.62); opacity:.16; animation-timing-function:cubic-bezier(.6,0,.7,.3);}
+  100% {transform:scale(1.5,1); opacity:.7;}
+}
+
+/* ข้อความ */
+.loading-msg{font-size:17px; font-weight:700; letter-spacing:.4px; color:#fff; text-shadow:0 3px 14px rgba(26,18,80,.45);}
+.loading-msg::after{content:""; display:inline-block; width:1.2em; text-align:left; animation:loDots 1.4s steps(4,end) infinite;}
+@keyframes loDots{0%{content:""}25%{content:"."}50%{content:".."}75%,100%{content:"..."}}
+.lo-sub{min-height:18px; font-size:12.5px; color:rgba(255,255,255,.8); text-shadow:0 2px 8px rgba(26,18,80,.35); transition:opacity .35s ease, transform .35s ease;}
+.lo-sub.swap{opacity:0; transform:translateY(5px);}
+
+@media (prefers-reduced-motion:reduce){
+  .lo-ball b,.lo-ball i{animation-duration:2.2s!important}
+}
+
+/* ลูกบอลจิ๋วในหน้า Splash */
+.mini-balls{display:inline-flex; gap:5px; align-items:flex-end; height:16px;}
+.mini-balls i{
+  width:7px; height:7px; border-radius:50%; background:#fff;
+  box-shadow:0 3px 6px rgba(26,18,80,.4);
+  transform-origin:50% 100%; will-change:transform;
+  animation:miniBounce .95s linear infinite;
+}
+.mini-balls i:nth-child(2){background:#FFE08A; animation-delay:-.13s;}
+.mini-balls i:nth-child(3){background:#FFC2DD; animation-delay:-.26s;}
+@keyframes miniBounce{
+  0%   {transform:translate3d(0,0,0) scale(1.5,.5);  animation-timing-function:cubic-bezier(.16,.84,.3,1);}
+  50%  {transform:translate3d(0,-9px,0) scale(1,1);  animation-timing-function:cubic-bezier(.6,0,.7,.3);}
+  100% {transform:translate3d(0,0,0) scale(1.5,.5);}
+}
+
+/* ===== Scores: save bar (ค้างด้านล่างเสมอ) ===== */
+#scoreSaveBtn:disabled{opacity:.45; cursor:not-allowed;}
+
+/* หน้าตารางคะแนน: ให้ตารางเลื่อนอยู่ในกรอบของมันเอง ปุ่มบันทึกอยู่ใต้ตาราง ไม่ทับช่องคะแนน */
+#view-scores-table.active{height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)); padding-bottom:16px;}
+#view-scores-table .score-scroll{min-height:0;}
+#scoreSaveBar{flex-shrink:0; margin-top:12px;}
+
+/* ===== หัวคอลัมน์ / ช่องที่ยังไม่ตั้งชื่องาน: ให้ดูเป็น "รอตั้งค่า" ไม่ใช่ "โดนล็อก" ===== */
+.head-badge{margin:3px auto 0;}
+.head-badge.empty{color:#B45309; background:#FEF3C7; border:1px dashed #F59E0B; border-radius:8px; padding:1px 7px; opacity:1; max-width:none;}
+.head-badge.slot{color:var(--ink-soft); opacity:.55;}
+.score-circle.locked{opacity:1; background:#FBFCFF; border:1.5px dashed var(--gold-soft); cursor:pointer;}
+.score-circle.locked.slot{border-color:var(--line); opacity:.6;}
+
+/* =====================================================================
+   Round 5 : ปรับหน้าด้านในให้สวยเหมือนหน้าแรก (ธีมสีตามเมนู)
+   ===================================================================== */
+#view-attend-setup,#view-attend-list{--c-main:#4285F4; --c-bg:#E8F0FE; --c-ink:#174EA6; --c-sh:rgba(66,133,244,.6); --c-on:#fff;}
+#view-scores-setup,#view-scores-table,.modal-backdrop{--c-main:#34A853; --c-bg:#E6F4EA; --c-ink:#0D652D; --c-sh:rgba(52,168,83,.6); --c-on:#fff;}
+#view-teaching{--c-main:#FBBC04; --c-bg:#FEF3D0; --c-ink:#7A4F00; --c-sh:rgba(251,188,4,.7); --c-on:#4A3000;}
+#view-exam,#view-exam-manage,#view-exam-key,#view-exam-summary,#view-exam-scan{--c-main:#A142F4; --c-bg:#F3E8FD; --c-ink:#6B21A8; --c-sh:rgba(161,66,244,.6); --c-on:#fff;}
+
+@keyframes viewIn{from{opacity:0; transform:translateY(12px);}}
+@keyframes sheetUp{from{transform:translateY(40px); opacity:.4;}}
+@keyframes fadeIn{from{opacity:0;}}
+/* หน้าเปลี่ยนด้วย JS (showView) + คลาส .v-in/.v-out ด้านล่างสุดของไฟล์ */
+
+/* ---- Top bar: แถบสีหัวหน้า ---- */
+.topbar{
+  background:var(--c-bg); border-radius:22px; padding:12px 14px; gap:12px; margin-bottom:18px;
+  box-shadow:0 1px 2px rgba(27,34,51,.05), 0 12px 22px -16px var(--c-sh);
+}
+.topbar .tb-txt{flex:1; min-width:0;}
+.topbar h2{font-size:18px; color:var(--c-ink); flex:none; line-height:1.3;}
+.topbar .sub{color:var(--c-ink); opacity:.7; font-size:12px; margin-top:2px;}
+.back-btn{width:40px; height:40px; border:none; background:#fff; color:var(--c-ink); font-size:26px; line-height:1; padding:0 0 3px; box-shadow:0 4px 10px -6px var(--c-sh);}
+.back-btn:active{transform:scale(.94);}
+.tb-ico{width:44px; height:44px; flex-shrink:0; border-radius:14px; background:var(--c-main); display:flex; align-items:center; justify-content:center; font-size:21px; box-shadow:0 8px 16px -8px var(--c-sh);}
+
+/* ---- การ์ดฟอร์ม ---- */
+.card{background:var(--surface); border-radius:24px; padding:18px 16px 4px; margin-bottom:16px; box-shadow:0 1px 2px rgba(27,34,51,.05), 0 14px 26px -20px rgba(27,34,51,.35);}
+.field label{font-weight:600; color:var(--ink); font-size:13px; margin-bottom:7px;}
+.field input, .field select, .field textarea{background:#F8FAFF; border:1.5px solid #E6EBF5; border-radius:14px; padding:14px; transition:border-color .15s, box-shadow .15s;}
+.field input:focus, .field select:focus, .field textarea:focus{outline:none; border-color:var(--c-main,var(--gold)); box-shadow:0 0 0 4px color-mix(in srgb, var(--c-main,#4F6BF5) 20%, transparent);}
+.field select{appearance:none; -webkit-appearance:none; padding-right:40px; background-repeat:no-repeat; background-position:right 14px center;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%235F6B85' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");}
+
+/* ---- ปุ่ม ---- */
+.btn{border-radius:16px; transition:transform .12s, opacity .12s;}
+.btn:active{transform:scale(.98);}
+.btn-primary{background:var(--c-main,var(--ink)); color:var(--c-on,#fff); padding:15px 18px; font-size:16px; box-shadow:0 14px 24px -14px var(--c-sh,rgba(27,34,51,.5));}
+.btn-primary:disabled{opacity:.45; box-shadow:none; cursor:not-allowed;}
+.btn-outline{background:#fff; border:1.5px solid #E1E7F3; color:var(--ink);}
+.btn-danger{background:#FDECEC; color:#C62828; border:none;}
+.btn-gold{background:#fff; color:var(--c-ink); border:1.5px solid var(--c-main); box-shadow:0 6px 14px -10px var(--c-sh);}
+
+/* ---- เช็คชื่อ ---- */
+.roster{overflow:visible; gap:10px;}
+.roster-row{border:none; border-radius:18px; padding:11px 12px; gap:10px; box-shadow:0 1px 2px rgba(27,34,51,.05), 0 10px 18px -14px rgba(27,34,51,.3);}
+.roster-row .no{width:28px; height:28px; flex-shrink:0; border-radius:50%; background:var(--c-bg); color:var(--c-ink); font-weight:700; font-size:12px; display:flex; align-items:center; justify-content:center;}
+.roster-row .name{font-size:14px; line-height:1.35; min-width:0; font-weight:500;}
+.chip-group{gap:5px; flex-shrink:0;}
+.chip{width:40px; padding:7px 0; text-align:center; border:none; font-weight:600;}
+.chip[data-status="present"]{background:#E7F6EE; color:var(--present);}
+.chip[data-status="absent"]{background:#FDECEC; color:var(--absent);}
+.chip[data-status="leave"]{background:#F1EAFE; color:var(--leave);}
+.chip[data-status="late"]{background:#FEF3D0; color:#B45309;}
+#view-attend-list .actions-fixed{position:sticky; bottom:0; margin-top:14px; padding:12px 0 8px; background:linear-gradient(180deg,rgba(244,246,251,0),#F4F6FB 35%);}
+
+/* ---- ตารางคะแนน: ตารางเลื่อนในกรอบของมันเอง ปุ่มบันทึกอยู่ใต้ตาราง ไม่เกย ---- */
+#view-scores-table.active{height:auto; padding-bottom:16px;}
+.table-toolbar{margin-bottom:12px;}
+.score-scroll{
+  flex:none; min-height:220px; max-height:calc(100dvh - 320px); overflow:auto; -webkit-overflow-scrolling:touch;
+  border:none; border-radius:22px; background:#fff;
+  box-shadow:0 1px 2px rgba(27,34,51,.05), 0 16px 28px -22px rgba(27,34,51,.4);
+}
+#scoreSaveBar{position:relative; z-index:6; flex-shrink:0; margin-top:14px; padding:0;}
+table.score-table{border-collapse:separate; border-spacing:0; font-size:12.5px; min-width:100%;}
+table.score-table th, table.score-table td{border-bottom:1px solid #EEF1F7; border-right:1px solid #EEF1F7; padding:8px 8px;}
+table.score-table thead th{position:sticky; top:0; z-index:2; background:var(--c-bg); color:var(--c-ink); font-weight:700; padding:10px 8px; line-height:1.3; min-width:66px;}
+table.score-table thead th.name-head{left:0; z-index:4; min-width:132px; text-align:left;}
+table.score-table td.name-cell{position:sticky; left:0; z-index:1; background:#fff; min-width:132px; font-size:13px; font-weight:500; box-shadow:2px 0 0 #EEF1F7;}
+table.score-table tbody tr:nth-child(even) td{background:#FAFBFE;}
+.wd{display:block; font-size:10.5px; font-weight:500; opacity:.65;}
+
+.score-circle{width:34px; height:34px; font-size:14px; font-weight:700; border:1.5px solid #DCE3F0; color:var(--ink-soft); transition:transform .12s, box-shadow .12s;}
+.score-circle:active{transform:scale(.9);}
+.v1{--sv:#E5484D;} .v2{--sv:#F08A24;} .v3{--sv:#E0A100;} .v4{--sv:#6FAF3D;} .v5{--sv:#1E9E6A;}
+.score-circle.filled{background:var(--sv,var(--c-main)); border-color:var(--sv,var(--c-main)); color:#fff; box-shadow:0 6px 10px -6px var(--sv,var(--c-main));}
+.score-circle.pending{background:#fff; border:2px dashed var(--sv,var(--c-main)); color:var(--sv,var(--c-main)); box-shadow:0 0 0 3px color-mix(in srgb, var(--sv,#34A853) 16%, transparent);}
+.score-circle.removing{--sv:#E5484D; font-size:12px;}
+.score-circle.locked{background:#FBFCFF; border:1.5px dashed #C9D6E8; box-shadow:none; opacity:1; cursor:pointer;}
+.score-circle.locked.slot{border-color:#E6EBF5; opacity:.6;}
+
+/* ---- Modal ---- */
+.modal-backdrop.active{animation:fadeIn .2s ease;}
+.modal-sheet{border-radius:28px 28px 0 0; padding-top:26px; box-shadow:0 -12px 40px -16px rgba(27,34,51,.4);}
+.modal-backdrop.active .modal-sheet{animation:sheetUp .28s cubic-bezier(.2,.8,.2,1);}
+.modal-sheet::before{content:""; display:block; width:44px; height:5px; border-radius:3px; background:#DCE3F0; margin:-14px auto 16px;}
+.modal-sheet h3{font-size:18px;}
+.pick-who{font-size:13px; color:var(--ink-soft); margin:-8px 0 16px; line-height:1.5;}
+.score-pick{gap:10px; margin-bottom:18px;}
+.score-pick button{width:54px; height:54px; font-size:20px; font-weight:700; border:2px solid var(--sv); color:var(--sv); background:color-mix(in srgb, var(--sv) 12%, #fff); transition:transform .12s;}
+.score-pick button[data-v="1"]{--sv:#E5484D;} .score-pick button[data-v="2"]{--sv:#F08A24;} .score-pick button[data-v="3"]{--sv:#E0A100;}
+.score-pick button[data-v="4"]{--sv:#6FAF3D;} .score-pick button[data-v="5"]{--sv:#1E9E6A;}
+.score-pick button.cur, .score-pick button:active{background:var(--sv); color:#fff; border-color:var(--sv); transform:scale(1.06); box-shadow:0 10px 16px -10px var(--sv);}
+
+/* ---- อื่นๆ ---- */
+.toast{bottom:calc(24px + env(safe-area-inset-bottom,0px)); border-radius:14px; padding:12px 18px; box-shadow:0 12px 24px -12px rgba(27,34,51,.5);}
+.empty-note{background:#fff; border-radius:20px; margin-top:8px; padding:36px 16px; box-shadow:0 1px 2px rgba(27,34,51,.05);}
+
+/* ===== Round 6 : ยังไม่มีหัวตาราง / ป้ายชื่องาน ===== */
+.head-badge.noname{color:var(--ink-soft); background:#F1F4FA; border:1px dashed #CBD5E6; border-radius:8px; padding:1px 7px; opacity:1; max-width:none; font-weight:500;}
+.head-badge.slot{color:var(--ink-soft); opacity:.5;}
+.hint.warn{background:#FEF3D0; color:#7A4F00; border-radius:12px; padding:10px 12px; margin-bottom:16px;}
+.empty-state{text-align:center; padding:44px 22px 40px;}
+.empty-state .es-ico{width:84px; height:84px; margin:0 auto 18px; border-radius:28px; background:var(--c-bg); display:flex; align-items:center; justify-content:center; font-size:40px; box-shadow:0 14px 26px -16px var(--c-sh);}
+.empty-state h4{margin:0 0 8px; font-size:18px; font-weight:700; color:var(--ink);}
+.empty-state p{margin:0 0 22px; font-size:13.5px; line-height:1.65; color:var(--ink-soft);}
+.empty-state .es-actions{display:flex; gap:10px; justify-content:center; flex-wrap:wrap;}
+.empty-state .btn-primary{width:auto;}
+
+/* =====================================================================
+   Round 7 : เก็บรายละเอียด เช็คชื่อ / ตารางคะแนน / ตัวสร้างหัวคะแนน
+   ===================================================================== */
+/* ---- เช็คชื่อ: แถบสรุปจำนวน ---- */
+#attendSummary{display:flex; gap:8px; align-items:stretch; margin-bottom:14px;}
+.sum-tile{flex:1; border-radius:16px; padding:9px 4px 8px; text-align:center; line-height:1.15;}
+.sum-tile b{display:block; font-size:20px; font-weight:700;}
+.sum-tile span{font-size:11.5px; font-weight:600; opacity:.85;}
+.sum-tile[data-status="present"]{background:#E7F6EE; color:var(--present);}
+.sum-tile[data-status="absent"]{background:#FDECEC; color:var(--absent);}
+.sum-tile[data-status="leave"]{background:#F1EAFE; color:var(--leave);}
+.sum-tile[data-status="late"]{background:#FEF3D0; color:#B45309;}
+.sum-all{border:1.5px solid #D6E2FB; background:#fff; color:var(--c-ink); border-radius:16px; padding:0 10px; font-family:inherit; font-size:12px; font-weight:600; cursor:pointer; flex-shrink:0;}
+.sum-all:active{transform:scale(.96);}
+.roster-row{position:relative; overflow:hidden; transition:background .15s;}
+.roster-row::before{content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--present); opacity:.0; transition:opacity .15s;}
+.roster-row[data-s="absent"]::before{background:var(--absent); opacity:1;}
+.roster-row[data-s="leave"]::before{background:var(--leave); opacity:1;}
+.roster-row[data-s="late"]::before{background:var(--late); opacity:1;}
+.roster-row[data-s="absent"]{background:#FFF8F8;}
+.roster-row[data-s="leave"]{background:#FBF9FF;}
+.roster-row[data-s="late"]{background:#FFFCF2;}
+
+/* ---- ตารางคะแนน ---- */
+.table-toolbar{align-items:center; justify-content:space-between;}
+.score-info{font-size:12px; font-weight:600; color:var(--c-ink); background:var(--c-bg); border-radius:20px; padding:6px 12px;}
+table.score-table thead th.today-col{background:var(--c-main); color:#fff;}
+table.score-table thead th.today-col .wd{opacity:.9;}
+table.score-table thead th.today-col .head-badge{background:rgba(255,255,255,.22); color:#fff; border-color:rgba(255,255,255,.55);}
+table.score-table td.today-col{background:#F2FAF5 !important;}
+#scoreTableWrap .hint{border-top:1px dashed #E1E7F3; margin-top:8px; padding-top:10px;}
+
+/* ---- ตัวสร้างหัวคะแนน: พรีวิวช่วงวันที่ ---- */
+.gen-preview{display:flex; flex-direction:column; gap:2px; background:var(--c-bg); color:var(--c-ink); border-radius:14px; padding:12px 14px; margin:0 0 16px; font-size:13px;}
+.gen-preview b{font-size:14.5px;}
+.gen-preview span{opacity:.8;}
+
+/* ---- Round 7b : ตารางคะแนนสูงเต็มจอ / คอลัมน์ชื่อไม่กว้างเกิน / ปุ่มสถานะเล็กลงให้ชื่อมีที่ ---- */
+#view-scores-table.active{height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)); min-height:0;}
+#view-scores-table .score-scroll{flex:1 1 0; min-height:0; max-height:none;}
+table.score-table thead th.name-head, table.score-table td.name-cell{width:122px; min-width:122px; max-width:122px; white-space:normal; line-height:1.3; font-size:12.5px;}
+table.score-table thead th .head-badge:not(.noname):not(.slot){color:var(--c-ink); opacity:.8;}
+.chip{width:37px; font-size:12.5px;}
+.chip-group{gap:4px;}
+.roster-row .name{font-size:13.5px;}
+.score-info:empty{display:none;}
+#scoreTableWrap:has(.empty-state){min-height:100%; display:flex;}
+#scoreTableWrap .empty-state{margin:auto; padding-top:24px; padding-bottom:24px;}
+
+/* ---- ตัวเลือกจำนวนคาบสอนต่อสัปดาห์ (หน้าต่างสร้างหัวคะแนน) ---- */
+.seg{display:flex; gap:8px;}
+.seg button{flex:1; padding:11px 6px; border-radius:14px; border:1.5px solid #E1E7F3; background:#fff; color:var(--ink); font:inherit; font-size:13.5px; font-weight:600; cursor:pointer; transition:background .15s, border-color .15s, color .15s;}
+.seg button.on{background:var(--gold); border-color:var(--gold); color:#fff;}
+
+/* ---- Round 9 : หน้าต่างยืนยัน (แทน confirm) ---- */
+#modalConfirm{z-index:120;}
+.confirm-sheet{text-align:center;}
+.confirm-ico{width:64px; height:64px; margin:0 auto 14px; border-radius:22px; background:#FEF3D0; display:flex; align-items:center; justify-content:center; font-size:30px;}
+#modalConfirm.danger .confirm-ico{background:#FDECEC;}
+.confirm-sheet h3{margin-bottom:8px;}
+.confirm-msg{margin:0 0 16px; font-size:13.5px; line-height:1.65; color:var(--ink-soft);}
+.confirm-stats{display:flex; gap:8px; margin-bottom:16px;}
+.confirm-stats:empty{display:none;}
+.confirm-stats .cs{flex:1; border-radius:16px; padding:10px 4px; background:#F1F4FA; color:var(--ink); line-height:1.25;}
+.confirm-stats .cs b{display:block; font-size:18px; font-weight:700;}
+.confirm-stats .cs span{font-size:11.5px; font-weight:600; opacity:.75;}
+.confirm-stats .cs.ok{background:#E7F6EE; color:var(--present);}
+.confirm-stats .cs.bad{background:#FDECEC; color:var(--absent);}
+#modalConfirm.danger #confirmOk{background:var(--absent); box-shadow:0 14px 24px -14px rgba(229,72,77,.7);}
+
+/* ---- Round 9 : สรุปการมาเรียน ---- */
+#view-attend-report-setup,#view-attend-report{--c-main:#4285F4; --c-bg:#E8F0FE; --c-ink:#174EA6; --c-sh:rgba(66,133,244,.6); --c-on:#fff;}
+#view-attend-report.active{height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)); min-height:0; padding-bottom:16px;}
+#view-attend-report .score-scroll{flex:1 1 0; min-height:0; max-height:none;}
+#view-attend-report table.score-table thead th{cursor:default; min-width:50px;}
+#view-attend-report table.score-table thead th.name-head{min-width:122px;}
+#view-attend-report table.score-table thead th.sum{min-width:40px;}
+.att-legend{display:flex; gap:5px; flex-wrap:wrap;}
+.att-legend .ar{min-width:0; height:22px; padding:0 8px; font-size:11px;}
+.ar{display:inline-flex; align-items:center; justify-content:center; min-width:34px; height:26px; padding:0 8px; border-radius:13px; font-size:11.5px; font-weight:700; white-space:nowrap;}
+.ar-present{background:#E7F6EE; color:var(--present);}
+.ar-absent{background:var(--absent); color:#fff;}
+.ar-leave{background:var(--leave); color:#fff;}
+.ar-late{background:var(--late); color:#fff;}
+.ar-none{background:transparent; color:#B8C0D2; font-weight:500;}
+/* มส. (หมดสิทธิ์สอบ) — ขาด+ลา เกินเกณฑ์ที่คำนวณจากคาบต่อสัปดาห์ */
+#view-attend-report tr.ms-row td, #view-attend-report tr.ms-row td.name-cell{background:#FFF1BF !important;}
+#view-attend-report tr.ms-row td.name-cell{box-shadow:2px 0 0 #F5D36B, inset 4px 0 0 #F59E0B;}
+.ms-badge{display:inline-block; margin-left:6px; padding:1px 7px; border-radius:10px; background:#F59E0B; color:#fff; font-size:10.5px; font-weight:800; vertical-align:middle;}
+.ms-warn{background:#FDECEC; color:#B42318; border-radius:12px; padding:9px 12px; font-size:12.5px; font-weight:500; line-height:1.55; margin-bottom:10px;}
+td.sum b{font-weight:600; color:#C3CBDB;}
+td.sum b.s-absent.on{color:var(--absent); font-weight:700;}
+td.sum b.s-leave.on{color:var(--leave); font-weight:700;}
+td.sum b.s-late.on{color:#B45309; font-weight:700;}
+
+/* ---- Round 10 : แจ้งว่าเป็นการแก้ข้อมูลเช็คชื่อเดิม ---- */
+.exist-note{background:var(--c-bg,#E8F0FE); color:var(--c-ink,#174EA6); border-radius:14px; padding:10px 12px; margin-bottom:12px; font-size:12.5px; line-height:1.5; font-weight:500;}
+
+/* =====================================================================
+   Round 11 : ภาคเรียน/ประเภท · แท็บคะแนนสอบ · สรุปคะแนน + เกรด
+   ===================================================================== */
+#view-summary{--c-main:#34A853; --c-bg:#E6F4EA; --c-ink:#0D652D; --c-sh:rgba(52,168,83,.6); --c-on:#fff;}
+#view-attend-list,#view-attend-report{--c-main:#4285F4;}
+
+/* ---- แถบเลือกภาคเรียน/ประเภท (เด่น เห็นชัด) ---- */
+.period-bar{border-radius:22px; padding:14px 14px 12px; margin-bottom:16px; color:#fff; background:linear-gradient(135deg,#1B2233,#2B3A67); box-shadow:0 14px 26px -16px rgba(27,34,51,.7); transition:background .25s;}
+.period-bar[data-type="กลางภาค"]{background:linear-gradient(135deg,#0F766E,#14B8A6); box-shadow:0 14px 26px -16px rgba(15,118,110,.8);}
+.period-bar[data-type="ปลายภาค"]{background:linear-gradient(135deg,#C2410C,#F59E0B); box-shadow:0 14px 26px -16px rgba(194,65,12,.8);}
+.period-bar[data-mode="term"]{background:linear-gradient(135deg,#1E3A8A,#4F6BF5); box-shadow:0 14px 26px -16px rgba(30,58,138,.8);}
+.pb-head{display:flex; flex-direction:column; gap:2px; margin-bottom:10px;}
+.pb-lbl{font-size:11.5px; opacity:.9; letter-spacing:.3px;}
+.pb-now{font-family:'Noto Serif Thai',serif; font-size:22px; font-weight:700; line-height:1.3;}
+.pb-ctl{display:flex; gap:8px; flex-wrap:wrap;}
+.pb-seg{display:flex; gap:4px; align-items:center; background:rgba(255,255,255,.2); padding:4px; border-radius:14px;}
+.pb-seg em{font-style:normal; font-size:12px; font-weight:600; padding:0 6px 0 8px;}
+.pb-seg button{border:none; border-radius:10px; padding:8px 14px; font:inherit; font-size:13.5px; font-weight:700; background:transparent; color:#fff; cursor:pointer; transition:background .15s, color .15s;}
+.pb-seg button.on{background:#fff; color:#1B2233; box-shadow:0 4px 10px -4px rgba(0,0,0,.4);}
+.pb-type{flex:1; min-width:200px;} .pb-type button{flex:1;}
+.period-bar[data-mode="lock"]{padding:10px 14px;}
+.period-bar[data-mode="lock"] .pb-head{margin:0; flex-direction:row; align-items:baseline; gap:10px; flex-wrap:wrap;}
+.period-bar[data-compact] {padding:10px 12px; margin-bottom:10px; border-radius:18px;}
+.period-bar[data-compact] .pb-head{flex-direction:row; align-items:baseline; gap:10px; margin-bottom:8px; flex-wrap:wrap;}
+.period-bar[data-compact] .pb-now{font-size:17px;}
+.period-bar[data-compact] .pb-seg button{padding:6px 12px; font-size:13px;}
+.period-bar[data-compact][data-mode="lock"] .pb-head{margin:0;}
+
+/* ---- แท็บในหน้าลงคะแนน ---- */
+.score-tabs{display:flex; gap:8px; margin-bottom:10px;}
+.score-tabs button{flex:1; padding:11px 6px; border-radius:14px; border:1.5px solid #E1E7F3; background:#fff; font:inherit; font-size:12.5px; font-weight:700; color:var(--ink); cursor:pointer; transition:background .15s, color .15s;}
+.score-tabs button.on{background:var(--c-main); border-color:var(--c-main); color:#fff; box-shadow:0 10px 18px -12px var(--c-sh);}
+.score-tabs .tab-sum{flex:0 0 auto; padding:11px 14px; background:var(--c-bg); color:var(--c-ink); border-color:transparent;}
+.pane{flex:1 1 0; min-height:0; display:flex; flex-direction:column;}
+#scoreSaveBar .btn{width:100%;}
+
+/* ---- คะแนนสอบ ---- */
+.exam-setup{background:#fff; border-radius:20px; padding:12px 14px 14px; margin-bottom:10px; box-shadow:0 1px 2px rgba(27,34,51,.05), 0 12px 22px -18px rgba(27,34,51,.4);}
+.ex-title{font-size:13px; font-weight:700; color:var(--c-ink); margin-bottom:8px;}
+.ex-grid{display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:end;}
+.ex-grid label{font-size:12px; font-weight:600; color:var(--ink-soft); display:flex; flex-direction:column; gap:4px;}
+.ex-grid input{width:100%; padding:10px; text-align:center; font:inherit; font-size:16px; font-weight:700; background:#F8FAFF; border:1.5px solid #E6EBF5; border-radius:12px; color:var(--ink);}
+.ex-grid input:focus{outline:none; border-color:var(--c-main); box-shadow:0 0 0 4px color-mix(in srgb, var(--c-main) 20%, transparent);}
+.ex-sum{background:var(--c-bg); color:var(--c-ink); border-radius:12px; padding:6px 12px; text-align:center; line-height:1.2;}
+.ex-sum span{display:block; font-size:11px; font-weight:600; opacity:.8;} .ex-sum b{font-size:18px;}
+.exam-table thead th{cursor:default; min-width:72px;}
+.exam-in{width:68px; padding:8px 4px; text-align:center; font:inherit; font-size:15px; font-weight:700; background:#F8FAFF; border:1.5px solid #DCE3F0; border-radius:10px; color:var(--ink);}
+.exam-in:focus{outline:none; border-color:var(--c-main); background:#fff;}
+.exam-in.over{border-color:var(--absent); background:#FDECEC; color:var(--absent);}
+.exam-tot{font-size:14px; color:var(--c-ink);}
+
+/* ---- สรุปคะแนน ---- */
+.w-card{background:#fff; border-radius:20px; padding:14px; margin-bottom:12px; box-shadow:0 1px 2px rgba(27,34,51,.05), 0 12px 22px -18px rgba(27,34,51,.4);}
+.w-title{font-size:13.5px; font-weight:700; color:var(--c-ink); margin-bottom:10px;}
+.w-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+.w-grid label{display:flex; flex-direction:column; gap:4px; font-size:12px; font-weight:600; color:var(--ink-soft);}
+.w-grid input{width:100%; padding:10px; text-align:center; font:inherit; font-size:17px; font-weight:700; background:#F8FAFF; border:1.5px solid #E6EBF5; border-radius:12px; color:var(--ink);}
+.w-grid input:focus{outline:none; border-color:var(--c-main); box-shadow:0 0 0 4px color-mix(in srgb, var(--c-main) 20%, transparent);}
+.w-total{margin-top:10px; padding:8px 12px; border-radius:12px; font-size:13px; font-weight:600;}
+.w-total.ok{background:#E7F6EE; color:var(--present);} .w-total.bad{background:#FEF3D0; color:#7A4F00;}
+.sum-stats{margin-bottom:10px; display:flex; flex-direction:column; gap:6px;}
+.ss-row{display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:13px;}
+.ss-near{background:#FFF1BF; color:#7A4F00; border-radius:12px; padding:8px 12px; font-size:12.5px; font-weight:600;}
+.ss-warn{background:#FDECEC; color:#B42318; border-radius:12px; padding:8px 12px; font-size:12px; font-weight:500; line-height:1.5;}
+#view-summary.active{height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)); min-height:0;}
+#view-summary .score-scroll{flex:1 1 0; min-height:0; max-height:none;}
+.sum-table thead th{cursor:default; min-width:54px; font-size:12px;}
+.sum-table thead th.name-head{min-width:122px;}
+.sum-table thead tr.r1 th{top:0; height:34px; text-align:center;}
+.sum-table thead tr.r2 th{top:34px;}
+.sum-table th.g-mid{background:#CCFBF1; color:#0F766E;}
+.sum-table th.g-fin{background:#FFEDD5; color:#C2410C;}
+.sum-table th.g-all{background:#DBE4FF; color:#1E3A8A;}
+.sum-table td{font-size:12.5px;}
+.sum-table td.tot{font-weight:700; background:#F7FAF8;}
+.sum-table td.grand{font-size:15px; font-weight:800; color:var(--ink);}
+.sum-table td.gcell{min-width:86px;}
+.gr{display:inline-flex; align-items:center; justify-content:center; gap:3px; min-width:38px; height:28px; padding:0 10px; border-radius:14px; font-weight:800; font-size:14px;}
+.gr i{font-style:normal; font-size:11px; font-weight:700; opacity:.85;}
+.g4{background:#D1F5E0; color:#0B7A44;} .g3_5{background:#DDF4E4; color:#1E8A4F;}
+.g3{background:#DCEBFE; color:#1D5FD0;} .g2_5{background:#E5EEFE; color:#3B6FD8;}
+.g2{background:#FEF3D0; color:#8A5A00;} .g1_5{background:#FFF0CC; color:#9A6200;}
+.g1{background:#FFE4CC; color:#B4530A;}
+.g0{background:#FDECEC; color:#E5484D; box-shadow:inset 0 0 0 1.5px #F5B5B8;}
+.near-tag{display:block; margin-top:3px; font-size:10.5px; font-weight:700; color:#B45309;}
+.sum-table tr.near td, .sum-table tr.near td.name-cell{background:#FFF1BF !important;}
+.sum-table tr.near td.name-cell{box-shadow:2px 0 0 #F5D36B, inset 4px 0 0 #F59E0B;}
+
+/* =====================================================================
+   Round 12 : ปุ่ม ขาด/ลา/สาย เป็นสีเทาจนกว่าจะกด + ปรับให้ใช้บนมือถือ
+   ===================================================================== */
+.chip[data-status]{background:#EEF1F6; color:#9AA3B5;}
+.chip[data-status="present"].active{background:var(--present); color:#fff;}
+.chip[data-status="absent"].active{background:var(--absent); color:#fff;}
+.chip[data-status="leave"].active{background:var(--leave); color:#fff;}
+.chip[data-status="late"].active{background:var(--late); color:#fff;}
+.sum-tile.zero{background:#F1F3F8 !important; color:#A3ABBC !important;}
+.score-scroll{overscroll-behavior:contain;}
+
+@media (max-width:600px){
+  .view{padding:10px 10px 16px;}
+  .topbar{padding:8px 10px; margin-bottom:8px; gap:8px; border-radius:18px;}
+  .topbar h2{font-size:16px;}
+  .topbar .sub{font-size:11px; margin-top:0;}
+  .back-btn{width:34px; height:34px; font-size:22px;}
+  .tb-ico{width:34px; height:34px; border-radius:11px; font-size:17px;}
+
+  .period-bar{padding:10px 10px 8px; margin-bottom:10px;}
+  .pb-now{font-size:18px;}
+  .pb-head{margin-bottom:8px;}
+  /* แถบแบบกะทัดรัด: ซ่อนหัวข้อ เหลือแต่ปุ่มเลือก (ปุ่มที่เลือกอยู่ขึ้นสีขาวเด่นบนพื้นสีตามประเภท) */
+  .period-bar[data-compact]:not([data-mode="lock"]) .pb-head{display:none;}
+  .period-bar[data-compact]:not([data-mode="lock"]){padding:6px; margin-bottom:8px;}
+  .pb-seg em{padding:0 4px 0 6px; font-size:11.5px;}
+  .pb-seg button{padding:6px 11px;}
+  .pb-type{min-width:0; flex:1 1 150px;}
+
+  .score-tabs{margin-bottom:8px; gap:6px;}
+  .score-tabs button{padding:8px 4px; font-size:12px;}
+  .score-tabs .tab-sum{padding:8px 10px;}
+  .table-toolbar{margin-bottom:8px;}
+  .table-toolbar .btn-sm{padding:7px 12px;}
+  #scoreSaveBar{margin-top:8px;}
+  #scoreSaveBar .btn{padding:12px 16px; font-size:15px;}
+  #scoreTableWrap .hint, #examWrap .hint{display:none;}
+
+  .exam-setup{padding:8px 10px 10px; margin-bottom:8px; border-radius:16px;}
+  .ex-title{display:none;}
+  .ex-grid input{padding:7px; font-size:15px;}
+  .exam-in{width:62px; padding:7px 2px;}
+
+  .score-scroll{border-radius:16px;}
+  table.score-table thead th.name-head, table.score-table td.name-cell{width:100px; min-width:100px; max-width:100px; font-size:12px;}
+  table.score-table th, table.score-table td{padding:6px 5px;}
+  .score-circle{width:38px; height:38px;}
+
+  #attendSummary{margin-bottom:10px; gap:6px;}
+  .sum-tile{padding:6px 2px 5px;} .sum-tile b{font-size:17px;}
+  .roster{gap:7px;}
+  .roster-row{padding:8px 10px; border-radius:14px; gap:8px;}
+  .roster-row .no{width:24px; height:24px; font-size:11px;}
+  .chip{width:36px; padding:8px 0;}
+  .exist-note{padding:8px 10px; font-size:12px; margin-bottom:8px;}
+  .w-card{padding:10px; margin-bottom:8px;}
+  .w-grid input{padding:8px;}
+}
+
+/* เลขที่นักเรียนหน้าชื่อ */
+.sn{display:inline-flex; align-items:center; justify-content:center; min-width:22px; height:20px; padding:0 5px; margin-right:6px; border-radius:10px; background:var(--c-bg,#E8F0FE); color:var(--c-ink,#174EA6); font-size:11px; font-weight:700; vertical-align:1px;}
+/* =====================================================================
+   Round 13 : จิตพิสัยในหน้าคะแนนสอบ · สรุปงานค้างนักเรียน · เน็ตสะดุดตอนบันทึก
+   ===================================================================== */
+.exam-table th:nth-child(2){min-width:60px;}
+.beh-circle{margin:0 auto;}
+
+.pend-table th:nth-child(2), .pend-table td.pend-cell{text-align:left;}
+.pend-table thead th{min-width:auto;}
+.pend-cell{display:flex; flex-wrap:wrap; gap:6px; padding:8px 10px;}
+.pend-chip{display:inline-block; background:#FDECEC; color:#B42318; border-radius:10px; padding:5px 10px; font-size:11.5px; font-weight:600; white-space:nowrap;}
+.pend-ok{color:var(--present); font-weight:700; font-size:12.5px;}
+
+@media (max-width:600px){
+  .pend-chip{font-size:11px; padding:4px 8px;}
+}
+
+/* =====================================================================
+   Round 15 : ปุ่มขยายเต็มจอ — ยุบทุกอย่างเหลือแค่ตาราง (เลขที่/รายชื่อ/ช่องลงคะแนน/หัวตาราง)
+   ปุ่มย้อนกลับก็ถูกซ่อนไปด้วย เหลือปุ่ม ⤡ ปุ่มเดียวที่กดได้ ต้องกดย่อออกก่อนถึงจะย้อนกลับได้
+   Round 15b : ของเดิมแค่ยุบหัวลงนิดเดียว ดูไม่เหมือนเต็มจอเลย — คราวนี้ทำให้ #app หลุดกรอบ 430px
+   เต็มความกว้างจอจริงๆ ตัดขอบ/เงาของกรอบตารางออก ขยายฟอนต์+ระยะห่างในตารางให้อ่านง่ายขึ้น
+   ===================================================================== */
+.focus-btn{width:30px; height:30px; border-radius:10px; border:1.5px solid #E1E7F3; background:#fff; color:var(--ink-soft,#5B6474); font-size:15px; line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer; flex:0 0 auto; transition:background .15s, transform .1s;}
+.focus-btn:active{transform:scale(.88);}
+body.focus-mode .focus-btn{background:var(--c-main,#4285F4); border-color:var(--c-main,#4285F4); color:#fff; box-shadow:0 6px 14px -6px rgba(0,0,0,.35);}
+
+/* หลุดกรอบ #app (max-width:430px) ให้กินเต็มความกว้างหน้าจอจริง ๆ — เฉพาะมือถือ (จอแคบ) เท่านั้น
+   บนคอม/แท็บเล็ตจอกว้างให้คงกรอบการ์ด 430px ไว้เหมือนเดิม ไม่ยืดเต็มจอ */
+@media (max-width:600px){
+  body.focus-mode #app{max-width:none;}
+}
+body.focus-mode{background:var(--surface,#fff);}
+
+/* แก้บั๊ก: เผื่อพื้นที่ safe-area ด้านล่างซ้ำซ้อน (body เผื่อไว้ชั้นหนึ่ง + .view เผื่อไว้อีกชั้นด้านล่าง)
+   ทำให้เห็นเป็นแถบขาวๆ เกินจริงที่ก้นจอตอนขยาย/เต็มจอ — ตัด padding-bottom ระดับ body ออกตอน focus-mode
+   แล้วปล่อยให้ .view (Round 15b ด้านล่าง) เป็นคนเผื่อ safe-area ก้นจอแทนแค่ชั้นเดียว */
+body.focus-mode{padding-bottom:0;}
+
+/* แถบหัว: ซ่อนทุกอย่างยกเว้นปุ่ม ⤡ (รวมปุ่มย้อนกลับ) แล้วยุบให้เหลือแค่แถบบางๆ ชิดขวา */
+body.focus-mode .topbar{background:transparent; box-shadow:none; padding:8px 10px 4px; margin-bottom:0; justify-content:flex-end; border-radius:0;}
+body.focus-mode .topbar > *:not(.focus-btn){display:none !important;}
+
+/* ซ่อนส่วนควบคุม/ข้อมูลรอง เหลือแค่ตาราง (roster/score-scroll) กับแถบปุ่มบันทึกด้านล่าง */
+body.focus-mode .period-bar,
+body.focus-mode .table-toolbar,
+body.focus-mode .score-tabs,
+body.focus-mode .exist-note,
+body.focus-mode #attendSummary,
+body.focus-mode .exam-setup,
+body.focus-mode .w-card,
+body.focus-mode #sumStats{display:none !important;}
+
+/* ตัวหน้าเต็มจอ: เอา padding ซ้าย/ขวาออกแทบหมด ให้ตารางกินพื้นที่จริง แถบล่าง (ปุ่มบันทึก) เว้นระยะพอจับได้ */
+body.focus-mode .view{padding:2px 6px calc(10px + env(safe-area-inset-bottom,0px)) !important;}
+body.focus-mode .score-scroll{border-radius:14px !important; box-shadow:none !important;}
+body.focus-mode .actions-fixed{margin-top:8px;}
+
+/* ขยายฟอนต์/ระยะห่างในตาราง+รายชื่อ ให้รู้สึกว่า "เต็มจอ" จริง อ่านง่ายกว่าโหมดปกติชัดเจน */
+body.focus-mode table.score-table{font-size:14.5px !important;}
+body.focus-mode table.score-table th, body.focus-mode table.score-table td{padding:12px 9px !important;}
+body.focus-mode table.score-table thead th.name-head, body.focus-mode table.score-table td.name-cell{width:auto !important; min-width:120px !important; max-width:150px !important;}
+body.focus-mode .score-circle{width:38px !important; height:38px !important; font-size:15px !important;}
+body.focus-mode .roster-row{padding:14px 16px !important;}
+body.focus-mode .roster-row .name{font-size:15px !important;}
+body.focus-mode .chip{padding:9px 0 !important;}
+body.focus-mode .pend-chip{font-size:13px !important; padding:6px 12px !important;}
+
+@media (max-width:600px){
+  .focus-btn{width:28px; height:28px; font-size:13px;}
+  body.focus-mode .topbar{padding:6px 8px 4px;}
+}
+
+/* =====================================================================
+   Round 16 : เริ่มฟีเจอร์ "ตรวจข้อสอบ" — สร้าง/จัดการชุดข้อสอบ, ตั้งเฉลย, สรุปคะแนน
+   (ยังไม่ใช่ตัวสแกนกล้อง — เป็นโครงเริ่มต้น: สร้างชุด ตั้งเฉลย ดูตารางสรุป)
+   ===================================================================== */
+.examset-list{display:flex; flex-direction:column; gap:12px;}
+.examset-card{display:flex; align-items:center; gap:12px; background:var(--surface); border-radius:20px; padding:16px 14px; box-shadow:0 1px 2px rgba(27,34,51,.05), 0 12px 22px -18px rgba(27,34,51,.35); cursor:pointer; transition:transform .12s;}
+.examset-card:active{transform:scale(.98);}
+.examset-card .ec-main{flex:1; min-width:0;}
+.examset-card h3{font-size:16.5px; margin-bottom:3px;}
+.examset-card p{margin:0; font-size:12.5px; color:var(--ink-soft);}
+.ec-del{width:38px; height:38px; flex-shrink:0; border:none; background:#FDECEC; color:#C62828; border-radius:12px; font-size:15px; cursor:pointer;}
+.ec-del:active{transform:scale(.9);}
+
+.exam-stats{display:flex; gap:10px; margin-bottom:18px;}
+.exam-stats .es-stat{flex:1; background:var(--c-bg); color:var(--c-ink); border-radius:18px; padding:14px 8px; text-align:center;}
+.exam-stats .es-stat b{display:block; font-size:22px; font-weight:800; line-height:1.2;}
+.exam-stats .es-stat span{font-size:11.5px; font-weight:600; opacity:.75;}
+
+.examkey-scroll{background:transparent; border:none; box-shadow:none; padding:0;}
+.examkey-list{display:flex; flex-direction:column; gap:8px;}
+.ek-row{display:flex; align-items:center; gap:12px; background:var(--surface); border-radius:16px; padding:9px 12px; box-shadow:0 1px 2px rgba(27,34,51,.05);}
+.ek-num{width:26px; text-align:center; font-weight:800; font-size:14px; color:var(--ink-soft); flex-shrink:0;}
+.ek-opts{display:flex; gap:8px; flex:1;}
+.ek-opts button{flex:1; padding:10px 0; border-radius:12px; border:1.5px solid #E1E7F3; background:#fff; color:var(--ink-soft); font:inherit; font-weight:700; font-size:14px; cursor:pointer; transition:background .12s, border-color .12s, color .12s, transform .1s;}
+.ek-opts button:active{transform:scale(.92);}
+.ek-opts button.on{background:var(--c-main); border-color:var(--c-main); color:#fff; box-shadow:0 6px 12px -8px var(--c-sh);}
+
+.exam-sum-table td, .exam-sum-table th{text-align:center;}
+.ec-thumb-cell{padding:6px 8px;}
+.ec-thumb{width:44px; height:34px; border-radius:8px; object-fit:cover; display:block; margin:0 auto; cursor:pointer;}
+.ec-thumb-empty{width:44px; height:34px; border-radius:8px; background:#F1F3F9; color:#B8C0D2; display:flex; align-items:center; justify-content:center; font-size:14px; margin:0 auto;}
+
+@media (max-width:600px){
+  .examset-card{padding:13px 12px; border-radius:16px;}
+  .ek-opts button{padding:9px 0; font-size:13px;}
+  .exam-stats .es-stat{padding:11px 6px;}
+  .exam-stats .es-stat b{font-size:19px;}
+}
+
+/* =====================================================================
+   Round 17 : Scan กระดาษคำตอบด้วยกล้อง (OMR) — จอกล้อง/สถานะ/ผลลัพธ์
+   ===================================================================== */
+.scan-stage{
+  position:relative; width:100%; aspect-ratio:3/4; background:#0B0E14; border-radius:20px;
+  overflow:hidden; box-shadow:0 1px 2px rgba(27,34,51,.05), 0 16px 28px -20px rgba(27,34,51,.5);
+}
+.scan-stage video, .scan-stage canvas#scanOverlay{
+  position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+}
+.scan-stage video{ transform:scaleX(1); }
+#scanOverlay{ pointer-events:none; }
+.scan-status{
+  position:absolute; left:0; right:0; bottom:0; padding:12px 14px calc(10px + env(safe-area-inset-bottom,0px));
+  background:linear-gradient(0deg, rgba(0,0,0,.68), rgba(0,0,0,0)); color:#fff; font-size:13px; font-weight:600;
+  text-align:center; letter-spacing:.2px;
+}
+
+.scan-num-row{display:flex; align-items:center; justify-content:center; gap:18px; margin:14px 0;}
+.scan-num-btn{
+  width:38px; height:38px; border-radius:50%; border:1.5px solid var(--line); background:#fff;
+  font-size:18px; color:var(--ink); cursor:pointer; flex-shrink:0;
+}
+.scan-num-btn:active{transform:scale(.9);}
+.scan-num-cur{font-size:14.5px; font-weight:600; color:var(--ink-soft);}
+.scan-num-cur b{color:var(--c-main,#4285F4); font-size:19px; margin-left:4px;}
+
+.scan-result{
+  display:flex; gap:12px; align-items:center; background:var(--surface); border-radius:18px; padding:12px;
+  margin-bottom:14px; box-shadow:0 1px 2px rgba(27,34,51,.05), 0 12px 22px -18px rgba(27,34,51,.35);
+}
+.scan-result-thumb{width:70px; height:94px; object-fit:cover; border-radius:10px; background:#F1F3F9; flex-shrink:0; border:1px solid var(--line); cursor:pointer;}
+.img-view-sheet{text-align:center;}
+.img-view-wrap{max-height:65vh; overflow:auto; background:#F1F3F9; border-radius:14px; padding:8px; margin-bottom:12px;}
+.img-view-wrap img{width:100%; display:block; border-radius:8px;}
+.scan-result-info{flex:1; min-width:0;}
+.scan-result-score{font-size:15.5px; font-weight:700; margin-bottom:10px;}
+.scan-result-actions{display:flex; gap:8px;}
+.scan-result-actions .btn{flex:1;}
+
+.scan-controls{display:flex; gap:10px; margin-top:auto;}
+.scan-controls .btn{flex:1;}
+
+@media (max-width:600px){
+  .scan-num-row{gap:14px;}
+  .scan-num-cur{font-size:13.5px;}
+  .scan-num-cur b{font-size:17px;}
+}
+
+/* =====================================================================
+   Round 18 : แก้บั๊กพื้นที่ว่างค้างด้านล่าง (เห็นชัดสุดที่หน้าเฉลย และตอนกดเต็มจอ
+   ในหน้าสรุปคะแนนสอบ / งานค้าง)
+   ต้นเหตุ: .score-scroll เวอร์ชันแรก (ด้านบนไฟล์) ถูกโอเวอร์ไรด์เป็น flex:none
+   + max-height:calc(100dvh - 320px) ซึ่งเป็นเลขเดามั่ว ๆ — พอเนื้อหาน้อยกว่ากรอบ
+   กล่องเลยหดตามเนื้อหา เหลือพื้นที่ว่างโล่ง ๆ ใต้กล่องภายใน .view (ซึ่งเป็น flex
+   column เต็มจอ) หน้า view-scores-table กับ view-attend-report เคยแก้ไว้แล้ว
+   (flex:1 1 0 + max-height:none) แต่หน้าเฉลย/สรุปคะแนนสอบ/งานค้าง ยังไม่ได้แก้
+   เลยพังอยู่ — รอบนี้ใช้สูตรเดียวกันให้ครบทุกหน้า */
+#view-exam-key.active{height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)); min-height:0;}
+#view-exam-key .score-scroll{flex:1 1 0; min-height:0; max-height:none;}
+#view-exam-summary.active{height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)); min-height:0;}
+#view-exam-summary .score-scroll{flex:1 1 0; min-height:0; max-height:none;}
+#view-pending.active{height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)); min-height:0;}
+#view-pending .score-scroll{flex:1 1 0; min-height:0; max-height:none;}
+
+/* ---- รายชื่อ มส. / ติด 0 ทุกห้อง ---- */
+.blk-filters{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px;}
+.blk-filters button{border:1px solid var(--line); background:var(--surface); color:var(--ink-soft); border-radius:999px; padding:7px 13px; font:600 12.5px 'Noto Sans Thai',sans-serif; cursor:pointer;}
+.blk-filters button.on{background:var(--gold); border-color:var(--gold); color:#fff;}
+.blk-filters button.fx{margin-left:auto;}
+.blk-room{background:var(--surface); border-radius:var(--radius-md); margin-bottom:14px; overflow:hidden; box-shadow:0 1px 2px rgba(27,34,51,.05), 0 14px 26px -20px rgba(27,34,51,.35);}
+.blk-head{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; background:#EEF1FE; border-bottom:1px solid var(--line);}
+.blk-head b{font-family:'Noto Serif Thai',serif; font-size:16px;}
+.blk-head small{display:block; color:var(--ink-soft); font-size:11.5px; margin-top:2px;}
+.blk-row{padding:10px 14px; border-bottom:1px solid var(--line);}
+.blk-row:last-child{border-bottom:0;}
+.blk-who{display:flex; align-items:center; gap:8px; font-weight:600; font-size:14px;}
+.blk-tags{display:flex; flex-direction:column; gap:6px; margin-top:8px;}
+.blk-tag{display:flex; align-items:center; justify-content:space-between; gap:8px; border-radius:10px; padding:6px 6px 6px 10px; font-size:12.5px; font-weight:600;}
+.blk-tag.ms{background:#FDECEC; color:#B42318;}
+.blk-tag.zero{background:#FFF4DB; color:#B45309;}
+.blk-tag.fixed{background:#E8F6EF; color:var(--present);}
+.blk-tag.fixed .blk-lbl{opacity:.85;}
+.blk-act{border:0; border-radius:8px; padding:6px 10px; background:rgba(255,255,255,.85); color:inherit; font:700 12px 'Noto Sans Thai',sans-serif; cursor:pointer; white-space:nowrap;}
+
+/* ---- สัดส่วนคะแนนสอบ ---- */
+.ex-sub{font-size:12px; font-weight:700; color:var(--c-ink,var(--ink)); margin:12px 0 8px;}
+.ex-sub small{font-weight:500; color:var(--ink-soft); font-size:11px;}
+@media (max-width:480px){ .ex-sub small{display:block; margin-top:2px;} }
+
+/* ===== v10: กล่องคะแนนเต็มสอบพับได้ (ตารางลงคะแนนได้พื้นที่เต็ม) + จิตพิสัยกรอกเอง ===== */
+.exam-setup{padding:0; overflow:hidden;}
+.exam-setup .ex-head{display:flex; align-items:center; gap:8px; width:100%; padding:10px 14px; border:none; background:transparent; font:inherit; cursor:pointer; text-align:left;}
+.exam-setup .ex-head-t{font-size:13px; font-weight:700; color:var(--c-ink); white-space:nowrap;}
+.exam-setup .ex-chips{flex:1; min-width:0; font-size:12px; font-weight:600; color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:right;}
+.exam-setup .ex-caret{font-size:14px; color:var(--c-ink); transition:transform .2s;}
+.exam-setup.open .ex-caret{transform:rotate(180deg);}
+.exam-setup .ex-body{display:none; padding:0 14px 14px;}
+.exam-setup.open .ex-body{display:block;}
+.ex-grid.ex-g4{grid-template-columns:1fr 1fr 1fr auto;}
+.exam-in.plus{border-color:#F59E0B; background:#FFF6D6; color:#8A5A00;}
+.exam-table thead th small.wd{display:block; font-size:10.5px; font-weight:600; opacity:.8; min-height:12px;}
+@media (max-width:600px){
+  .exam-setup{margin-bottom:6px;}
+  .exam-setup .ex-head{padding:8px 10px;}
+  .exam-setup .ex-body{padding:0 10px 10px;}
+  .ex-grid.ex-g4{gap:6px;}
+}
+
+/* ===== v10: หน้าสรุปคะแนน — ดินสอแก้จิตพิสัย, ช่องเกรด มส./0, ต้องพิจารณา มส. ===== */
+.sum-table td.behcell{position:relative; min-width:64px;}
+.sum-table .pen{display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; margin-left:4px; padding:0; border:none; border-radius:50%; background:#EEF2FF; color:#4458C8; font-size:12px; line-height:1; cursor:pointer; vertical-align:middle;}
+.sum-table .pen:active{transform:scale(.88); background:#DCE3FF;}
+.sum-table .braw{display:block; font-size:10px; color:var(--ink-soft); opacity:.85; margin-top:1px;}
+.sum-table td.gcell{min-width:98px;}
+.gbtn{border:none; cursor:pointer; font-family:inherit;}
+.gbtn:active{transform:scale(.94);}
+button.gr.g0{box-shadow:inset 0 0 0 1.5px #F5B5B8;}
+.gms{background:#FFE4B8; color:#9A4A00; box-shadow:inset 0 0 0 1.5px #F5B04C;}
+.gfix{background:#EDE3FF; color:#6B3FC4; box-shadow:inset 0 0 0 1.5px #C9B2F5;}
+.gsub{display:block; margin-top:3px; font-size:10.5px; font-weight:600; color:var(--ink-soft);}
+.gsub.fixed{color:#6B3FC4;}
+.gsub b{font-weight:800;} .gsub b.g0{background:none; box-shadow:none; color:#E5484D;}
+.chip-consider{display:block; margin:5px auto 0; padding:3px 9px; border:none; border-radius:10px; background:#F97316; color:#fff; font:inherit; font-size:10.5px; font-weight:800; cursor:pointer; box-shadow:0 4px 10px -6px rgba(249,115,22,.9);}
+.chip-dis{display:block; margin:5px auto 0; padding:2px 8px; border:1px dashed #CBD3E4; border-radius:10px; background:transparent; color:var(--ink-soft); font:inherit; font-size:10px; font-weight:600; cursor:pointer;}
+.al-tag{display:block; margin-top:2px; font-size:10px; font-weight:700; color:#C2410C;}
+.sum-table tr.consider td, .sum-table tr.consider td.name-cell{background:#FFE3C7 !important;}
+.sum-table tr.consider td.name-cell{box-shadow:2px 0 0 #F7B27A, inset 4px 0 0 #F97316;}
+.ss-consider{background:#FFE3C7; color:#9A3412; border-radius:12px; padding:8px 12px; font-size:12.5px; font-weight:600;}
+.w-hours{margin-top:10px;}
+.w-hours label{display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:12px; font-weight:600; color:var(--ink-soft);}
+.w-hours small{font-weight:500; font-size:11px;}
+.w-hours input{width:72px; padding:8px; text-align:center; font:inherit; font-size:15px; font-weight:700; background:#F8FAFF; border:1.5px solid #E6EBF5; border-radius:12px; color:var(--ink);}
+.beh-edit{display:flex; flex-direction:column; gap:12px; margin-bottom:14px;}
+.beh-edit label{display:flex; flex-direction:column; gap:6px; font-size:12.5px; font-weight:600; color:var(--ink-soft);}
+.beh-edit small{font-weight:500; font-size:11px;}
+.beh-edit input{width:100%; padding:12px; text-align:center; font:inherit; font-size:20px; font-weight:800; background:#F8FAFF; border:1.5px solid #E6EBF5; border-radius:14px; color:var(--ink);}
+.beh-edit input:focus{outline:none; border-color:#4285F4; box-shadow:0 0 0 4px rgba(66,133,244,.18);}
+.be-prev{background:#F2F6FF; color:#1E3A8A; border-radius:12px; padding:10px 12px; font-size:13.5px; text-align:center;}
+.be-prev small{opacity:.75;}
+.sg-p{margin:0 0 12px; font-size:14px; line-height:1.6; color:var(--ink);}
+.sg-flow{display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:16px; font-weight:800; color:var(--ink-soft);}
+.sg-flow span{min-width:44px; padding:6px 12px; border-radius:14px; background:#F1F4FA; text-align:center;}
+.sg-flow span.on{background:#FFE4B8; color:#9A4A00;} .sg-flow span.zero{background:#FDECEC; color:#E5484D;} .sg-flow span.fix{background:#EDE3FF; color:#6B3FC4;}
+#modalSheetGen .modal-actions{display:flex; gap:10px;} #modalSheetGen .modal-actions .btn{flex:1;}
+
+/* ===== สรุปคะแนน: คอลัมน์ % และ คะแนนที่แก้ 0 → 1 (ขีดค่าเก่าสีแดง + ค่าใหม่) ===== */
+.sum-table thead th.pct{min-width:46px;}
+.sum-table td.pct{font-size:11.5px; color:var(--ink-soft); font-weight:600; background:#FAFBFA;}
+.sum-table .oldv{display:block; color:#E5484D; text-decoration:line-through; text-decoration-thickness:1.5px; font-weight:600; font-size:.82em; line-height:1.2;}
+.sum-table .newv{display:block; color:#6B3FC4; font-weight:800; line-height:1.25;}
+.sum-table td.grand .oldv{font-size:12px;}
+.blk-sub{padding:8px 14px 2px; font-size:12px; font-weight:700; color:var(--ink-soft); background:#FAFAFC; border-bottom:1px solid var(--line);}
+
+/* ===== สวิตช์ / ปุ่มเลือก (segmented) ===== */
+.sw{display:inline-flex; align-items:center; gap:8px; font-size:12.5px; font-weight:600; color:var(--ink-soft); cursor:pointer; user-select:none;}
+.sw input{position:absolute; opacity:0; width:0; height:0;}
+.sw-track{position:relative; width:38px; height:22px; border-radius:999px; background:#D5DBE8; transition:background .2s; flex:none;}
+.sw-track::after{content:""; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(27,34,51,.3); transition:transform .2s;}
+.sw input:checked + .sw-track{background:var(--gold);}
+.sw input:checked + .sw-track::after{transform:translateX(16px);}
+.sw input:focus-visible + .sw-track{box-shadow:0 0 0 4px color-mix(in srgb, var(--gold) 25%, transparent);}
+.sw.dis{opacity:.45; cursor:not-allowed;}
+.seg{display:inline-flex; background:#EEF1F8; border-radius:999px; padding:3px; gap:2px;}
+.seg button{border:0; background:transparent; border-radius:999px; padding:6px 14px; font:600 12.5px 'Noto Sans Thai',sans-serif; color:var(--ink-soft); cursor:pointer;}
+.seg button.on{background:#fff; color:var(--ink); box-shadow:0 1px 3px rgba(27,34,51,.18);}
+
+/* ===== พับเก็บสัดส่วนคะแนน / กราฟ ===== */
+.w-fold > summary, .ch-fold > summary{list-style:none; display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer;}
+.w-fold > summary::-webkit-details-marker, .ch-fold > summary::-webkit-details-marker{display:none;}
+.w-fold > summary::after, .ch-fold > summary::after{content:"▾"; color:var(--ink-soft); font-size:14px; transition:transform .2s; flex:none;}
+.w-fold:not([open]) > summary::after, .ch-fold:not([open]) > summary::after{transform:rotate(-90deg);}
+.w-fold summary .w-title, .ch-fold summary .w-title{margin:0; flex:1;}
+.w-mini{font-size:11.5px; font-weight:600; color:var(--ink-soft); text-align:right;}
+.w-fold[open] .w-mini{display:none;}
+.w-body{margin-top:10px;}
+
+/* ===== กราฟการกระจายเกรด ===== */
+.ch-ctl{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin:12px 0 6px;}
+.ch-svg{display:block; width:100%; max-width:460px; margin:0 auto; overflow:visible;}
+.ch-svg text{font-family:'Noto Sans Thai',sans-serif;}
+.ch-grid{stroke:#E8ECF5; stroke-width:1; stroke-dasharray:3 3;}
+.ch-axis{stroke:#C9D1E3; stroke-width:1.2;}
+.ch-ax{fill:var(--ink-soft); font-size:10.5px; font-weight:600;}
+.ch-title{fill:var(--ink-soft); font-size:10.5px; font-weight:600; opacity:.8;}
+.ch-val{fill:var(--ink); font-size:11.5px; font-weight:800;}
+.ch-val.zero{fill:#AAB3C7; font-weight:600;}
+.ch-pl{fill:#1B2233; font-size:11px; font-weight:800;}
+.ch-center-n{fill:var(--ink); font-size:26px; font-weight:800;}
+.ch-center-l{fill:var(--ink-soft); font-size:11px; font-weight:600;}
+.ch-slice{stroke:#fff; stroke-width:2;}
+.ch-pie{display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:14px 22px; padding:4px 0;}
+.ch-pie-svg{width:210px; max-width:210px; margin:0;}
+.ch-legend{list-style:none; margin:0; padding:0; display:grid; gap:6px; font-size:12.5px;}
+.ch-legend li{display:flex; align-items:center; gap:8px;}
+.ch-legend i{width:12px; height:12px; border-radius:4px; flex:none;}
+.ch-legend span{color:var(--ink-soft); margin-left:auto; padding-left:12px; white-space:nowrap;}
+.ch-note{margin-top:8px; font-size:11.5px; color:var(--ink-soft); text-align:center;}
+@keyframes chGrowY{from{transform:scaleY(0);}to{transform:scaleY(1);}}
+@keyframes chGrowX{from{transform:scaleX(0);}to{transform:scaleX(1);}}
+@keyframes chFade{from{opacity:0; transform:scale(.92);}to{opacity:1; transform:none;}}
+.ch-svg.anim .ch-bar-v{transform-box:fill-box; transform-origin:50% 100%; animation:chGrowY .55s cubic-bezier(.2,.8,.2,1) both;}
+.ch-svg.anim .ch-bar-h{transform-box:fill-box; transform-origin:0 50%; animation:chGrowX .55s cubic-bezier(.2,.8,.2,1) both;}
+.ch-svg.anim .ch-slice{transform-box:fill-box; transform-origin:center; animation:chFade .5s ease-out both;}
+@media (prefers-reduced-motion:reduce){ .ch-svg.anim *{animation:none !important;} }
+body.focus-mode #sumChart{display:none !important;}
+
+/* ===== หน้ามส./ติด 0 : โทนแดงพาสเทล ===== */
+.blk-tag.zero:not(.fixed){background:#FBE4E2; color:#9C3B36;}
+.blk-tag.ms:not(.fixed){background:#F9E6EA; color:#A03A52;}
+.blk-tag:not(.fixed) .blk-act{background:#F3BDB8; color:#7F2A25; box-shadow:0 1px 0 rgba(127,42,37,.12);}
+.blk-tag:not(.fixed) .blk-act:active{background:#EBA7A1;}
+
+
+/* =====================================================================
+   ✦ SMOOTH LAYER — ความสมูทของปุ่ม / การเปลี่ยนหน้า / ป๊อปอัพ
+   (ลบบล็อกนี้ทิ้งได้ถ้าอยากกลับไปแบบเดิมเป๊ะ)
+   ===================================================================== */
+:root{ --ease-out:cubic-bezier(.22,1,.36,1); --ease-spring:cubic-bezier(.34,1.45,.64,1); }
+
+/* ---- ปุ่ม: กดยุบเร็ว ปล่อยแล้วคืนตัวนุ่มๆ ---- */
+button,.btn,.menu-item,.examset-card,.chip,.score-circle{-webkit-tap-highlight-color:transparent; touch-action:manipulation;}
+.btn,.menu-item,.back-btn,.sum-all,.focus-btn,.score-circle,.score-pick button,.seg button,.score-tabs button,
+.ek-opts button,.blk-filters button,.pb-seg button,.chip,.examset-card,.gbtn,.ec-del,.scan-num-btn,.pen,.blk-act,.chip-consider{
+  transition:transform .4s var(--ease-spring), box-shadow .3s var(--ease-out), background-color .28s ease, border-color .28s ease, color .28s ease, opacity .22s ease;
+}
+:is(.btn,.menu-item,.back-btn,.sum-all,.focus-btn,.score-circle,.score-pick button,.seg button,.score-tabs button,
+.ek-opts button,.blk-filters button,.pb-seg button,.chip,.examset-card,.gbtn,.ec-del,.scan-num-btn,.pen,.blk-act,.chip-consider):active{
+  transition-duration:.09s;
+}
+:is(.seg button,.score-tabs button,.pb-seg button,.blk-filters button,.chip,.blk-act,.chip-consider):active{transform:scale(.94);}
+
+/* ---- เปลี่ยนหน้า: หน้าเก่าจางออก หน้าใหม่เลื่อนเข้าไหลต่อกัน ---- */
+@keyframes vInFwd {from{opacity:0; transform:translate3d(26px,0,0);}}
+@keyframes vInBack{from{opacity:0; transform:translate3d(-26px,0,0);}}
+@keyframes vOutFwd {to{opacity:0; transform:translate3d(-22px,0,0);}}
+@keyframes vOutBack{to{opacity:0; transform:translate3d(22px,0,0);}}
+.view.v-in.nav-fwd {animation:vInFwd  .42s var(--ease-out) .04s backwards;}
+.view.v-in.nav-back{animation:vInBack .42s var(--ease-out) .04s backwards;}
+.view.v-out{display:flex; position:fixed; margin:0; overflow:hidden; pointer-events:none; z-index:2;}
+.view.v-out.nav-fwd {animation:vOutFwd  .2s ease-in forwards;}
+.view.v-out.nav-back{animation:vOutBack .2s ease-in forwards;}
+
+/* ---- ป๊อปอัพ (bottom sheet): ฉากหลังจางเข้า-ออก แผ่นเลื่อนขึ้น-ลง ---- */
+.modal-backdrop{
+  display:flex; visibility:hidden; pointer-events:none; background:rgba(27,34,51,0);
+  transition:background-color .35s ease, visibility 0s linear .42s;
+}
+.modal-backdrop.active{
+  visibility:visible; pointer-events:auto; background:rgba(27,34,51,.45); animation:none;
+  transition:background-color .35s ease, visibility 0s;
+}
+.modal-backdrop .modal-sheet{transform:translate3d(0,100%,0); transition:transform .4s cubic-bezier(.4,0,.2,1);}
+.modal-backdrop.active .modal-sheet{transform:none; animation:none; transition:transform .52s var(--ease-out);}
+
+/* ---- หน้าจอโหลด/บันทึก: จางเข้า-ออก ไม่โผล่วับ ---- */
+.loading-overlay{display:flex; visibility:hidden; opacity:0; pointer-events:none; transition:opacity .38s ease, visibility 0s linear .38s;}
+.loading-overlay.active{visibility:visible; opacity:1; pointer-events:auto; animation:none; transition:opacity .38s ease, visibility 0s;}
+.loading-overlay:not(.active) *,.loading-overlay:not(.active) *::before,.loading-overlay:not(.active) *::after{animation-play-state:paused !important;}
+.loading-box{animation:none; opacity:0; transform:translateY(18px) scale(.94); transition:transform .55s var(--ease-spring), opacity .35s ease;}
+.loading-overlay.active .loading-box{opacity:1; transform:none;}
+
+/* ---- Toast: ลอยขึ้น/ลงนุ่มๆ ---- */
+.toast{transform:translate(-50%,16px) scale(.96); transition:opacity .3s ease, transform .45s var(--ease-spring);}
+.toast.show{transform:translate(-50%,0) scale(1);}
+
+/* ---- กล่องพับ (details): เนื้อหาไหลลงมา ---- */
+@keyframes foldIn{from{opacity:0; transform:translateY(-8px);}}
+.w-fold[open] > :not(summary), .ch-fold[open] > :not(summary){animation:foldIn .34s var(--ease-out);}
+
+@media (prefers-reduced-motion:reduce){
+  .view.v-in,.view.v-out{animation:none !important;}
+  .modal-backdrop,.modal-backdrop .modal-sheet,.toast,.loading-overlay,.loading-box{transition-duration:.01s !important;}
+  .btn,.menu-item,.seg button,.score-tabs button,.chip{transition-duration:.01s !important;}
+}
+
+
+/* ---- แถบ กลางภาค/ปลายภาค: สีพื้นไล่ไหลข้ามกัน (ใช้ @property ให้ gradient transition ได้) ---- */
+@property --pb1{syntax:'<color>'; inherits:false; initial-value:#1B2233;}
+@property --pb2{syntax:'<color>'; inherits:false; initial-value:#2B3A67;}
+.period-bar{--pb1:#1B2233; --pb2:#2B3A67; background:linear-gradient(135deg,var(--pb1),var(--pb2));
+  transition:--pb1 .55s ease, --pb2 .55s ease, box-shadow .55s ease;}
+.period-bar[data-type="กลางภาค"]{--pb1:#0F766E; --pb2:#14B8A6; background:linear-gradient(135deg,var(--pb1),var(--pb2));}
+.period-bar[data-type="ปลายภาค"]{--pb1:#C2410C; --pb2:#F59E0B; background:linear-gradient(135deg,var(--pb1),var(--pb2));}
+.period-bar[data-mode="term"]{--pb1:#1E3A8A; --pb2:#4F6BF5; background:linear-gradient(135deg,var(--pb1),var(--pb2));}
+@keyframes pbTick{from{opacity:0; transform:translateY(7px);}}
+.pb-now.pb-tick{animation:pbTick .38s var(--ease-out);}
+.pb-seg button.on{transition-duration:.4s,.3s,.3s,.3s,.3s,.22s;}
+
+/* ---- เนื้อหาจางเข้าตอนเปลี่ยนภาค/แท็บ ---- */
+@keyframes softIn{from{opacity:0; transform:translateY(8px);}}
+.soft-in{animation:softIn .4s var(--ease-out) backwards;}
+.pane-in{animation:softIn .42s var(--ease-out) backwards;}
+
+/* ---- กล่องคะแนนเต็ม (dropdown): ลูกศรหมุนไหลตาม ---- */
+.exam-setup .ex-caret{transition:transform .38s var(--ease-spring);}
+.exam-setup.collapsing .ex-caret{transform:none;}
+.exam-setup .ex-head:active .ex-chips{opacity:.7;}
+.exam-setup .ex-head{transition:background-color .2s ease;}
+.exam-setup .ex-head:active{background:rgba(0,0,0,.03);}
+
+@media (prefers-reduced-motion:reduce){
+  .period-bar,.pb-now.pb-tick,.soft-in,.pane-in{animation:none !important; transition-duration:.01s !important;}
+}
+
+
+/* =====================================================================
+   ครูประจำชั้น (Homeroom) — ธีมสีชมพูกุหลาบ
+   ===================================================================== */
+.c-rose{--c-bg:#FFE9F1; --c-main:#EC4C8A; --c-ink:#9D174D; --c-sh:rgba(236,76,138,.65);}
+#view-homeroom,#view-hr-detail,#view-hr-docs,#view-hr-orders,#view-hr-order,#view-hr-summary,.modal-backdrop.hr-modal{
+  --c-main:#EC4C8A; --c-bg:#FFE9F1; --c-ink:#9D174D; --c-sh:rgba(236,76,138,.6); --c-on:#fff;
+}
+button.tb-ico{border:none; cursor:pointer; font-family:inherit; padding:0; transition:transform .15s;}
+button.tb-ico:active{transform:scale(.92);}
+#view-hr-detail .tb-ico.hr-edit-btn{font-size:20px;}
+.hr-modal .seg button.on,#view-hr-order .seg button.on{background:var(--c-main); border-color:var(--c-main); color:#fff;}
+
+/* ---- ห้อง (กรณีเป็นครูประจำชั้นหลายห้อง) ---- */
+.hr-rooms{display:flex; gap:8px; flex-wrap:wrap;}
+.hr-rooms:not(:empty){margin-bottom:12px;}
+.hr-rooms button{border:1.5px solid #E1E7F3; background:#fff; border-radius:14px; padding:8px 16px; font:inherit; font-size:13.5px; font-weight:700; color:var(--ink); cursor:pointer;}
+.hr-rooms button.on{background:var(--c-main); border-color:var(--c-main); color:#fff; box-shadow:0 10px 18px -12px var(--c-sh);}
+
+/* ---- ปุ่มลัด เอกสาร / เงินอุดหนุน ---- */
+.hr-tiles{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;}
+.hr-tile{border:none; border-radius:22px; padding:14px 14px 15px; text-align:left; font-family:inherit; cursor:pointer; display:flex; flex-direction:column; gap:1px; transition:transform .15s;}
+.hr-tile:active{transform:scale(.97);}
+.hr-tile .t-ico{width:42px; height:42px; border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:21px; margin-bottom:9px;}
+.hr-tile b{font-size:16px;}
+.hr-tile small{font-size:11.5px; opacity:.75; line-height:1.4;}
+.hr-tile.docs{background:#E8F0FE; color:#174EA6; box-shadow:0 1px 2px rgba(27,34,51,.06), 0 10px 20px -12px rgba(66,133,244,.75);}
+.hr-tile.docs .t-ico{background:#4285F4; box-shadow:0 8px 14px -8px rgba(66,133,244,.9);}
+.hr-tile.sub{background:#FEF3D0; color:#7A4F00; box-shadow:0 1px 2px rgba(27,34,51,.06), 0 10px 20px -12px rgba(251,188,4,.9);}
+.hr-tile.sub .t-ico{background:#FBBC04; box-shadow:0 8px 14px -8px rgba(251,188,4,.95);}
+
+/* ---- ค้นหา + คำอธิบายสีปุ่มโทร ---- */
+.hr-search{position:relative; margin-bottom:8px;}
+.hr-search::before{content:"🔍"; position:absolute; left:14px; top:50%; transform:translateY(-50%); font-size:14px; opacity:.55; pointer-events:none;}
+.hr-search input{width:100%; padding:12px 14px 12px 40px; border:1.5px solid #E6EBF5; border-radius:14px; background:#fff; font:inherit; font-size:14.5px; color:var(--ink); -webkit-appearance:none; appearance:none;}
+.hr-search input:focus{outline:none; border-color:var(--c-main); box-shadow:0 0 0 4px color-mix(in srgb, var(--c-main) 20%, transparent);}
+.hr-legend{display:flex; align-items:center; gap:14px; flex-wrap:wrap; font-size:11.5px; color:var(--ink-soft); margin:0 2px 10px;}
+.hr-legend .dot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:0;}
+.hr-legend .dot.gdn{background:#1E9E6A;} .hr-legend .dot.stu{background:#4285F4;}
+.hr-legend-tip{margin-left:auto; opacity:.8;}
+
+/* ---- รายชื่อ ---- */
+.hr-list{display:flex; flex-direction:column; gap:10px;}
+.hr-row{display:flex; align-items:center; gap:12px; background:#fff; border-radius:20px; padding:10px 12px; cursor:pointer; box-shadow:0 1px 2px rgba(27,34,51,.05), 0 10px 18px -14px rgba(27,34,51,.3); transition:transform .12s, box-shadow .15s;}
+.hr-row:active{transform:scale(.985);}
+.hr-id{flex:1; min-width:0;}
+.hr-nick{font-size:16.5px; font-weight:700; color:var(--ink); line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.hr-nick.noni{font-size:14.5px; font-weight:600;}
+.hr-real{font-size:12px; color:var(--ink-soft); margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.hr-calls{display:flex; gap:8px; flex:none;}
+
+/* ---- รูป/ตัวอักษรย่อ ---- */
+.hr-av{position:relative; width:54px; height:54px; flex:none; border-radius:50%; background:var(--av-bg,#E8F0FE); color:var(--av-fg,#174EA6); display:inline-flex; align-items:center; justify-content:center; font-weight:700; font-size:22px;}
+.hr-av i{font-style:normal;}
+.hr-av img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; border-radius:50%; background:var(--av-bg,#E8F0FE);}
+.hr-av .hr-badge{position:absolute; right:-5px; bottom:-4px; min-width:21px; height:21px; padding:0 5px; border-radius:11px; background:#fff; color:var(--ink); font-size:10.5px; font-weight:700; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 7px rgba(27,34,51,.28);}
+.hr-av.sm{width:44px; height:44px; font-size:18px;}
+.hr-av.xl{width:124px; height:124px; font-size:50px; box-shadow:0 0 0 5px #fff, 0 16px 30px -12px var(--c-sh);}
+
+/* ---- ปุ่มโทรออก ---- */
+.hr-call{width:42px; height:42px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; border:none; padding:0; color:#fff; text-decoration:none; cursor:pointer; flex:none; transition:transform .12s;}
+.hr-call:active{transform:scale(.9);}
+.hr-call.gdn{background:#1E9E6A; box-shadow:0 8px 14px -8px rgba(30,158,106,.95);}
+.hr-call.stu{background:#4285F4; box-shadow:0 8px 14px -8px rgba(66,133,244,.95);}
+.hr-call.empty{background:#fff; color:#9AA5BD; border:1.5px dashed #CBD3E4; box-shadow:none; font-size:20px; font-family:inherit;}
+.hr-call.sm{width:38px; height:38px; align-self:center;}
+
+/* ---- หน้าข้อมูลนักเรียน ---- */
+.hr-profile{text-align:center; padding:4px 0 16px; display:flex; flex-direction:column; align-items:center;}
+.hr-pbtns{display:flex; gap:8px; justify-content:center; margin-top:16px;}
+.hr-pname{font-size:24px; margin-top:14px;}
+.hr-pfull{color:var(--ink-soft); font-size:14px; margin-top:2px;}
+.hr-chips{display:flex; gap:8px; justify-content:center; margin-top:10px;}
+.hr-chips span{background:var(--c-bg); color:var(--c-ink); border-radius:999px; padding:4px 12px; font-size:12.5px; font-weight:700;}
+.hr-info{padding:6px 16px;}
+.hr-f{display:flex; gap:12px; align-items:flex-start; padding:14px 0; border-bottom:1px solid #EEF1F7;}
+.hr-f:last-child{border-bottom:none;}
+.hr-f-ico{width:38px; height:38px; border-radius:12px; background:var(--c-bg); display:flex; align-items:center; justify-content:center; font-size:18px; flex:none;}
+.hr-f-main{flex:1; min-width:0;}
+.hr-f label{display:block; font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:4px;}
+.hr-f-val{font-size:16.5px; font-weight:600; color:var(--ink); word-break:break-word; line-height:1.45;}
+.hr-f input,.hr-f textarea{width:100%; padding:10px 12px; border:1.5px solid #E6EBF5; background:#F8FAFF; border-radius:12px; font:inherit; font-size:15.5px; color:var(--ink); resize:vertical;}
+.hr-f input:focus,.hr-f textarea:focus{outline:none; border-color:var(--c-main); box-shadow:0 0 0 4px color-mix(in srgb, var(--c-main) 20%, transparent);}
+.hr-savebar{position:sticky; bottom:0; display:flex; gap:10px; margin-top:auto; padding:14px 0 8px; background:linear-gradient(180deg,rgba(244,246,251,0),#F4F6FB 35%);}
+.hr-savebar .btn{flex:1;}
+.hr-savebar .btn-primary{flex:2;}
+
+/* ---- เช็คเอกสาร ---- */
+#view-hr-docs.active,#view-hr-summary.active{height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)); min-height:0; padding-bottom:16px;}
+#view-hr-docs .score-scroll,#view-hr-summary .score-scroll{flex:1 1 0; min-height:0; max-height:none;}
+#hrdocsSaveBtn:disabled{opacity:.45; cursor:not-allowed;}
+table.hr-docs thead th,table.hr-sum thead th{white-space:normal; vertical-align:bottom; line-height:1.25; min-width:86px; max-width:108px; cursor:pointer;}
+table.hr-sum thead th{cursor:default; min-width:84px;}
+table.hr-docs th .hd-title,table.hr-sum th .hd-title{display:block; font-size:12px; font-weight:700;}
+table.hr-docs th .hd-cnt{display:block; font-size:11px; font-weight:600; color:var(--c-ink); margin-top:3px; opacity:.85;}
+table.hr-docs th .hd-bar{display:block; height:4px; border-radius:2px; background:#E6EBF5; margin:5px auto 0; max-width:64px; overflow:hidden;}
+table.hr-docs th .hd-bar u{display:block; height:100%; width:0; background:var(--present); border-radius:2px; transition:width .25s;}
+table.hr-docs th.done .hd-cnt{color:var(--present);}
+table.hr-docs thead th.sum,table.hr-sum thead th.sum{min-width:62px; cursor:default; background:#FFF5F9;}
+.nm-sub{display:block; font-size:10.5px; font-weight:400; color:var(--ink-soft); margin-top:1px;}
+.hr-chk{width:32px; height:32px; border-radius:50%; border:2px solid #D5DBE8; background:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:16px; font-weight:700; color:#fff; cursor:pointer; transition:background .15s, border-color .15s, transform .12s;}
+.hr-chk:active{transform:scale(.88);}
+.hr-chk.on{background:var(--present); border-color:var(--present); box-shadow:0 6px 12px -6px rgba(30,158,106,.9);}
+table.hr-docs td.hr-miss{background:#FFF5F9; font-weight:700;}
+.miss-n{display:inline-flex; min-width:24px; height:24px; padding:0 6px; border-radius:12px; background:#FDECEC; color:#C62828; align-items:center; justify-content:center; font-size:12.5px;}
+.miss-ok{color:var(--present); font-size:16px;}
+
+/* ---- หน้าต่างหัวข้อเอกสาร ---- */
+.hr-suggest{margin:-4px 0 16px;}
+.hr-suggest .so-chip{font-size:12.5px; padding:7px 11px; font-weight:600; min-width:0;}
+.hr-doc-tools{display:flex; flex-wrap:wrap; gap:8px; margin:0 0 18px;}
+
+/* ---- เงินอุดหนุน: รายคน ---- */
+.money-row{display:flex; gap:10px; align-items:center;}
+.money{position:relative; flex:1;}
+.money span{position:absolute; left:15px; top:50%; transform:translateY(-50%); font-weight:700; font-size:18px; color:var(--ink-soft);}
+.money input{padding-left:36px !important; font-size:21px !important; font-weight:700;}
+.hr-sub-card{padding-bottom:0;}
+.o-chip{font-size:12px; font-weight:700; border-radius:999px; padding:5px 11px; background:#EEF1F7; color:var(--ink-soft); white-space:nowrap; flex:none;}
+.o-chip.ok{background:#E7F6EE; color:#13794F;}
+.o-chip.over{background:#FDECEC; color:#C62828;}
+.hr-who{display:flex; align-items:center; gap:12px; background:var(--c-bg); border-radius:20px; padding:10px 14px; margin-bottom:14px;}
+
+/* ---- ฟอร์มสั่งซื้อ ---- */
+.so-list{display:flex; flex-direction:column; gap:12px; margin-bottom:14px;}
+.so-card{background:#fff; border-radius:20px; padding:14px; border:2px solid transparent; box-shadow:0 1px 2px rgba(27,34,51,.05), 0 10px 18px -14px rgba(27,34,51,.3); transition:border-color .2s;}
+.so-card.on{border-color:color-mix(in srgb, var(--c-main) 50%, transparent);}
+.so-head{display:flex; align-items:center; gap:12px;}
+.so-ico{width:40px; height:40px; border-radius:13px; background:var(--c-bg); display:inline-flex; align-items:center; justify-content:center; font-size:20px; flex:none;}
+.so-nm{flex:1; min-width:0;}
+.so-nm b{display:block; font-size:14.5px; line-height:1.3;}
+.so-nm small{font-size:12px; color:var(--ink-soft);}
+.so-card .sw-track{flex:none;}
+.so-card .sw input:checked + .sw-track{background:var(--c-main);}
+.so-sec{margin-top:14px;}
+.so-sec > label{display:block; font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:7px;}
+.so-sec.so-row{display:flex; align-items:center; justify-content:space-between;}
+.so-sec.so-row > label{margin:0; font-size:13px;}
+.so-chips{display:flex; flex-wrap:wrap; gap:8px;}
+.so-chip{border:1.5px solid #E1E7F3; background:#fff; border-radius:12px; padding:8px 10px; min-width:56px; font:inherit; font-size:14.5px; font-weight:700; color:var(--ink); cursor:pointer; text-align:center; line-height:1.25; transition:background .15s, border-color .15s, color .15s;}
+.so-chip small{display:block; font-size:10.5px; font-weight:600; color:var(--ink-soft); margin-top:1px;}
+.so-chip.on{background:var(--c-main); border-color:var(--c-main); color:#fff; box-shadow:0 8px 14px -8px var(--c-sh);}
+.so-chip.on small{color:rgba(255,255,255,.88);}
+.so-input{width:100%; padding:12px 14px; border:1.5px solid #E6EBF5; border-radius:14px; background:#F8FAFF; font:inherit; font-size:16px; font-weight:600; color:var(--ink);}
+.so-input:focus{outline:none; border-color:var(--c-main); box-shadow:0 0 0 4px color-mix(in srgb, var(--c-main) 20%, transparent);}
+.so-step{display:inline-flex; align-items:center; gap:10px;}
+.so-step button{width:36px; height:36px; border-radius:50%; border:1.5px solid #E1E7F3; background:#fff; font:inherit; font-size:19px; font-weight:700; line-height:1; color:var(--ink); cursor:pointer; padding:0;}
+.so-step button:active{background:var(--c-main); border-color:var(--c-main); color:#fff;}
+.so-step b{min-width:24px; text-align:center; font-size:17px;}
+.so-cols{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+.so-col{display:flex; align-items:center; justify-content:space-between; gap:6px; border:1.5px solid #E1E7F3; border-radius:14px; padding:6px 8px 6px 12px; font-size:13.5px; font-weight:600;}
+.so-col.on{border-color:var(--c-main); background:var(--c-bg);}
+.so-col .so-step{gap:6px;} .so-col .so-step button{width:30px; height:30px; font-size:16px;} .so-col .so-step b{min-width:16px; font-size:15px;}
+.so-line{margin-top:12px; padding:9px 12px; border-radius:12px; background:var(--c-bg); color:var(--c-ink); font-size:13px; text-align:right;}
+.so-line b{font-size:15px;}
+.so-line.warn{background:#FEF3C7; color:#B45309; text-align:left; font-size:12.5px;}
+.so-bar{position:sticky; bottom:8px; margin-top:auto; background:#fff; border-radius:22px; padding:12px; box-shadow:0 -4px 8px -6px rgba(27,34,51,.1), 0 14px 34px -10px rgba(27,34,51,.5); z-index:5;}
+.so-sum{display:flex; gap:8px; margin-bottom:10px;}
+.so-sum > div{flex:1; background:#F4F6FB; border-radius:14px; padding:8px 6px; text-align:center; line-height:1.2;}
+.so-sum span{display:block; font-size:11px; color:var(--ink-soft); font-weight:600;}
+.so-sum b{font-size:17px; font-weight:800;}
+.so-sum .so-extra.over{background:#FDECEC;} .so-sum .so-extra.over b{color:#C62828;}
+.so-sum .so-extra:not(.over) b{color:#13794F;}
+
+/* ---- สรุปรวม ---- */
+.sub-cell{display:flex; flex-direction:column; gap:1px; line-height:1.25; min-width:62px;}
+.sub-cell b{font-size:12.5px;}
+.sub-cell span{font-size:10.5px; color:var(--ink-soft);}
+.sub-cell em{font-style:normal; font-size:11.5px; font-weight:700; color:var(--c-ink);}
+td.sub-none{color:#C9D1E2;}
+td.sub-total{font-weight:800; background:#FFF5F9;}
+td.sub-extra{font-weight:800; background:#FFF5F9; color:var(--ink-soft);}
+td.sub-extra.over{color:#C62828;}
+table.hr-sum tfoot td{position:sticky; bottom:0; z-index:2; background:#F7F9FE; border-top:2px solid #DCE3F0; font-weight:700;}
+table.hr-sum tfoot td.name-cell{z-index:3; font-weight:800;}
+table.hr-sum tfoot td.sub-total,table.hr-sum tfoot td.sub-extra{background:#FFE9F1;}
+.hrs-total{flex:1 1 0; min-height:0; overflow:auto;}
+.tot-card{background:#fff; border-radius:20px; padding:14px; margin-bottom:12px; box-shadow:0 1px 2px rgba(27,34,51,.05), 0 10px 18px -14px rgba(27,34,51,.3);}
+.tot-head{display:flex; align-items:center; gap:10px;}
+.tot-head b{flex:1; font-size:14.5px;}
+.tot-sum{font-size:12px; font-weight:700; color:var(--c-ink); background:var(--c-bg); border-radius:999px; padding:4px 10px; white-space:nowrap;}
+.tot-chips{display:flex; flex-wrap:wrap; gap:7px; margin-top:12px;}
+.tot-chip{background:#F4F6FB; border-radius:11px; padding:6px 10px; font-size:13px; font-weight:600;}
+.tot-chip b{color:var(--c-main); margin-left:3px;}
+
+@media (max-width:380px){
+  .hr-tile b{font-size:15px;}
+  .hr-call{width:38px; height:38px;}
+  .hr-av{width:48px; height:48px; font-size:20px;}
+  .so-cols{grid-template-columns:1fr;}
+}
+/* ---- เงินอุดหนุน: รับเงินสด (ไม่ต้องสั่งของ) ---- */
+.so-cash{margin-bottom:12px;}
+.so-cash small{display:block; line-height:1.35;}
+.o-chip.cash{background:#FFF4D6; color:#9A6A00;}
+.so-bar.cash .so-sum{display:none;}
+.so-cash-note{margin:0 0 14px; padding:12px 14px; border-radius:16px; background:#FFF8E6; color:#8A6100; font-size:13px; line-height:1.5;}
+
+/* ===== ปุ่มเลือกโหมดหน้าจอ (หน้าแรก) ===== */
+.mode-switch{display:inline-flex; gap:4px; margin-top:18px; padding:4px; background:#fff; border-radius:999px; box-shadow:0 1px 2px rgba(27,34,51,.06), 0 8px 18px -12px rgba(27,34,51,.35);}
+.mode-switch button{border:none; background:transparent; font:inherit; font-size:12.5px; font-weight:600; padding:8px 15px; border-radius:999px; color:var(--ink-soft); cursor:pointer; transition:background .2s, color .2s, box-shadow .2s;}
+.mode-switch button.on{background:var(--gold); color:#fff; box-shadow:0 6px 12px -6px rgba(79,107,245,.8);}
+
+/* ===== โหมด PC: หน้ากว้าง จัดการ์ดเป็นหลายคอลัมน์ (โหมดมือถือคือหน้าตาเดิมทั้งหมด) ===== */
+html.mode-pc #app{max-width:1180px;}
+html.mode-pc .view{padding:28px 40px 44px;}
+html.mode-pc .brand{padding:56px 0 36px;}
+html.mode-pc .menu{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px;}
+html.mode-pc .roster{display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:12px;}
+html.mode-pc .hr-list{display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:12px;}
+html.mode-pc .hr-tiles{grid-template-columns:repeat(4,minmax(0,1fr));}
+html.mode-pc .so-list{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; align-items:start;}
+html.mode-pc .exam-stats{max-width:720px;}
+html.mode-pc .modal-backdrop{align-items:center;}
+html.mode-pc .modal-sheet{max-width:560px; border-radius:24px; max-height:88vh;}
+html.mode-pc .topbar{padding:14px 18px;}
+html.mode-pc .topbar h2{font-size:20px;}
+html.mode-pc .so-bar{max-width:760px; margin-left:auto; margin-right:auto; width:100%;}
+html.mode-pc body.focus-mode #app{max-width:none;}
+@media (max-width:760px){
+  html.mode-pc .menu,html.mode-pc .so-list{grid-template-columns:1fr;}
+  html.mode-pc .hr-tiles{grid-template-columns:1fr 1fr;}
+  html.mode-pc .view{padding:16px;}
+}
+
+/* ---- สรุปเงินอุดหนุน: แตะช่องเพื่อบันทึกการรับของ ---- */
+table.hr-sum tbody td.rcv-td{cursor:pointer; transition:background .15s;}
+table.hr-sum tbody td.rcv-td:active{background:#EEF2FF;}
+table.hr-sum tbody td.rcv-td.done{background:#EAF7F0;}
+table.hr-sum tbody td.rcv-td.part{background:#FFF7E3;}
+.rcv-tag{display:inline-block; margin-top:3px; font-style:normal; text-decoration:none; font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:999px; background:#EEF1F7; color:var(--ink-soft); align-self:flex-start;}
+table.hr-sum tbody td.rcv-td.done .rcv-tag{background:#CFEEDD; color:#13794F;}
+table.hr-sum tbody td.rcv-td.part .rcv-tag{background:#FFE7A8; color:#9A6A00;}
+.rcv-who{font-size:13px; color:var(--ink-soft); margin:-8px 0 14px; line-height:1.5;}
+.rcv-step{display:flex; align-items:center; justify-content:center; gap:22px; margin:6px 0 16px;}
+.rcv-step button{width:54px; height:54px; border-radius:50%; border:1.5px solid #E1E7F3; background:#fff; font:inherit; font-size:26px; font-weight:700; line-height:1; color:var(--ink); cursor:pointer; padding:0;}
+.rcv-step button:active:not(:disabled){background:var(--gold); border-color:var(--gold); color:#fff;}
+.rcv-step button:disabled{opacity:.35; cursor:not-allowed;}
+.rcv-num{text-align:center; min-width:96px;}
+.rcv-num b{display:block; font-size:44px; font-weight:800; line-height:1.1;}
+.rcv-num small{font-size:12px; color:var(--ink-soft);}
