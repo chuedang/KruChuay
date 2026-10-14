@@ -190,6 +190,62 @@ function showSaving(msg="กำลังบันทึกข้อมูล..."
 }
 function hideSaving(){ clearInterval(_savingTimer); qs("#savingOverlay").classList.remove("active"); }
 
+/* ===== ลูกบอลเด้ง 3 ลูก (ย้ายมาจาก LoadingFX.balls ใน loading-fx.js) — ใช้กับหน้า "กำลังบันทึก" และ Splash =====
+   lfxBalls(text, { color, textStyle, size:'sm' }) คืน HTML ใส่ innerHTML ได้เลย · CSS ฉีดเองครั้งเดียว */
+const BALL_CSS = `
+.lfx-loader{ --lfx-color:#fff; --lfx-d:20px; --lfx-h:44px; --lfx-t:1s;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:10px 0; }
+.lfx-loader.sm{ --lfx-d:14px; --lfx-h:30px; }
+.lfx-balls{ display:flex; gap:20px; align-items:flex-end; }
+.lfx-col{ position:relative; width:var(--lfx-d); height:calc(var(--lfx-h) + var(--lfx-d)); }
+.lfx-ball{ position:absolute; left:0; bottom:0; width:100%; height:var(--lfx-d); border-radius:50%;
+  background:var(--lfx-color); box-shadow:0 2px 8px rgba(0,0,0,.28), 0 0 0 1px rgba(0,0,0,.06);
+  transform-origin:50% 100%; will-change:transform;
+  animation:lfx-hop var(--lfx-t) infinite backwards; animation-delay:calc(var(--i) * .13s); }
+.lfx-shadow{ position:absolute; left:0; right:0; bottom:-7px; height:6px; border-radius:50%;
+  background:rgba(0,0,0,.35); filter:blur(1.5px);
+  animation:lfx-shadow var(--lfx-t) infinite backwards; animation-delay:calc(var(--i) * .13s); }
+.lfx-text{ font-size:14px; text-align:center; }
+@keyframes lfx-hop{
+  0%  { transform:translateY(0) scale(1.45,.6); animation-timing-function:cubic-bezier(.2,.75,.35,1); }
+  46% { transform:translateY(calc(var(--lfx-h) * -1)) scale(1,1); animation-timing-function:cubic-bezier(.6,0,.85,.4); }
+  90% { transform:translateY(0) scale(.9,1.12); animation-timing-function:cubic-bezier(.3,.6,.5,1); }
+  100%{ transform:translateY(0) scale(1.45,.6); }
+}
+@keyframes lfx-shadow{
+  0%  { transform:scale(1.35,1); opacity:.4;  animation-timing-function:cubic-bezier(.2,.75,.35,1); }
+  46% { transform:scale(.45,.7); opacity:.12; animation-timing-function:cubic-bezier(.6,0,.85,.4); }
+  90% { transform:scale(1,1);    opacity:.32; animation-timing-function:cubic-bezier(.3,.6,.5,1); }
+  100%{ transform:scale(1.35,1); opacity:.4; }
+}
+@keyframes lfx-fade{ 0%,100%{ opacity:.35; } 50%{ opacity:1; } }
+@media (prefers-reduced-motion:reduce){
+  .lfx-ball{ animation:lfx-fade 1.2s ease-in-out infinite; animation-delay:calc(var(--i) * .2s); }
+  .lfx-shadow{ display:none; }
+}`;
+
+function lfxInjectCss(){
+  if(document.getElementById("lfxCss")) return;
+  const el = document.createElement("style");
+  el.id = "lfxCss"; el.textContent = BALL_CSS;
+  (document.head || document.documentElement).appendChild(el);
+}
+function lfxBalls(text, opts){
+  lfxInjectCss();
+  opts = opts || {};
+  const cols = [0,1,2].map(i => `<div class="lfx-col" style="--i:${i}"><i class="lfx-ball"></i><i class="lfx-shadow"></i></div>`).join("");
+  return `<div class="lfx-loader${opts.size === "sm" ? " sm" : ""}" role="status" style="--lfx-color:${opts.color || "#fff"}">` +
+           `<div class="lfx-balls">${cols}</div>` +
+           (text ? `<div class="lfx-text" style="${opts.textStyle || ""}">${text}</div>` : "") +
+         `</div>`;
+}
+(function initLoadingBalls(){
+  const sb = qs("#savingBalls");
+  if(sb) sb.innerHTML = lfxBalls("", { color:"#fff" });
+  const sp = qs("#splashLoading");
+  if(sp) sp.innerHTML = lfxBalls("กำลังโหลดข้อมูล...", { color:"#fff", size:"sm", textStyle:"color:#fff;font-size:13px;letter-spacing:.3px" });
+})();
+
 /* หน้าต่างยืนยันสวยๆ แทน confirm() ของเบราว์เซอร์ — คืน Promise<boolean>
    ใช้: if(await confirmDialog({title, message, stats:[{label,value,cls}], okText, danger:true})) {...} */
 function confirmDialog({ title="ยืนยัน", message="", stats=[], okText="ตกลง", cancelText="ยกเลิก", icon="⚠️", danger=false } = {}){
