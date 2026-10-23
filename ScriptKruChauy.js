@@ -3946,7 +3946,17 @@ function setMode(m){
   window.dispatchEvent(new Event("resize"));   // ให้ส่วนที่คำนวณขนาดตามจอ (กราฟ ฯลฯ) วัดใหม่
 }
 qs("#modeSwitch")?.addEventListener("click", e=>{ const b = e.target.closest("[data-mode]"); if(b && b.dataset.mode!==currentMode()) setMode(b.dataset.mode); });
-paintModeSwitch();
+
+/* ===== โหมดสว่าง/มืด ===== */
+function currentTheme(){ return document.documentElement.dataset.theme==="dark" ? "dark" : "light"; }
+function paintThemeSwitch(){ qsa("#themeSwitch [data-theme]").forEach(b=> b.classList.toggle("on", b.dataset.theme===currentTheme())); }
+function setTheme(t){
+  document.documentElement.dataset.theme = t;
+  try{ localStorage.setItem("kc_theme", t); }catch(e){}
+  paintThemeSwitch();
+}
+qs("#themeSwitch")?.addEventListener("click", e=>{ const b = e.target.closest("[data-theme]"); if(b && b.dataset.theme!==currentTheme()) setTheme(b.dataset.theme); });
+paintThemeSwitch();
 
 /* ================= SPLASH (ค้างจนกว่าจะโหลดข้อมูลเสร็จ) ================= */
 (async function splash(){
@@ -3956,6 +3966,7 @@ paintModeSwitch();
   try{
     if(document.fonts && document.fonts.ready) await Promise.race([document.fonts.ready, new Promise(r=>setTimeout(r,1500))]);
     logo.classList.add("show");
+    qs("#splashIcon")?.classList.add("show"); qs("#splashTag")?.classList.add("show");
     await new Promise(r=>setTimeout(r,500)); // ให้โลโก้เด้งขึ้นมาก่อนค่อยโชว์ข้อความโหลด
     if(loadingEl) loadingEl.classList.add("show");
 
@@ -3968,6 +3979,7 @@ paintModeSwitch();
     const dx = m.left + m.width/2 - innerWidth/2, dy = m.top + m.height/2 - innerHeight/2;
     logo.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(1)`;
     logo.classList.add("go");
+    qs("#splashIcon")?.classList.add("gone"); qs("#splashTag")?.classList.add("gone");
     qs("#splashBg").classList.add("fade");
     setTimeout(done, 1000);
   }catch(e){ done(); }
