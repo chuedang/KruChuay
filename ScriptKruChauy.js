@@ -3947,15 +3947,24 @@ function setMode(m){
 }
 qs("#modeSwitch")?.addEventListener("click", e=>{ const b = e.target.closest("[data-mode]"); if(b && b.dataset.mode!==currentMode()) setMode(b.dataset.mode); });
 
-/* ===== โหมดสว่าง/มืด ===== */
-function currentTheme(){ return document.documentElement.dataset.theme==="dark" ? "dark" : "light"; }
-function paintThemeSwitch(){ qsa("#themeSwitch [data-theme]").forEach(b=> b.classList.toggle("on", b.dataset.theme===currentTheme())); }
+/* ===== ธีมสี 4 แบบ: สว่าง / ครีม / เข้ม / ดำ ===== */
+const THEME_COLORS = { light:"#d7defc", cream:"#efe3c4", dark:"#121624", black:"#000000" };
+function currentTheme(){ const t = document.documentElement.dataset.theme; return THEME_COLORS[t] ? t : "light"; }
+function paintThemeSwitch(){ qsa("#themeGrid [data-theme]").forEach(b=>{ const on = b.dataset.theme===currentTheme(); b.classList.toggle("on", on); b.setAttribute("aria-checked", on); }); }
 function setTheme(t){
+  if(!THEME_COLORS[t]) t = "light";
   document.documentElement.dataset.theme = t;
   try{ localStorage.setItem("kc_theme", t); }catch(e){}
+  const mt = document.querySelector('meta[name="theme-color"]'); if(mt) mt.setAttribute("content", THEME_COLORS[t]);
   paintThemeSwitch();
 }
-qs("#themeSwitch")?.addEventListener("click", e=>{ const b = e.target.closest("[data-theme]"); if(b && b.dataset.theme!==currentTheme()) setTheme(b.dataset.theme); });
+qs("#themeBtn")?.addEventListener("click", ()=>{ paintThemeSwitch(); qs("#modalTheme").classList.add("active"); });
+qs("#modalTheme")?.addEventListener("click", e=>{
+  if(e.target.id==="modalTheme"){ e.target.classList.remove("active"); return; }   // แตะพื้นหลังเพื่อปิด
+  const b = e.target.closest("#themeGrid [data-theme]");
+  if(b){ if(b.dataset.theme!==currentTheme()) setTheme(b.dataset.theme); setTimeout(()=> qs("#modalTheme").classList.remove("active"), 220); }
+});
+qsa("#modalTheme [data-close]").forEach(b=> b.addEventListener("click", ()=> qs("#modalTheme").classList.remove("active")));
 paintThemeSwitch();
 
 /* ================= SPLASH (ค้างจนกว่าจะโหลดข้อมูลเสร็จ) ================= */
