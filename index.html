@@ -10,10 +10,13 @@
 /* โหมดหน้าจอ: pc / mobile (จำค่าที่เลือกไว้ ถ้ายังไม่เคยเลือกจะเดาจากความกว้างจอ) — ตั้งก่อนวาดหน้าเพื่อกันภาพกระพริบ */
 (function(){var m="mobile";try{var s=localStorage.getItem("kc_mode");m=(s==="pc"||s==="mobile")?s:(window.innerWidth>=900?"pc":"mobile");}catch(e){}document.documentElement.classList.add("mode-"+m);})();
 </script>
-<link rel="stylesheet" href="StyleKruChauy.css?v=33">
+<link rel="stylesheet" href="StyleKruChauy.css?v=35">
+<script>try{var t=localStorage.getItem("kc_theme");if(!t)t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t;}catch(e){}</script>
 </head>
 <body>
-<div id="splash"><div id="splashBg"></div><div id="splashLogo">Kru<span>Chauy</span></div><div id="splashLoading"></div></div>
+<div id="splash"><div id="splashBg"><i class="orb o1"></i><i class="orb o2"></i><i class="orb o3"></i></div>
+<div id="splashIcon"><svg viewBox="0 0 24 24" width="38" height="38" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5 12 4l9 4.5-9 4.5-9-4.5Z"/><path d="M7 11v4.2c0 1.2 2.2 2.8 5 2.8s5-1.6 5-2.8V11"/><path d="M21 8.5V14"/></svg></div>
+<div id="splashLogo">Kru<span>Chauy</span></div><div id="splashTag">ผู้ช่วยครู · เช็คชื่อ ลงคะแนน คลังข้อสอบ</div><div id="splashLoading"></div></div>
 <div id="app">
 
   <!-- HOME -->
@@ -25,6 +28,10 @@
       <div class="mode-switch" id="modeSwitch" role="group" aria-label="เลือกขนาดหน้าจอ">
         <button type="button" data-mode="mobile">📱 มือถือ</button>
         <button type="button" data-mode="pc">💻 PC</button>
+      </div>
+      <div class="mode-switch" id="themeSwitch" role="group" aria-label="เลือกโหมดสี" style="margin-top:8px">
+        <button type="button" data-theme="light">☀️ สว่าง</button>
+        <button type="button" data-theme="dark">🌙 มืด</button>
       </div>
     </div>
     <div class="menu">
@@ -51,6 +58,11 @@
       <button class="menu-item c-purple" data-go="exam" style="--i:4">
         <span class="ico">🧾</span>
         <span class="txt"><h3>ตรวจข้อสอบ</h3><p>สร้างชุดข้อสอบ ตั้งเฉลย แล้วสแกนกระดาษคำตอบด้วยกล้อง</p></span>
+        <span class="arrow">›</span>
+      </button>
+      <button class="menu-item c-teal" data-go="tools" style="--i:5">
+        <span class="ico">🧰</span>
+        <span class="txt"><h3>เครื่องมือครู</h3><p>สุ่มนักเรียน · เซต · และเครื่องมืออื่นๆ ในห้องเรียน</p></span>
         <span class="arrow">›</span>
       </button>
     </div>
@@ -612,6 +624,8 @@
     </div>
   </div>
 </div>
-<script src="ScriptKruChauy.js?v=44"></script>
+<script src="ScriptKruChauy.js?v=46"></script>
+<script src="tool.js?v=4"></script>
+<script src="Khosob.js?v=2"></script>
 </body>
 </html>
