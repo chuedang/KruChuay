@@ -57,6 +57,9 @@ function shuffle(arr){
 /* ข้อสอบ 1 ข้อ → ข้อที่พร้อมทำ (สลับตัวเลือก) */
 function makeQuestion(it){
   const opts = shuffle([{ t:it.a, ok:true }, ...it.wrong.map(t => ({ t, ok:false }))]);
+  // ตัวเลือกที่มีคำว่า "ถูกทุกข้อ" ให้ไปอยู่ท้ายสุด (ข้อ ง) เสมอ
+  const isAll = o => String(o.t).replace(/\s/g, "").includes("ถูกทุกข้อ");
+  opts.sort((x, y) => isAll(x) - isAll(y));   // sort เสถียร: ลำดับสุ่มของตัวอื่นยังเหมือนเดิม
   return { q:it.q, a:it.a, expl:it.expl, opts, picked:-1, correct:opts.findIndex(o=>o.ok), ms:0, done:false };
 }
 const pctOf = (c, n) => n ? Math.round(c / n * 100) : 0;
@@ -112,7 +115,7 @@ html.mode-pc .qz-sets{grid-template-columns:repeat(4,1fr);}
 .qz-ring-wrap{position:relative; width:230px; height:230px; margin:0 auto;}
 .qz-ring-wrap svg{width:100%; height:100%;}
 .qz-ring-mid{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;}
-.qz-ring-mid b{font-family:'Noto Sans Thai',sans-serif; font-size:72px; font-weight:800; line-height:1; letter-spacing:-2px; font-variant-numeric:tabular-nums; color:var(--ink);}
+.qz-ring-mid b{font-family:'Sarabun',sans-serif; font-size:72px; font-weight:800; line-height:1; letter-spacing:-2px; font-variant-numeric:tabular-nums; color:var(--ink);}
 .qz-ring-mid b i{font-style:normal; font-size:30px; font-weight:700; letter-spacing:0; margin-left:2px;}
 .qz-ring-mid span{margin-top:8px; font-size:14px; color:var(--ink-soft); font-weight:600;}
 .qz-ring-mid b span{margin:0; font-size:inherit; color:inherit; font-weight:inherit;}
@@ -162,13 +165,13 @@ html.mode-pc .qz-q{font-size:19px;}
 .qz-stats span{display:block; font-size:11.5px; color:var(--ink-soft); margin-top:2px;}
 .qz-stats .g b{color:var(--ok);} .qz-stats .r b{color:var(--no);}
 .qz-best{display:inline-block; margin-top:12px; background:#FFF4D6; color:#8A5A00; font-size:12.5px; font-weight:700; border-radius:999px; padding:5px 12px;}
-.qz-h{font-family:'Noto Serif Thai',serif; font-size:15px; margin:18px 2px 8px; color:var(--ink);}
+.qz-h{font-family:'Sarabun',sans-serif; font-size:15px; margin:18px 2px 8px; color:var(--ink);}
 .qz-h{display:flex; align-items:baseline; gap:8px;}
-.qz-h small{font-family:'Noto Sans Thai',sans-serif; font-size:12px; font-weight:500; color:var(--ink-soft);}
+.qz-h small{font-family:'Sarabun',sans-serif; font-size:12px; font-weight:500; color:var(--ink-soft);}
 .qz-tiles{display:grid; grid-template-columns:repeat(auto-fill,minmax(60px,1fr)); gap:8px; margin-bottom:12px;}
 .qz-tile{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; padding:8px 2px 7px; border:0; border-radius:12px; color:#fff; font:inherit; cursor:pointer; box-shadow:0 6px 12px -8px rgba(27,34,51,.45); transition:transform .12s, box-shadow .15s;}
 .qz-tile:active{transform:scale(.94);}
-.qz-tile b{font-size:15px; font-weight:800; line-height:1.2; font-family:'Noto Sans Thai',sans-serif;}
+.qz-tile b{font-size:15px; font-weight:800; line-height:1.2; font-family:'Sarabun',sans-serif;}
 .qz-tile span{font-size:11.5px; font-weight:700; line-height:1.2; font-variant-numeric:tabular-nums; opacity:.95;}
 .qz-tile.ok{background:var(--ok);} .qz-tile.no{background:var(--no);}
 .qz-tile.sel{outline:3px solid var(--c-main); outline-offset:2px;}
@@ -185,37 +188,94 @@ html.mode-pc .qz-q{font-size:19px;}
 .qz-acts .btn{width:100%;}
 .qz-acts .btn-main{background:var(--c-main); color:#fff;}
 
-/* ---- โหมดมืด ---- */
-html[data-theme="dark"] .qz-view{--c-main:#6C83FA; --c-bg:#252E4B; --c-ink:#C9D3F5; --c-sh:rgba(0,0,0,.55);}
+/* ---- ธีมครีม ---- */
+html[data-theme="cream"] .c-slate{--c-bg:#E9E9EA}
+html[data-theme="cream"] .qz-view{--c-bg:#E9E9EA}
+html[data-theme="cream"] .qz-warn{background:#F6EDDA}
+html[data-theme="cream"] .qz-chip{border:1.5px solid #E9DEC5;background:#FCF6E6}
+html[data-theme="cream"] .qz-set{background:#FCF6E6;border:1.5px solid #E9DEC5}
+html[data-theme="cream"] .qz-set.done{background:linear-gradient(180deg,#FCF6E6,#F7F0E0)}
+html[data-theme="cream"] .qz-bar{background:#F5EBD6}
+html[data-theme="cream"] .qz-time.stop{background:#F5EBD6}
+html[data-theme="cream"] .qz-qcard{background:#FCF6E6}
+html[data-theme="cream"] .qz-opt{border:1.5px solid #E9DEC5;background:#FCF6E6}
+html[data-theme="cream"] .qz-opt .lt{background:#F7EFDD}
+html[data-theme="cream"] .qz-opt.ok{background:#F4EBD5}
+html[data-theme="cream"] .qz-opt.no{background:#F6EFDD}
+html[data-theme="cream"] .qz-expl{background:#F5ECD7}
+html[data-theme="cream"] .qz-foot .btn:disabled{background:#E1D5B9}
+html[data-theme="cream"] .qz-hero{background:#FCF6E6}
+html[data-theme="cream"] .qz-stats div{background:#F7EFDD}
+html[data-theme="cream"] .qz-best{background:#FCF2D7}
+html[data-theme="cream"] .qz-detail{background:#FCF6E6;border:1.5px solid #E9DEC5}
+html[data-theme="cream"] .qz-detail .ex{background:#F5ECD7}
+/* ---- ธีมเข้ม ---- */
+html[data-theme="dark"] .qz-view{--c-main:#6C83FA; --c-bg:#2B3145; --c-ink:#C9D3F5; --c-sh:rgba(0,0,0,.55);}
 html[data-theme="dark"] .qz-opt.ok{background:#173A2E;} html[data-theme="dark"] .qz-opt.no{background:#43202A;}
 html[data-theme="dark"] .qz-best{background:#4A3A12; color:#FBD36B;}
-html[data-theme="dark"] .c-slate{--c-bg:#2c3652;--c-ink:#e0e5f1}
-html[data-theme="dark"] .qz-view{--c-bg:#2c3652;--c-ink:#e0e5f1}
-html[data-theme="dark"] .qz-warn{background:#413316;border:1.5px solid #7f6739;color:#f4d59c}
-html[data-theme="dark"] .qz-chip{border:1.5px solid #2d3754;background:#1e2538}
-html[data-theme="dark"] .qz-set{background:#1e2538;border:1.5px solid #2d3754;box-shadow:0 12px 24px -22px rgba(0,0,0,0.75)}
-html[data-theme="dark"] .qz-set.done{border-color:rgba(33,155,105,0.45);background:linear-gradient(180deg,#1e2538,#1d3228)}
-html[data-theme="dark"] .qz-ring .bg{stroke:#29324c}
-html[data-theme="dark"] .qz-bar{background:#29324c}
-html[data-theme="dark"] .qz-time.stop{background:#29324c}
-html[data-theme="dark"] .qz-qcard{background:#1e2538;box-shadow:0 1px 2px rgba(0,0,0,0.12), 0 14px 26px -20px rgba(0,0,0,0.56)}
-html[data-theme="dark"] .qz-opt{border:1.5px solid #2d3754;background:#1e2538}
-html[data-theme="dark"] .qz-opt .lt{background:#252d45}
-html[data-theme="dark"] .qz-opt.ok{background:#213a2d}
-html[data-theme="dark"] .qz-opt.no{background:#3c1717}
-html[data-theme="dark"] .qz-expl{background:#20392c;color:#bceed9}
-html[data-theme="dark"] .qz-expl b{color:#a6edcf}
-html[data-theme="dark"] .qz-foot{background:linear-gradient(0deg,var(--bg) 70%,rgba(18,22,36,0))}
-html[data-theme="dark"] .qz-foot .btn:disabled{background:#4b5571}
-html[data-theme="dark"] .qz-hero{background:#1e2538;box-shadow:0 1px 2px rgba(0,0,0,0.12), 0 14px 26px -20px rgba(0,0,0,0.56)}
-html[data-theme="dark"] .qz-stats div{background:#252d45}
-html[data-theme="dark"] .qz-best{background:#4a3d19;color:#f4d59c}
+html[data-theme="dark"] .c-slate{--c-bg:#32394C;--c-ink:#E0E5F1}
+html[data-theme="dark"] .qz-view{--c-bg:#32394C;--c-ink:#E0E5F1}
+html[data-theme="dark"] .qz-warn{background:#413316;border:1.5px solid #7F6739;color:#F4D59C}
+html[data-theme="dark"] .qz-chip{border:1.5px solid #333A4E;background:#222734}
+html[data-theme="dark"] .qz-set{background:#222734;border:1.5px solid #333A4E;box-shadow:0 12px 24px -22px rgba(0,0,0,0.75)}
+html[data-theme="dark"] .qz-set.done{border-color:rgba(33,155,105,0.45);background:linear-gradient(180deg,#222734,#1D3228)}
+html[data-theme="dark"] .qz-ring .bg{stroke:#2E3547}
+html[data-theme="dark"] .qz-bar{background:#2E3547}
+html[data-theme="dark"] .qz-time.stop{background:#2E3547}
+html[data-theme="dark"] .qz-qcard{background:#222734;box-shadow:0 1px 2px rgba(0,0,0,0.12), 0 14px 26px -20px rgba(0,0,0,0.56)}
+html[data-theme="dark"] .qz-opt{border:1.5px solid #333A4E;background:#222734}
+html[data-theme="dark"] .qz-opt .lt{background:#2A2F40}
+html[data-theme="dark"] .qz-opt.ok{background:#213A2D}
+html[data-theme="dark"] .qz-opt.no{background:#3C1717}
+html[data-theme="dark"] .qz-expl{background:#20392C;color:#BCEED9}
+html[data-theme="dark"] .qz-expl b{color:#A6EDCF}
+html[data-theme="dark"] .qz-foot{background:linear-gradient(0deg,var(--bg) 70%,rgba(21,23,33,0))}
+html[data-theme="dark"] .qz-foot .btn:disabled{background:#4B5571}
+html[data-theme="dark"] .qz-hero{background:#222734;box-shadow:0 1px 2px rgba(0,0,0,0.12), 0 14px 26px -20px rgba(0,0,0,0.56)}
+html[data-theme="dark"] .qz-stats div{background:#2A2F40}
+html[data-theme="dark"] .qz-best{background:#4A3D19;color:#F4D59C}
 html[data-theme="dark"] .qz-tile{box-shadow:0 6px 12px -8px rgba(0,0,0,0.72)}
-html[data-theme="dark"] .qz-detail{background:#1e2538;border:1.5px solid #2d3754}
-html[data-theme="dark"] .qz-detail .ex{background:#20392c;color:#bceed9}
+html[data-theme="dark"] .qz-detail{background:#222734;border:1.5px solid #333A4E}
+html[data-theme="dark"] .qz-detail .ex{background:#20392C;color:#BCEED9}
+/* ---- ธีมดำ ---- */
+html[data-theme="black"] .qz-view{--c-main:#6C83FA; --c-bg:#1E1E20; --c-ink:#C9D3F5; --c-sh:rgba(0,0,0,.55);}
+html[data-theme="black"] .qz-opt.ok{background:#122821;} html[data-theme="black"] .qz-opt.no{background:#2E191F;}
+html[data-theme="black"] .qz-best{background:#322810; color:#FBD36B;}
+html[data-theme="black"] .c-slate{--c-bg:#212224;--c-ink:#E7E8EA}
+html[data-theme="black"] .qz-view{--c-bg:#212224;--c-ink:#E7E8EA}
+html[data-theme="black"] .qz-warn{background:#2C2412;border:1.5px solid #58492D;color:#F4D59C}
+html[data-theme="black"] .qz-chip{border:1.5px solid #222325;background:#121212}
+html[data-theme="black"] .qz-set{background:#121212;border:1.5px solid #222325;box-shadow:0 12px 24px -22px rgba(0,0,0,0.75)}
+html[data-theme="black"] .qz-set.done{border-color:rgba(30,105,74,0.45);background:linear-gradient(180deg,#121212,#16231D)}
+html[data-theme="black"] .qz-ring .bg{stroke:#1F2021}
+html[data-theme="black"] .qz-bar{background:#1F2021}
+html[data-theme="black"] .qz-time.stop{background:#1F2021}
+html[data-theme="black"] .qz-qcard{background:#121212;box-shadow:0 1px 2px rgba(0,0,0,0.12), 0 14px 26px -20px rgba(0,0,0,0.56)}
+html[data-theme="black"] .qz-opt{border:1.5px solid #222325;background:#121212}
+html[data-theme="black"] .qz-opt .lt{background:#1B1B1B}
+html[data-theme="black"] .qz-opt.ok{background:#192820}
+html[data-theme="black"] .qz-opt.no{background:#291313}
+html[data-theme="black"] .qz-expl{background:#182820;color:#BCEED9}
+html[data-theme="black"] .qz-expl b{color:#A6EDCF}
+html[data-theme="black"] .qz-foot{background:linear-gradient(0deg,var(--bg) 70%,rgba(0,0,0,0))}
+html[data-theme="black"] .qz-foot .btn:disabled{background:#323335}
+html[data-theme="black"] .qz-hero{background:#121212;box-shadow:0 1px 2px rgba(0,0,0,0.12), 0 14px 26px -20px rgba(0,0,0,0.56)}
+html[data-theme="black"] .qz-stats div{background:#1B1B1B}
+html[data-theme="black"] .qz-best{background:#332B15;color:#F4D59C}
+html[data-theme="black"] .qz-tile{box-shadow:0 6px 12px -8px rgba(0,0,0,0.72)}
+html[data-theme="black"] .qz-detail{background:#121212;border:1.5px solid #222325}
+html[data-theme="black"] .qz-detail .ex{background:#182820;color:#BCEED9}
+
+/* ---- ฟอนต์ Sarabun ทั้งคลังข้อสอบ (รวมปุ่มทุกปุ่ม) ---- */
+.qz-view, .qz-view *, .qz-view button, .qz-view input, .qz-view select, .qz-view textarea{font-family:'Sarabun',sans-serif !important;}
 `;
 (function injectCss(){
   if($("#qzCss")) return;
+  if(!$("#qzFont")){   // โหลดฟอนต์ Sarabun (มีหัวตัวอักษร)
+    const lk = document.createElement("link"); lk.id = "qzFont"; lk.rel = "stylesheet";
+    lk.href = "https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700;800&display=swap";
+    document.head.appendChild(lk);
+  }
   const st = document.createElement("style"); st.id = "qzCss"; st.textContent = CSS;
   document.head.appendChild(st);
 })();
