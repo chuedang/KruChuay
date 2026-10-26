@@ -10,7 +10,7 @@
 /* โหมดหน้าจอ: pc / mobile (จำค่าที่เลือกไว้ ถ้ายังไม่เคยเลือกจะเดาจากความกว้างจอ) — ตั้งก่อนวาดหน้าเพื่อกันภาพกระพริบ */
 (function(){var m="mobile";try{var s=localStorage.getItem("kc_mode");m=(s==="pc"||s==="mobile")?s:(window.innerWidth>=900?"pc":"mobile");}catch(e){}document.documentElement.classList.add("mode-"+m);})();
 </script>
-<link rel="stylesheet" href="StyleKruChauy.css?v=36">
+<link rel="stylesheet" href="StyleKruChauy.css?v=37">
 <script>try{var T={light:"#d7defc",cream:"#efe3c4",dark:"#121624",black:"#000000"};var t=localStorage.getItem("kc_theme");if(!T[t])t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t;var mt=document.querySelector('meta[name="theme-color"]');if(mt)mt.setAttribute("content",T[t]);}catch(e){}</script>
 </head>
 <body>
@@ -184,6 +184,7 @@
         <button id="addHeaderBtn" class="btn btn-outline btn-sm">＋ เพิ่มวันที่</button>
         <span class="score-info" id="scoreInfo"></span>
       </div>
+      <div class="stu-search"><span class="ss-ico">🔍</span><input type="text" id="scoreSearch" placeholder="ค้นหาชื่อนักเรียน / เลขที่" autocomplete="off"><button type="button" class="ss-clear" id="scoreSearchClear" aria-label="ล้างคำค้น">✕</button></div>
       <div class="score-scroll"><div id="scoreTableWrap"></div></div>
     </div>
     <div class="pane" id="examPane" style="display:none;">
@@ -232,6 +233,11 @@
       <button class="focus-btn" title="ขยายเต็มจอ">⤢</button>
     </div>
     <div class="period-bar" data-mode="full" data-compact="1"></div>
+    <div class="pend-mode">
+      <div class="seg" id="pendModeSeg"><button type="button" data-pm="today">📅 ถึงวันนี้</button><button type="button" data-pm="all">📚 ทั้งหมด</button></div>
+      <div class="pend-range" id="pendRange"></div>
+    </div>
+    <div class="stu-search"><span class="ss-ico">🔍</span><input type="text" id="pendSearch" placeholder="ค้นหาชื่อนักเรียน / เลขที่" autocomplete="off"><button type="button" class="ss-clear" id="pendSearchClear" aria-label="ล้างคำค้น">✕</button></div>
     <div class="table-toolbar"><span class="score-info" id="pendInfo"></span><label class="sw"><input type="checkbox" id="pendOnly"><span class="sw-track"></span>เฉพาะคนที่มีงานค้าง</label></div>
     <div class="score-scroll"><div id="pendTableWrap"></div></div>
   </section>
@@ -639,8 +645,8 @@
     </div>
   </div>
 </div>
-<script src="ScriptKruChauy.js?v=47"></script>
-<script src="tool.js?v=4"></script>
+<script src="ScriptKruChauy.js?v=49"></script>
+<script src="tool.js?v=9"></script>
 <script src="Khosob.js?v=2"></script>
 </body>
 </html>
