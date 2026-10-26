@@ -2019,3 +2019,12 @@ html[data-theme="black"] .rcv-tag{background:#1E1E20}
 html[data-theme="black"] table.hr-sum tbody td.rcv-td.done .rcv-tag{background:#21342A;color:#A6E8CD}
 html[data-theme="black"] table.hr-sum tbody td.rcv-td.part .rcv-tag{background:#544829;color:#F3D490}
 html[data-theme="black"] .rcv-step button{border:1.5px solid #222325;background:#121212}
+/* ===== ช่องค้นหาชื่อนักเรียน + โหมดเช็คงานค้าง ===== */
+.stu-search{position:relative; display:flex; align-items:center; margin:0 0 10px;}
+.stu-search .ss-ico{position:absolute; left:12px; font-size:14px; pointer-events:none; opacity:.7;}
+.stu-search input{width:100%; box-sizing:border-box; padding:10px 38px 10px 36px; border:1.5px solid #E1E7F3; border-radius:14px; background:#fff; font:500 14px 'Noto Sans Thai',sans-serif; color:var(--ink); outline:none; transition:border-color .15s, box-shadow .15s;}
+.stu-search input:focus{border-color:var(--gold); box-shadow:0 0 0 4px color-mix(in srgb, var(--gold) 20%, transparent);}
+.stu-search .ss-clear{position:absolute; right:8px; width:26px; height:26px; border:0; border-radius:50%; background:#EEF1F8; color:var(--ink-soft); font-size:12px; cursor:pointer; display:none;}
+.stu-search.has-q .ss-clear{display:block;}
+.pend-mode{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 10px;}
+.pend-range{font-size:12px; font-weight:600; color:var(--ink-soft);}
