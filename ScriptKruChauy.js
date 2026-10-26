@@ -19,6 +19,24 @@ const qsa = (s, r=document) => Array.from(r.querySelectorAll(s));
 const _reduceMotion = !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
 const toISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 const todayISO = () => toISO(new Date());
+
+/* ค้นหาชื่อนักเรียน (ตารางคะแนน + งานค้าง) — ล้างคำค้นอัตโนมัติเมื่อเปลี่ยนห้อง/วิชา */
+const stuSearch = { score:{ q:"", key:"" }, pend:{ q:"", key:"" } };
+const normQ = s => String(s==null ? "" : s).trim().toLowerCase();
+const matchStudent = (st, q) => { q = normQ(q); return !q || normQ(st.label).includes(q) || normQ(st.no)===q; };
+function syncSearchBox(kind){
+  const inp = qs(kind==="score" ? "#scoreSearch" : "#pendSearch");
+  if(inp && inp.parentElement) inp.parentElement.classList.toggle("has-q", !!stuSearch[kind].q);
+}
+function stuSearchQ(kind){
+  const s = stuSearch[kind], k = `${state.score.room}|${state.score.subject}`;
+  if(s.key!==k){
+    s.key = k; s.q = "";
+    const inp = qs(kind==="score" ? "#scoreSearch" : "#pendSearch"); if(inp) inp.value = "";
+    syncSearchBox(kind);
+  }
+  return s.q;
+}
 const isValidDate = t => /^\d{4}-\d{2}-\d{2}$/.test(t);
 /* รับได้เฉพาะ yyyy-mm-dd หรือ ISO จาก Google Sheet (yyyy-mm-ddT...) นอกนั้นคืน "" (ไม่ใช่วันที่) */
 const dateKey = v => {
@@ -284,6 +302,9 @@ function showView(id){
   const rect = animate ? prevActive.getBoundingClientRect() : null;
   qsa(".view").forEach(v=>v.classList.remove("active"));
   next.classList.add("active");
+  /* เข้าหน้าใหม่ทุกครั้งให้อยู่บนสุด (ไม่ค้างตำแหน่งเลื่อนของหน้าก่อน) */
+  try{ window.scrollTo({ top:0, left:0, behavior:"instant" }); }catch(_){ window.scrollTo(0,0); }
+  next.scrollTop = 0;
   if(animate){
     const dir = back ? "nav-back" : "nav-fwd";
     Object.assign(prevActive.style, { left:rect.left+"px", top:rect.top+"px", width:rect.width+"px", height:rect.height+"px" });
@@ -414,8 +435,10 @@ function subjectsOfRoom(room){
 function fillSubjectSelect(roomSel){
   const subSel = roomSel.closest(".view, .modal-sheet").querySelector("select.subject-select");
   if(!roomSel.value){ subSel.innerHTML = `<option value="">เลือกห้องก่อน</option>`; return; }
+  const subs = subjectsOfRoom(roomSel.value);
   subSel.innerHTML = `<option value="">เลือกวิชา</option>` +
-    subjectsOfRoom(roomSel.value).map(s=>`<option value="${s.name}">${s.label}</option>`).join("");
+    subs.map(s=>`<option value="${s.name}">${s.label}</option>`).join("");
+  if(subs.length===1) subSel.value = subs[0].name;   // ชั้นนี้มีวิชาเดียว → เลือกให้อัตโนมัติ
 }
 function fillRoomSelects(scope=document){
   const opts = uniqueRooms().map(r=>`<option value="${r}">${r}</option>`).join("");
@@ -655,8 +678,10 @@ function scoreRoster(room){
 
 function renderScoreTable(){
   const wrap = qs("#scoreTableWrap");
-  const roster = scoreRoster(state.score.room);
-  if(roster.length===0){ wrap.innerHTML = `<div class="empty-note">ไม่พบรายชื่อนักเรียนในห้องนี้</div>`; updateScoreSaveBar(); return; }
+  const rosterAll = scoreRoster(state.score.room);
+  const sq = stuSearchQ("score");
+  const roster = rosterAll.filter(st => matchStudent(st, sq));
+  if(rosterAll.length===0){ wrap.innerHTML = `<div class="empty-note">ไม่พบรายชื่อนักเรียนในห้องนี้</div>`; updateScoreSaveBar(); return; }
 
   if(state.score.headers.length===0){
     wrap.innerHTML = `
@@ -671,6 +696,13 @@ function renderScoreTable(){
       </div>`;
     qs("#esGen").addEventListener("click", ()=> qs("#genHeaderBtn").click());
     qs("#esAdd").addEventListener("click", ()=> openAssignmentModal(null));
+    updateScoreSaveBar();
+    return;
+  }
+
+  if(roster.length===0){   // ค้นหาแล้วไม่เจอใคร
+    wrap.innerHTML = `<div class="empty-note">ไม่พบนักเรียนที่ชื่อหรือเลขที่ตรงกับ “${esc(sq)}”</div>`;
+    const info0 = qs("#scoreInfo"); if(info0) info0.textContent = `พบ 0/${rosterAll.length} คน`;
     updateScoreSaveBar();
     return;
   }
@@ -708,7 +740,7 @@ function renderScoreTable(){
   wrap.innerHTML = `<table class="score-table"><thead>${thead}</thead><tbody>${rows}</tbody></table>${hint}`;
 
   const info = qs("#scoreInfo");
-  if(info) info.textContent = `${roster.length} คน · ${state.score.headers.length} วัน`;
+  if(info) info.textContent = `${sq ? `พบ ${roster.length}/${rosterAll.length}` : roster.length} คน · ${state.score.headers.length} วัน`;
   if(!state.score.scrolled){   // เปิดมาครั้งแรก เลื่อนไปที่คอลัมน์ของวันนี้ (หรือวันสอนถัดไป) ให้เลย
     state.score.scrolled = true;
     const hs = state.score.headers, t = todayISO();
@@ -1851,25 +1883,43 @@ renderPeriodBars();
 
 /* ================= สรุปงานค้างนักเรียน (ไม่โชว์คะแนน ใช้ให้เด็กดูได้ว่ายังขาดงานอะไรบ้าง) ================= */
 const pendOnlyMissing = () => { try{ return localStorage.getItem("kc_pendOnly")==="1"; }catch(e){ return false; } };
+const pendMode = () => { try{ return localStorage.getItem("kc_pendMode")==="all" ? "all" : "today"; }catch(e){ return "today"; } };
 function renderPending(){
   const { room, subject } = state.score;
   qs("#pendHeadSub").textContent = `${room} · ${subject} · ภาคเรียนที่ ${period.term} · ${period.type}`;
-  const acts = state.activities
+  const mode = pendMode();
+  qsa("#pendModeSeg button").forEach(b=> b.classList.toggle("on", b.dataset.pm===mode));
+  /* งานทั้งหมดของ ห้องนี้ + วิชานี้ + ภาคเรียน/ประเภทที่เลือก เรียงจากงานแรก */
+  const allActs = state.activities
     .filter(a=> sameStr(a["รายวิชา"],subject) && sameStr(a["ระดับชั้น"],room) && inPeriod(a) && dateKey(a["วันที่"]))
     .map(a=> ({ date: dateKey(a["วันที่"]), name: String(a["งาน"]||"").trim() }))
     .sort((x,y)=> x.date.localeCompare(y.date));
+  /* โหมด "ถึงวันนี้" = ตั้งแต่งานแรกจนถึงวันนี้ (ไม่นับงานของวันข้างหน้า) · โหมด "ทั้งหมด" = ทั้งเทอม */
+  const today = todayISO();
+  const acts = mode==="today" ? allActs.filter(a=> a.date<=today) : allActs;
+  const rng = qs("#pendRange");
+  if(rng){
+    rng.textContent = !allActs.length ? ""
+      : mode==="today"
+        ? (acts.length ? `เช็คตั้งแต่งานแรก ${fmtLong(acts[0].date)} ถึงวันนี้` : `งานแรกคือ ${fmtLong(allActs[0].date)} (ยังไม่ถึงวัน)`)
+        : `เช็คงานทั้งเทอม ${fmtLong(allActs[0].date)} – ${fmtLong(allActs[allActs.length-1].date)}`;
+  }
   const roster = scoreRoster(room);
   const wrap = qs("#pendTableWrap");
   if(roster.length===0){ wrap.innerHTML = `<div class="empty-note">ไม่พบรายชื่อนักเรียนในห้องนี้</div>`; qs("#pendInfo").textContent = ""; return; }
-  if(acts.length===0){ wrap.innerHTML = `<div class="empty-note">ยังไม่มีหัวคะแนนของวิชานี้ในภาคเรียน/ประเภทที่เลือก</div>`; qs("#pendInfo").textContent = ""; return; }
+  if(allActs.length===0){ wrap.innerHTML = `<div class="empty-note">ยังไม่มีหัวคะแนนของวิชานี้ในภาคเรียน/ประเภทที่เลือก</div>`; qs("#pendInfo").textContent = ""; return; }
+  if(acts.length===0){ wrap.innerHTML = `<div class="empty-note">ยังไม่ถึงวันของงานแรก<br><small>(เลือก "ทั้งหมด" เพื่อดูงานทั้งเทอม)</small></div>`; qs("#pendInfo").textContent = ""; return; }
 
-  let doneN = 0, shown = 0;
+  const sq = stuSearchQ("pend");
+  let doneN = 0, shown = 0, matched = 0;
   const onlyMissing = pendOnlyMissing();
   const tg = qs("#pendOnly"); if(tg) tg.checked = onlyMissing;
   const rowsHtml = roster.map(st=>{
     const missing = acts.filter(a => savedScore(st.key, a.date) === null);
     if(missing.length===0) doneN++;
-    if(onlyMissing && missing.length===0) return "";      // ติ๊ก "เฉพาะคนที่มีงานค้าง" → ซ่อนคนที่ครบแล้ว
+    if(!matchStudent(st, sq)) return "";                      // ค้นหาชื่อ → แสดงเฉพาะคนที่ตรง
+    matched++;
+    if(onlyMissing && !sq && missing.length===0) return "";   // ติ๊ก "เฉพาะคนที่มีงานค้าง" (ตอนค้นหาชื่อ จะโชว์คนนั้นเสมอ)
     shown++;
     const chips = missing.map(a=> `<span class="pend-chip">${fmtLong(a.date)}${a.name ? ` · ${esc(a.name)}` : ""}</span>`).join("");
     return `<tr><td class="name-cell">${snum(st.no)}${esc(st.label)}</td>
@@ -1877,9 +1927,21 @@ function renderPending(){
   }).join("");
   wrap.innerHTML = shown
     ? `<table class="score-table pend-table"><thead><tr><th class="name-head">ชื่อ</th><th>งานที่ค้าง</th></tr></thead><tbody>${rowsHtml}</tbody></table>`
-    : `<div class="empty-note">ทุกคนส่งงานครบแล้ว 🎉<br><small>(ปิดสวิตช์ "เฉพาะคนที่มีงานค้าง" เพื่อดูทั้งห้อง)</small></div>`;
-  qs("#pendInfo").textContent = `${acts.length} งาน · ครบแล้ว ${doneN}/${roster.length} คน` + (onlyMissing ? ` · แสดง ${shown} คนที่ค้าง` : "");
+    : (sq ? `<div class="empty-note">ไม่พบนักเรียนที่ชื่อหรือเลขที่ตรงกับ “${esc(sq)}”</div>`
+          : `<div class="empty-note">ทุกคนส่งงานครบแล้ว 🎉<br><small>(ปิดสวิตช์ "เฉพาะคนที่มีงานค้าง" เพื่อดูทั้งห้อง)</small></div>`);
+  qs("#pendInfo").textContent = `${acts.length} งาน · ครบแล้ว ${doneN}/${roster.length} คน` + (sq ? ` · พบ ${matched} คน` : onlyMissing ? ` · แสดง ${shown} คนที่ค้าง` : "");
 }
+qs("#pendModeSeg")?.addEventListener("click", e=>{
+  const b = e.target.closest("button[data-pm]"); if(!b) return;
+  try{ localStorage.setItem("kc_pendMode", b.dataset.pm); }catch(err){}
+  renderPending();
+});
+/* ช่องค้นหาชื่อ: ตารางคะแนน + งานค้าง */
+[["score","#scoreSearch","#scoreSearchClear",()=>renderScoreTable()],["pend","#pendSearch","#pendSearchClear",()=>renderPending()]].forEach(([kind,inSel,clrSel,fn])=>{
+  const inp = qs(inSel), clr = qs(clrSel); if(!inp) return;
+  inp.addEventListener("input", ()=>{ stuSearch[kind].q = inp.value; stuSearch[kind].key = `${state.score.room}|${state.score.subject}`; syncSearchBox(kind); fn(); });
+  clr?.addEventListener("click", ()=>{ inp.value = ""; stuSearch[kind].q = ""; syncSearchBox(kind); fn(); inp.focus(); });
+});
 qs("#pendOnly")?.addEventListener("change", e=>{ try{ localStorage.setItem("kc_pendOnly", e.target.checked ? "1" : "0"); }catch(err){} renderPending(); });
 let pendBack = "view-scores-setup";
 async function openPending(room, subject){
