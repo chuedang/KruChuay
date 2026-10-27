@@ -259,9 +259,9 @@ function lfxBalls(text, opts){
 }
 (function initLoadingBalls(){
   const sb = qs("#savingBalls");
-  if(sb) sb.innerHTML = lfxBalls("", { color:"#fff" });
+  if(sb) sb.innerHTML = `<div class="kc-ring" role="status" aria-label="กำลังโหลด"><i class="trk"></i><i class="arc"></i><b></b></div>`;
   const sp = qs("#splashLoading");
-  if(sp) sp.innerHTML = lfxBalls("กำลังโหลดข้อมูล...", { color:"#fff", size:"sm", textStyle:"color:#fff;font-size:13px;letter-spacing:.3px" });
+  if(sp) sp.innerHTML = `<span class="kc-ring sm" role="status"><i class="trk"></i><i class="arc"></i></span><span style="color:#fff;font-size:13px;letter-spacing:.3px">กำลังโหลดข้อมูล...</span>`;
 })();
 
 /* หน้าต่างยืนยันสวยๆ แทน confirm() ของเบราว์เซอร์ — คืน Promise<boolean>
@@ -348,7 +348,7 @@ async function apiGet(type, tries=4){
   }
   throw lastErr;
 }
-const GS_REQUIRED = "v17";
+const GS_REQUIRED = "v18";
 const sleep = ms => new Promise(r=>setTimeout(r, ms));
 async function apiPost(payload, tries=3){
   if(state.gsOld) return { success:false, message:"Apps Script ที่เชื่อมอยู่ยังเป็นเวอร์ชันเก่า (ไม่รองรับภาคเรียน/ประเภท) — Deploy โค้ด GS.txt ล่าสุด แล้วใส่ลิงก์ใน CONFIG.API_URL ของ script.js จากนั้นรีเฟรชแบบล้างแคช" };
@@ -3666,7 +3666,9 @@ function subsidyAmount(){
 }
 const CASH_ID = "CASH";   // แถวพิเศษใน SubsidyOrders = นักเรียนคนนี้รับเงินสด (ไม่สั่งของ)
 const hrOrderRows = st => state.hrOrders.filter(r=> String(r["รหัสรายการ"]||"").trim()!==CASH_ID &&  sameStr(rget(r,"ภาคเรียนที่"), period.term) && sameLv(rget(r,"ระดับชั้น"), hr.room) && sameStr(r["ชื่อ-สกุล"], st.name) && sameStr(r["เลขที่"], st.no));
-const hrIsCash = st => state.hrOrders.some(r=> String(r["รหัสรายการ"]||"").trim()===CASH_ID && sameStr(rget(r,"ภาคเรียนที่"), period.term) && sameLv(rget(r,"ระดับชั้น"), hr.room) && sameStr(r["ชื่อ-สกุล"], st.name) && sameStr(r["เลขที่"], st.no));
+const hrCashRow = st => state.hrOrders.find(r=> String(r["รหัสรายการ"]||"").trim()===CASH_ID && sameStr(rget(r,"ภาคเรียนที่"), period.term) && sameLv(rget(r,"ระดับชั้น"), hr.room) && sameStr(r["ชื่อ-สกุล"], st.name) && sameStr(r["เลขที่"], st.no));
+const hrIsCash = st => !!hrCashRow(st);
+const hrCashGot = st => { const r = hrCashRow(st); return !!r && Number(r["รับแล้ว"]) > 0; };   // รับเงินสดแล้วหรือยัง
 const stOrderRows = st => hrIsCash(st) ? [] : hrOrderRows(st);   // คนที่รับเงินสด = ไม่มีรายการสั่งซื้อ
 const rowsTotal = rows => rows.reduce((a,r)=> a + (Number(r["รวม"])||0), 0);
 const extraPay = (total, sub) => Math.max(0, total - sub);
@@ -3684,13 +3686,13 @@ function renderHrOrders(){
   const inp = qs("#hroSubInput");
   if(document.activeElement !== inp){ inp.value = sub; inp.dataset.saved = String(sub); }
   qs("#hroSubSave").style.display = String(inp.value) !== inp.dataset.saved ? "" : "none";
-  let ordered = 0, sumAll = 0, sumExtra = 0, cashN = 0;
+  let ordered = 0, sumAll = 0, sumExtra = 0, cashN = 0, cashGotN = 0;
   const rowsHtml = roster.map(st=>{
     const rows = stOrderRows(st), total = rowsTotal(rows), extra = extraPay(total, sub);
     const isCash = hrIsCash(st);
-    if(isCash) cashN++;
+    if(isCash){ cashN++; if(hrCashGot(st)) cashGotN++; }
     if(rows.length){ ordered++; sumAll += total; sumExtra += extra; }
-    const chip = isCash ? `<span class="o-chip cash">💵 รับเงินสด</span>`
+    const chip = isCash ? `<span class="o-chip ${hrCashGot(st) ? "ok" : "cash"}">💵 รับเงินสด${hrCashGot(st) ? " · รับเงินแล้ว ✓" : ""}</span>`
       : !rows.length ? `<span class="o-chip">ยังไม่สั่ง</span>`
       : `<span class="o-chip ${extra>0?"over":"ok"}">${baht(total)}${extra>0 ? ` · เพิ่ม ${baht(extra)}` : " · ในวงเงิน"}</span>`;
     return `<div class="hr-row" data-k="${esc(st.key)}">${hrAvatar(st, "sm")}
@@ -3699,7 +3701,7 @@ function renderHrOrders(){
   }).join("");
   qs("#hroStats").innerHTML =
     `<div class="es-stat"><b>${ordered}/${roster.length - cashN}</b><span>สั่งแล้ว (คน)</span></div>` +
-    (cashN ? `<div class="es-stat"><b>${cashN}</b><span>รับเงินสด (คน)</span></div>` : "") +
+    (cashN ? `<div class="es-stat"><b>${cashGotN}/${cashN}</b><span>รับเงินสดแล้ว (คน)</span></div>` : "") +
     `<div class="es-stat"><b>${baht(sumAll)}</b><span>ยอดรวมทั้งห้อง</span></div>` +
     `<div class="es-stat"><b>${baht(sumExtra)}</b><span>ต้องเก็บเพิ่ม</span></div>`;
   qs("#hroList").innerHTML = roster.length ? rowsHtml : `<div class="empty-note">ไม่พบรายชื่อนักเรียนในห้องนี้</div>`;
@@ -3872,20 +3874,55 @@ function cellParts(it, r){
   const main = it.colors ? size.replace(/, /g, " · ") : it.waist ? `เอว ${size}″` : size;
   return { main, sub: [lvl, `×${qty}`].filter(Boolean).join(" "), total: Number(r["รวม"])||0 };
 }
-const rcvOf = r => Math.max(0, Math.min(Number(r["จำนวน"])||0, Number(r["รับแล้ว"])||0));   // จำนวนชิ้นที่รับแล้ว (ไม่เกินที่สั่ง)
+/* โบว์: "รับแล้ว" เก็บแยกสีเป็นข้อความ "ขาว×1, ดำ×2" · ถ้าเป็นเลขล้วน (ข้อมูลเก่าไม่ระบุสี) → ให้รับไปสักสีก่อน (กระจายไปตามสีที่สั่งตามลำดับ) แล้วค่อยเข้าไปแก้เอง */
+const BOW_HEX = { "ขาว":"#FFFFFF", "ดำ":"#23252B", "น้ำเงิน":"#2453D6", "น้ำตาล":"#8A5A2B" };
+const bowDot = c => `<i class="cdot" style="--cc:${BOW_HEX[c] || "#ccc"}"></i>`;
+function parseColorQty(str){
+  const o = {};
+  String(str ?? "").split(",").forEach(p=>{ const m = p.trim().match(/^(.+?)×\s*(\d+)$/); if(m){ const k = m[1].trim(); o[k] = (o[k]||0) + Number(m[2]); } });
+  return o;
+}
+function bowRcvMap(r){
+  const ord = parseColorQty(r["ขนาด/ตัวเลือก"]), raw = String(r["รับแล้ว"] ?? "").trim(), out = {};
+  BOW_COLORS.forEach(c=> out[c] = 0);
+  if(raw.indexOf("×") >= 0){
+    const g = parseColorQty(raw);
+    BOW_COLORS.forEach(c=>{ out[c] = Math.min(ord[c]||0, g[c]||0); });
+    return { map:out, legacy:false };
+  }
+  let left = Math.max(0, Math.round(Number(raw)||0)); const legacy = left > 0;
+  BOW_COLORS.forEach(c=>{ const take = Math.min(ord[c]||0, left); out[c] = take; left -= take; });
+  return { map:out, legacy };
+}
+const bowStr = got => BOW_COLORS.filter(c=>got[c]>0).map(c=>`${c}×${got[c]}`).join(", ");
+const bowSum = got => BOW_COLORS.reduce((a,c)=> a + (got[c]||0), 0);
+function bowCellHtml(r){
+  const ord = parseColorQty(r["ขนาด/ตัวเลือก"]), g = bowRcvMap(r).map;
+  return `<div class="bw-list">` + BOW_COLORS.filter(c=>ord[c]>0).map(c=>`<span class="bw ${g[c]>=ord[c] ? "f" : g[c]>0 ? "p" : ""}">${bowDot(c)}${c} ${g[c]>=ord[c] ? "✓" : `${g[c]}/${ord[c]}`}</span>`).join("") + `</div>`;
+}
+const bowRcvText = r => { const ord = parseColorQty(r["ขนาด/ตัวเลือก"]), g = bowRcvMap(r).map; return BOW_COLORS.filter(c=>ord[c]>0).map(c=>`${c} ${g[c]}/${ord[c]}`).join(", "); };
+const rcvOf = r => {   // จำนวนชิ้นที่รับแล้ว (ไม่เกินที่สั่ง)
+  const id = String(r["รหัสรายการ"]||"").trim();
+  if(SUB_BY_ID[id] && SUB_BY_ID[id].colors) return bowSum(bowRcvMap(r).map);
+  return Math.max(0, Math.min(Number(r["จำนวน"])||0, Number(r["รับแล้ว"])||0));
+};
+function cashCellHtml(d, sub){
+  const got = d.cashGot;
+  return `<td colspan="${SUB_ITEMS.length}" class="rcv-td cash-td ${got ? "done" : "none"}" data-k="${esc(d.st.key)}" data-id="${CASH_ID}"><div class="cash-cell"><span class="cash-ico">💵</span><div class="cash-tx"><b>รับเป็นเงินสด · ${baht(sub)}</b><u class="rcv-tag">${got ? "✓ รับเงินแล้ว" : "ยังไม่ได้รับเงิน"}</u></div></div></td>`;
+}
 function summaryData(){
   const sub = subsidyAmount();
   return hrStudents().map(st=>{
     const rows = stOrderRows(st), byId = {};
     rows.forEach(r=>{ byId[String(r["รหัสรายการ"]||"").trim()] = r; });
     const total = rowsTotal(rows);
-    return { st, rows, byId, total, extra:extraPay(total, sub), cash:hrIsCash(st) };
+    return { st, rows, byId, total, extra:extraPay(total, sub), cash:hrIsCash(st), cashGot:hrCashGot(st) };
   });
 }
 function renderHrSummary(){
   const data = summaryData(), sub = subsidyAmount();
   const cashN = data.filter(d=>d.cash).length;
-  qs("#hrsSub").textContent = `${hr.room} · ภาคเรียนที่ ${period.term} · เงินอุดหนุนคนละ ${baht(sub)}${cashN ? ` · รับเงินสด ${cashN} คน` : ""}`;
+  qs("#hrsSub").textContent = `${hr.room} · ภาคเรียนที่ ${period.term} · เงินอุดหนุนคนละ ${baht(sub)}${cashN ? ` · รับเงินสด ${cashN} คน (รับเงินแล้ว ${data.filter(d=>d.cashGot).length})` : ""}`;
   if(hrs.tab==="total") return renderHrTotals(data);
   const wrap = qs("#hrsTableWrap");
   if(data.length===0){ wrap.innerHTML = `<div class="empty-note">ไม่พบรายชื่อนักเรียนในห้องนี้</div>`; return; }
@@ -3893,13 +3930,13 @@ function renderHrSummary(){
   const cnt = {}, money = {}, rcvCnt = {}; let gTotal = 0, gExtra = 0;
   const body = data.map(d=>{
     gTotal += d.total; gExtra += d.extra;
-    const cells = SUB_ITEMS.map(it=>{
+    const cells = d.cash ? cashCellHtml(d, sub) : SUB_ITEMS.map(it=>{
       const r = d.byId[it.id];
       if(!r) return `<td class="sub-none">·</td>`;
       const p = cellParts(it, r), q = Number(r["จำนวน"])||0, got = rcvOf(r);
       cnt[it.id] = (cnt[it.id]||0) + q; money[it.id] = (money[it.id]||0) + p.total; rcvCnt[it.id] = (rcvCnt[it.id]||0) + got;
       const st3 = got>=q && q>0 ? "done" : got>0 ? "part" : "none";
-      return `<td class="rcv-td ${st3}" data-k="${esc(d.st.key)}" data-id="${it.id}"><div class="sub-cell">${p.main ? `<b>${esc(p.main)}</b>` : ""}<span>${esc(p.sub)}</span><em>${baht(p.total)}</em><u class="rcv-tag">${st3==="done" ? "✓ รับครบ" : st3==="part" ? `รับ ${got}/${q}` : "ยังไม่รับ"}</u></div></td>`;
+      return `<td class="rcv-td ${st3}" data-k="${esc(d.st.key)}" data-id="${it.id}"><div class="sub-cell">${it.colors ? bowCellHtml(r) : p.main ? `<b>${esc(p.main)}</b>` : ""}<span>${esc(p.sub)}</span><em>${baht(p.total)}</em><u class="rcv-tag">${st3==="done" ? "✓ รับครบ" : st3==="part" ? `รับ ${got}/${q}` : "ยังไม่รับ"}</u></div></td>`;
     }).join("");
     return `<tr><td class="name-cell">${snum(d.st.no)}${esc(d.st.nick || d.st.name)}${d.st.nick ? `<small class="nm-sub">${esc(d.st.name)}</small>` : ""}</td>${cells}
       <td class="sub-total">${d.cash ? `<span class="o-chip cash">💵 เงินสด</span>` : d.rows.length ? baht(d.total) : `<span class="o-chip">ยังไม่สั่ง</span>`}</td>
@@ -3910,19 +3947,55 @@ function renderHrSummary(){
   wrap.innerHTML = `<div class="hint" style="margin:0 2px 10px;">แตะช่องของแต่ละรายการเพื่อบันทึกว่านักเรียนรับของไปแล้วกี่ชิ้น</div><table class="score-table hr-sum"><thead>${thead}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table>`;
 }
 /* ---------- บันทึกการรับของ (แตะช่องในตารางสรุป) ---------- */
-const rcv = { key:null, id:null, qty:0, n:0, orig:0 };
+const rcv = { key:null, id:null, mode:"num", qty:0, n:0, orig:0, ord:{}, got:{}, origStr:"", legacy:false };   // mode: num = ของทั่วไป · color = โบว์แยกสี · cash = รับเงินสด
 function paintRcv(){
-  qs("#hrRcvNum").textContent = rcv.n;
-  qs("#hrRcvOf").textContent = `จากที่สั่ง ${rcv.qty} ชิ้น`;
-  qs("#hrRcvMinus").disabled = rcv.n<=0; qs("#hrRcvPlus").disabled = rcv.n>=rcv.qty;
+  const m = rcv.mode;
+  qs("#hrRcvPaneNum").style.display = m==="num" ? "" : "none";
+  qs("#hrRcvPaneColors").style.display = m==="color" ? "" : "none";
+  qs("#hrRcvPaneCash").style.display = m==="cash" ? "" : "none";
+  qs("#hrRcvNone").textContent = m==="cash" ? "ยังไม่รับเงิน" : "ยังไม่รับ";
+  qs("#hrRcvAll").textContent = m==="cash" ? "✓ รับเงินแล้ว" : "✓ รับครบ";
+  if(m==="num"){
+    qs("#hrRcvNum").textContent = rcv.n;
+    qs("#hrRcvOf").textContent = `จากที่สั่ง ${rcv.qty} ชิ้น`;
+    qs("#hrRcvMinus").disabled = rcv.n<=0; qs("#hrRcvPlus").disabled = rcv.n>=rcv.qty;
+  } else if(m==="color"){
+    qs("#hrRcvColors").innerHTML = BOW_COLORS.filter(c=>rcv.ord[c]>0).map(c=>{
+      const n = rcv.got[c]||0, q = rcv.ord[c];
+      return `<div class="rcv-col ${n>=q ? "full" : n>0 ? "part" : ""}"><span class="rc-nm">${bowDot(c)}<span><b>${c}</b><small>สั่ง ${q} ชิ้น</small></span></span>
+        <div class="rc-step"><button type="button" data-c="${c}" data-d="-1" ${n<=0 ? "disabled" : ""}>−</button><b>${n}</b><button type="button" data-c="${c}" data-d="1" ${n>=q ? "disabled" : ""}>＋</button></div></div>`;
+    }).join("");
+    qs("#hrRcvSum").textContent = `รับแล้ว ${bowSum(rcv.got)} จากที่สั่ง ${rcv.qty} ชิ้น`;
+    qs("#hrRcvLegacy").style.display = rcv.legacy ? "" : "none";
+  } else {
+    const on = rcv.n > 0;
+    qs("#hrRcvCashState").classList.toggle("on", on);
+    qs("#hrRcvCashTxt").textContent = on ? "รับเงินสดแล้ว ✓" : "ยังไม่ได้รับเงิน";
+  }
 }
 function openHrRcv(key, id){
-  const st = hrFind(key), it = SUB_BY_ID[id]; if(!st || !it) return;
-  const r = hrOrderRows(st).find(x=> String(x["รหัสรายการ"]||"").trim()===id); if(!r) return;
-  rcv.key = key; rcv.id = id; rcv.qty = Number(r["จำนวน"])||0; rcv.orig = rcv.n = rcvOf(r);
-  const p = cellParts(it, r);
-  qs("#hrRcvTitle").textContent = `${it.ico} ${r["รายการ"] || it.name}`;
-  qs("#hrRcvWho").textContent = `${st.nick || st.name}${p.main ? " · " + p.main : ""} · สั่ง ${rcv.qty} ชิ้น`;
+  const st = hrFind(key); if(!st) return;
+  rcv.key = key; rcv.id = id; rcv.legacy = false;
+  if(id === CASH_ID){
+    rcv.mode = "cash"; rcv.qty = 1; rcv.orig = rcv.n = hrCashGot(st) ? 1 : 0;
+    qs("#hrRcvTitle").textContent = "💵 รับเงินสด";
+    qs("#hrRcvWho").textContent = `${st.nick || st.name} · เงินอุดหนุน ${baht(subsidyAmount())}`;
+  } else {
+    const it = SUB_BY_ID[id]; if(!it) return;
+    const r = hrOrderRows(st).find(x=> String(x["รหัสรายการ"]||"").trim()===id); if(!r) return;
+    rcv.qty = Number(r["จำนวน"])||0;
+    if(it.colors){
+      const o = bowRcvMap(r);
+      rcv.mode = "color"; rcv.ord = parseColorQty(r["ขนาด/ตัวเลือก"]); rcv.got = { ...o.map }; rcv.legacy = o.legacy;
+      rcv.origStr = o.legacy ? "\u0000legacy" : bowStr(rcv.got);   // ข้อมูลเก่าไม่ระบุสี → ถือว่าเปลี่ยนเสมอ เพื่อให้กดบันทึกแล้วเก็บเป็นรูปแบบแยกสี
+      qs("#hrRcvWho").textContent = `${st.nick || st.name} · สั่ง ${rcv.qty} ชิ้น`;
+    } else {
+      const p = cellParts(it, r);
+      rcv.mode = "num"; rcv.orig = rcv.n = rcvOf(r);
+      qs("#hrRcvWho").textContent = `${st.nick || st.name}${p.main ? " · " + p.main : ""} · สั่ง ${rcv.qty} ชิ้น`;
+    }
+    qs("#hrRcvTitle").textContent = `${it.ico} ${r["รายการ"] || it.name}`;
+  }
   paintRcv();
   qs("#modalHrRcv").classList.add("active");
 }
@@ -3931,18 +4004,27 @@ qsa("#modalHrRcv [data-close]").forEach(b=> b.addEventListener("click", closeHrR
 qs("#modalHrRcv")?.addEventListener("click", e=>{ if(e.target.id==="modalHrRcv") closeHrRcv(); });
 qs("#hrRcvMinus")?.addEventListener("click", ()=>{ rcv.n = Math.max(0, rcv.n-1); paintRcv(); });
 qs("#hrRcvPlus")?.addEventListener("click", ()=>{ rcv.n = Math.min(rcv.qty, rcv.n+1); paintRcv(); });
-qs("#hrRcvNone")?.addEventListener("click", ()=>{ rcv.n = 0; paintRcv(); });
-qs("#hrRcvAll")?.addEventListener("click", ()=>{ rcv.n = rcv.qty; paintRcv(); });
+qs("#hrRcvColors")?.addEventListener("click", e=>{
+  const b = e.target.closest("button[data-c]"); if(!b || b.disabled) return;
+  const c = b.dataset.c, d = Number(b.dataset.d);
+  rcv.got[c] = Math.max(0, Math.min(rcv.ord[c]||0, (rcv.got[c]||0) + d)); paintRcv();
+});
+qs("#hrRcvCashState")?.addEventListener("click", ()=>{ rcv.n = rcv.n>0 ? 0 : 1; paintRcv(); });
+qs("#hrRcvNone")?.addEventListener("click", ()=>{ if(rcv.mode==="color") rcv.got = {}; else rcv.n = 0; paintRcv(); });
+qs("#hrRcvAll")?.addEventListener("click", ()=>{ if(rcv.mode==="color") rcv.got = { ...rcv.ord }; else rcv.n = rcv.qty; paintRcv(); });
 qs("#hrRcvOk")?.addEventListener("click", async ()=>{
   const st = hrFind(rcv.key); if(!st){ closeHrRcv(); return; }
-  if(rcv.n === rcv.orig){ closeHrRcv(); return; }
-  closeHrRcv(); showSaving("กำลังบันทึกการรับของ...");
-  const res = await apiPost({ type:"saveSubsidyReceived", term:period.term, level:hr.room, no:st.no, name:st.name, id:rcv.id, received:rcv.n });
+  const mode = rcv.mode, id = rcv.id;
+  const payload = mode==="color" ? bowStr(rcv.got) : rcv.n;
+  const changed = mode==="color" ? payload !== rcv.origStr : rcv.n !== rcv.orig;
+  if(!changed){ closeHrRcv(); return; }
+  closeHrRcv(); showSaving(mode==="cash" ? "กำลังบันทึกการรับเงิน..." : "กำลังบันทึกการรับของ...");
+  const res = await apiPost({ type:"saveSubsidyReceived", term:period.term, level:hr.room, no:st.no, name:st.name, id, received:payload });
   hideSaving();
   if(res.success){
-    const r = hrOrderRows(st).find(x=> String(x["รหัสรายการ"]||"").trim()===rcv.id);
-    if(r) r["รับแล้ว"] = res.received ?? rcv.n;
-    renderHrSummary(); toast("บันทึกการรับของแล้ว ✓");
+    const r = id===CASH_ID ? hrCashRow(st) : hrOrderRows(st).find(x=> String(x["รหัสรายการ"]||"").trim()===id);
+    if(r) r["รับแล้ว"] = res.received ?? payload;
+    renderHrSummary(); toast(mode==="cash" ? "บันทึกการรับเงินแล้ว ✓" : "บันทึกการรับของแล้ว ✓");
   } else toast(res.message || "บันทึกไม่สำเร็จ");
 });
 qs("#hrsTableWrap")?.addEventListener("click", e=>{ const td = e.target.closest("td[data-id]"); if(td) openHrRcv(td.dataset.k, td.dataset.id); });
@@ -3979,8 +4061,8 @@ qs("#hrsCsv")?.addEventListener("click", ()=>{
   const head = ["เลขที่", "ชื่อ-สกุล", "ชื่อเล่น", ...SUB_ITEMS.map(i=>i.name), "รวม", "เงินอุดหนุน", "ชำระเพิ่ม", "วิธีรับ"];
   const lines = [head.map(q).join(",")];
   data.forEach(d=>{
-    const cells = SUB_ITEMS.map(it=>{ const r = d.byId[it.id]; if(!r) return ""; const p = cellParts(it, r); return [p.main, p.sub, baht(p.total), `รับ ${rcvOf(r)}/${Number(r["จำนวน"])||0}`].filter(Boolean).join(" "); });
-    lines.push([d.st.no, d.st.name, d.st.nick, ...cells, d.cash ? "" : d.total, d.cash ? "" : sub, d.cash ? "" : d.extra, d.cash ? "เงินสด" : "สั่งของ"].map(q).join(","));
+    const cells = SUB_ITEMS.map(it=>{ const r = d.byId[it.id]; if(!r) return ""; const p = cellParts(it, r); return [p.main, p.sub, baht(p.total), (it.colors ? `รับ ${bowRcvText(r)}` : `รับ ${rcvOf(r)}/${Number(r["จำนวน"])||0}`)].filter(Boolean).join(" "); });
+    lines.push([d.st.no, d.st.name, d.st.nick, ...cells, d.cash ? "" : d.total, d.cash ? "" : sub, d.cash ? "" : d.extra, d.cash ? (d.cashGot ? "เงินสด (รับเงินแล้ว)" : "เงินสด (ยังไม่รับเงิน)") : "สั่งของ"].map(q).join(","));
   });
   const blob = new Blob(["\ufeff" + lines.join("\r\n")], { type:"text/csv;charset=utf-8" });
   const a = document.createElement("a");
