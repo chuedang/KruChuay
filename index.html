@@ -10,7 +10,7 @@
 /* โหมดหน้าจอ: pc / mobile (จำค่าที่เลือกไว้ ถ้ายังไม่เคยเลือกจะเดาจากความกว้างจอ) — ตั้งก่อนวาดหน้าเพื่อกันภาพกระพริบ */
 (function(){var m="mobile";try{var s=localStorage.getItem("kc_mode");m=(s==="pc"||s==="mobile")?s:(window.innerWidth>=900?"pc":"mobile");}catch(e){}document.documentElement.classList.add("mode-"+m);})();
 </script>
-<link rel="stylesheet" href="StyleKruChauy.css?v=37">
+<link rel="stylesheet" href="StyleKruChauy.css?v=38">
 <script>try{var T={light:"#d7defc",cream:"#efe3c4",dark:"#121624",black:"#000000"};var t=localStorage.getItem("kc_theme");if(!T[t])t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t;var mt=document.querySelector('meta[name="theme-color"]');if(mt)mt.setAttribute("content",T[t]);}catch(e){}</script>
 </head>
 <body>
@@ -599,10 +599,20 @@
     <div class="modal-sheet">
       <h3 id="hrRcvTitle">รับของแล้ว</h3>
       <div class="rcv-who" id="hrRcvWho"></div>
+      <div id="hrRcvPaneNum">
       <div class="rcv-step">
         <button type="button" id="hrRcvMinus" aria-label="ลด">−</button>
         <div class="rcv-num"><b id="hrRcvNum">0</b><small id="hrRcvOf"></small></div>
         <button type="button" id="hrRcvPlus" aria-label="เพิ่ม">＋</button>
+      </div>
+      </div>
+      <div id="hrRcvPaneColors" style="display:none;">
+        <div class="rcv-legacy" id="hrRcvLegacy" style="display:none;">ข้อมูลเดิมบันทึกว่ารับแล้วโดยไม่ได้ระบุสี ระบบเลือกสีให้ก่อนตามลำดับ — ปรับให้ตรงกับที่รับจริงแล้วกดบันทึกได้เลย</div>
+        <div id="hrRcvColors"></div>
+        <div class="rcv-sum" id="hrRcvSum"></div>
+      </div>
+      <div id="hrRcvPaneCash" style="display:none;">
+        <div class="rcv-cash-state" id="hrRcvCashState"><span class="ico">💵</span><b id="hrRcvCashTxt">ยังไม่ได้รับเงิน</b><small>แตะเพื่อสลับสถานะ</small></div>
       </div>
       <div class="hr-doc-tools" style="justify-content:center;">
         <button type="button" class="btn btn-outline btn-sm" id="hrRcvNone">ยังไม่รับ</button>
@@ -642,10 +652,11 @@
       <div id="savingBalls"></div>
       <div class="loading-msg" id="savingMsg">กำลังบันทึกข้อมูล</div>
       <div class="lo-sub" id="savingSub">กำลังเชื่อมต่อ Google Sheet</div>
+      <div class="lo-bar"><i></i></div>
     </div>
   </div>
 </div>
-<script src="ScriptKruChauy.js?v=49"></script>
+<script src="ScriptKruChauy.js?v=50"></script>
 <script src="tool.js?v=9"></script>
 <script src="Khosob.js?v=2"></script>
 </body>
