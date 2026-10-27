@@ -2028,3 +2028,115 @@ html[data-theme="black"] .rcv-step button{border:1.5px solid #222325;background:
 .stu-search.has-q .ss-clear{display:block;}
 .pend-mode{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 10px;}
 .pend-range{font-size:12px; font-weight:600; color:var(--ink-soft);}
+
+/* ==========================================================================
+   v38 — หน้าโหลด/บันทึกแบบใหม่ (กระจกฝ้า + วงแหวนไล่สี) · Splash โทนใหม่ · รับของโบว์แยกสี · รับเงินสด
+   ========================================================================== */
+.loading-overlay{
+  --kc-a:var(--gold); --kc-b:#22D3EE;
+  background:rgba(236,240,250,.6);
+  background:color-mix(in srgb, var(--bg) 58%, transparent);
+  backdrop-filter:blur(22px) saturate(170%); -webkit-backdrop-filter:blur(22px) saturate(170%);
+}
+html[data-theme="cream"] .loading-overlay{--kc-b:#E3AE4F;}
+.loading-overlay::before{
+  content:""; position:absolute; left:50%; top:50%; width:440px; height:440px; margin:-220px 0 0 -220px; border-radius:50%; pointer-events:none;
+  background:radial-gradient(circle, color-mix(in srgb, var(--kc-a) 30%, transparent) 0, color-mix(in srgb, var(--kc-b) 16%, transparent) 42%, transparent 70%);
+  animation:kcGlow 4.2s ease-in-out infinite alternate;
+}
+@keyframes kcGlow{from{transform:scale(.88); opacity:.7;}to{transform:scale(1.08); opacity:1;}}
+.loading-box{
+  width:min(80vw,296px); padding:30px 24px 24px; gap:8px; border-radius:30px; color:var(--ink);
+  background:rgba(255,255,255,.82);
+  background:color-mix(in srgb, var(--surface) 82%, transparent);
+  border:1px solid var(--line);
+  box-shadow:0 34px 64px -26px rgba(27,34,51,.42), inset 0 1px 0 rgba(255,255,255,.55);
+}
+.loading-msg{color:var(--ink); text-shadow:none; font-size:16.5px; letter-spacing:.2px;}
+.lo-sub{color:var(--ink-soft); text-shadow:none;}
+.kc-ring{position:relative; display:block; width:72px; height:72px; margin:0 auto 8px; --w:5px;}
+.kc-ring i,.kc-ring b{position:absolute; display:block;}
+.kc-ring i{inset:0; border-radius:50%;}
+.kc-ring .trk{border:var(--w) solid rgba(79,107,245,.14); border:var(--w) solid color-mix(in srgb, var(--kc-a, var(--gold)) 15%, transparent);}
+.kc-ring .arc{
+  background:conic-gradient(from 0deg, transparent 0deg, var(--kc-a, var(--gold)) 190deg, var(--kc-b, #22D3EE) 345deg, transparent 360deg);
+  -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - var(--w)), #000 calc(100% - var(--w) + 1px));
+          mask:radial-gradient(farthest-side, transparent calc(100% - var(--w)), #000 calc(100% - var(--w) + 1px));
+  animation:kcSpin 1.05s cubic-bezier(.55,.15,.45,.85) infinite;
+}
+.kc-ring b{
+  left:50%; top:50%; width:26px; height:26px; margin:-13px 0 0 -13px; border-radius:9px;
+  background:linear-gradient(135deg, var(--kc-a, var(--gold)), var(--kc-b, #22D3EE));
+  box-shadow:0 10px 20px -8px var(--kc-a, var(--gold)); animation:kcPulse 1.7s ease-in-out infinite;
+}
+.kc-ring.sm{width:22px; height:22px; margin:0; --w:3px; flex:none;}
+#splashLoading .kc-ring{--kc-a:#fff; --kc-b:#67E8F9;}
+#splashLoading .kc-ring .trk{border-color:rgba(255,255,255,.2);}
+@keyframes kcSpin{to{transform:rotate(360deg);}}
+@keyframes kcPulse{0%,100%{transform:scale(.8) rotate(0deg); border-radius:9px;}50%{transform:scale(1) rotate(90deg); border-radius:13px;}}
+.lo-bar{width:100%; height:4px; margin-top:8px; border-radius:99px; overflow:hidden; background:rgba(120,130,160,.16);}
+.lo-bar i{display:block; height:100%; width:38%; border-radius:inherit; background:linear-gradient(90deg, var(--kc-a), var(--kc-b)); animation:kcBar 1.35s ease-in-out infinite;}
+@keyframes kcBar{0%{transform:translateX(-115%);}100%{transform:translateX(290%);}}
+@media (prefers-reduced-motion:reduce){ .kc-ring .arc{animation-duration:2.6s;} .kc-ring b,.lo-bar i,.loading-overlay::before{animation-duration:3.4s;} }
+
+/* Splash: โทนสะอาดขึ้น (กรมท่า + ฟ้าอมเขียว) ลดม่วง */
+#splashBg{background:radial-gradient(120% 80% at 15% 0%, #1B2F73 0%, transparent 60%), radial-gradient(100% 70% at 100% 100%, #0B4A68 0%, transparent 55%), #0A0F1F;}
+#splashBg .o1{background:#3B82F6;}
+#splashBg .o2{background:#14B8A6; opacity:.4;}
+#splashBg .o3{background:#6366F1; opacity:.3;}
+#splashLogo span{color:#93C5FD;}
+
+/* ---- รับของ: โบว์แยกสี ---- */
+.cdot{display:inline-block; width:11px; height:11px; border-radius:50%; background:var(--cc,#ccc); border:1.5px solid rgba(0,0,0,.2); margin-right:5px; vertical-align:-1px; flex:none;}
+.bw-list{display:flex; flex-direction:column; gap:2px; margin-bottom:1px;}
+.bw{font-size:11.5px; font-weight:700; white-space:nowrap; color:var(--ink-soft);}
+.bw.f{color:#13794F;} .bw.p{color:#9A6A00;}
+.rcv-col{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; margin-bottom:8px; border:1.5px solid #E1E7F3; border-radius:16px; background:var(--surface); transition:background .2s, border-color .2s;}
+.rcv-col.full{border-color:#7BCBA4; background:#EAF7F0;}
+.rcv-col.part{border-color:#F2CC73; background:#FFF7E3;}
+.rc-nm{display:flex; align-items:center; gap:10px; min-width:0;}
+.rc-nm .cdot{width:22px; height:22px; margin:0; border-width:2px;}
+.rc-nm b{display:block; font-size:15px;} .rc-nm small{display:block; font-size:11.5px; color:var(--ink-soft);}
+.rc-step{display:flex; align-items:center; gap:12px;}
+.rc-step b{min-width:22px; text-align:center; font-size:21px; font-weight:800;}
+.rc-step button{width:40px; height:40px; padding:0; border-radius:50%; border:1.5px solid #E1E7F3; background:var(--surface); font:inherit; font-size:21px; font-weight:700; line-height:1; color:var(--ink); cursor:pointer;}
+.rc-step button:active:not(:disabled){background:var(--gold); border-color:var(--gold); color:#fff;}
+.rc-step button:disabled{opacity:.35; cursor:not-allowed;}
+.rcv-sum{text-align:center; font-size:13px; color:var(--ink-soft); margin:6px 0 14px;}
+.rcv-legacy{font-size:12px; line-height:1.55; background:#FFF4D6; color:#8A5E00; border-radius:12px; padding:9px 11px; margin-bottom:10px;}
+/* ---- รับเงินสด ---- */
+.rcv-cash-state{display:flex; flex-direction:column; align-items:center; gap:4px; padding:22px 16px; margin:4px 0 16px; border:2px dashed #E1C887; border-radius:22px; background:#FFF8E6; cursor:pointer; transition:background .2s, border-color .2s;}
+.rcv-cash-state .ico{font-size:42px; line-height:1.1;}
+.rcv-cash-state b{font-size:17px;} .rcv-cash-state small{font-size:11.5px; color:var(--ink-soft);}
+.rcv-cash-state.on{border:2px solid #7BCBA4; background:#EAF7F0;}
+table.hr-sum tbody td.cash-td.none{background:#FFF8E6;}
+.cash-cell{display:flex; align-items:center; gap:10px; padding:2px 4px;}
+.cash-ico{font-size:24px; line-height:1;}
+.cash-tx{display:flex; flex-direction:column; gap:3px; text-align:left;}
+.cash-tx b{font-size:13px;}
+
+html[data-theme="cream"] .rcv-col{border-color:#E9DEC5;}
+html[data-theme="cream"] .rcv-col.full{background:#F5ECD6; border-color:#CDBB8B;}
+html[data-theme="cream"] .rcv-col.part{background:#F8EBC9; border-color:#E2C277;}
+html[data-theme="cream"] .rc-step button{border-color:#E9DEC5; background:#FCF6E6;}
+html[data-theme="cream"] .rcv-cash-state{background:#F8EEC9; border-color:#DDBF77;}
+html[data-theme="cream"] .rcv-cash-state.on{background:#F5ECD6; border-color:#CDBB8B;}
+html[data-theme="cream"] table.hr-sum tbody td.cash-td.none{background:#F8EEC9;}
+html[data-theme="dark"] .rcv-col{border-color:#333A4E;}
+html[data-theme="dark"] .rcv-col.full{background:#22382C; border-color:#2C4B3A;}
+html[data-theme="dark"] .rcv-col.part{background:#423616; border-color:#7A6633;}
+html[data-theme="dark"] .rc-step button{border-color:#333A4E; background:#222734;}
+html[data-theme="dark"] .rcv-legacy{background:#423616; color:#F3D490;}
+html[data-theme="dark"] .rcv-cash-state{background:#3A3017; border-color:#7A6633;}
+html[data-theme="dark"] .rcv-cash-state.on{background:#22382C; border-color:#2C4B3A;}
+html[data-theme="dark"] table.hr-sum tbody td.cash-td.none{background:#3A3017;}
+html[data-theme="dark"] .bw.f,html[data-theme="black"] .bw.f{color:#A6E8CD;}
+html[data-theme="dark"] .bw.p,html[data-theme="black"] .bw.p{color:#F3D490;}
+html[data-theme="black"] .rcv-col{border-color:#222325;}
+html[data-theme="black"] .rcv-col.full{background:#1A2720; border-color:#21342A;}
+html[data-theme="black"] .rcv-col.part{background:#2D2612; border-color:#544829;}
+html[data-theme="black"] .rc-step button{border-color:#222325; background:#121212;}
+html[data-theme="black"] .rcv-legacy{background:#2D2612; color:#F3D490;}
+html[data-theme="black"] .rcv-cash-state{background:#2A2411; border-color:#544829;}
+html[data-theme="black"] .rcv-cash-state.on{background:#1A2720; border-color:#21342A;}
+html[data-theme="black"] table.hr-sum tbody td.cash-td.none{background:#2A2411;}
