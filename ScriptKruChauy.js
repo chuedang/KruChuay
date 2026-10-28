@@ -3533,7 +3533,7 @@ function renderHrDocs(){
     hrdPaint(); return;
   }
   let thead = `<tr><th class="name-head">ชื่อ</th>`;
-  hrd.docs.forEach((d,i)=>{ thead += `<th data-i="${i}"><span class="hd-title">${esc(d.title)}</span><span class="hd-cnt"></span><i class="hd-bar"><u></u></i></th>`; });
+  hrd.docs.forEach((d,i)=>{ thead += `<th data-i="${i}"><span class="hd-title">${esc(d.title)}</span><span class="hd-cnt"></span><i class="hd-bar"><u></u></i><button type="button" class="hd-miss" data-i="${i}" title="ดูรายชื่อคนที่ยังไม่ส่ง"></button></th>`; });
   thead += `<th class="sum">ค้าง</th></tr>`;
   const rows = roster.map(st=>{
     let r = `<tr data-k="${esc(st.key)}"><td class="name-cell">${snum(st.no)}${esc(st.nick ? st.nick : st.name)}${st.nick ? `<small class="nm-sub">${esc(st.name)}</small>` : ""}</td>`;
@@ -3558,6 +3558,8 @@ function hrdPaint(){
     const n = hrStudents().filter(s=>d.set.has(s.key)).length;
     qs(".hd-cnt", th).textContent = `${n}/${total}`;
     qs(".hd-bar u", th).style.width = total ? (n/total*100)+"%" : "0";
+    const mb = qs(".hd-miss", th), miss = total - n;
+    if(mb){ mb.textContent = miss ? `👁 ค้าง ${miss}` : "ครบ ✓"; mb.classList.toggle("ok", !miss); }
     th.classList.toggle("done", total>0 && n===total);
   });
   qsa("tbody tr[data-k]", wrap).forEach(tr=>{
@@ -3576,10 +3578,42 @@ qs("#hrdocsWrap")?.addEventListener("click", e=>{
     d.set.has(c.dataset.k) ? d.set.delete(c.dataset.k) : d.set.add(c.dataset.k);
     hrdPaint(); return;
   }
+  const mb = e.target.closest(".hd-miss");
+  if(mb){ showHrdMissing(+mb.dataset.i); return; }
   const th = e.target.closest("th[data-i]");
   if(th) openHrDocModal(+th.dataset.i);
 });
+qs("#hrdocsSumBtn")?.addEventListener("click", ()=> showHrdSummary());
 qs("#hrdocsAddBtn")?.addEventListener("click", ()=> openHrDocModal(null));
+
+/* หน้าต่าง: ใครยังไม่ส่งเอกสารชิ้นนี้ (ดูจากที่ติ๊กอยู่ตอนนี้ แม้ยังไม่ได้กดบันทึก) */
+function showHrdMissing(i){
+  const d = hrd.docs[i]; if(!d) return;
+  const all = hrStudents(), miss = all.filter(s=>!d.set.has(s.key));
+  const body = miss.length
+    ? `<div class="hrm-list">${miss.map(s=>`<div class="hrm-row">${snum(s.no)}<span>${esc(hrLabel(s))}</span></div>`).join("")}</div>`
+    : `<div class="hrm-done">🎉 ส่งครบทุกคนแล้ว</div>`;
+  const actions = [{ text:"ปิด", cls:"btn-outline" }];
+  if(miss.length) actions.unshift({ text:"📋 คัดลอกรายชื่อ", cls:"btn-primary", keep:true, fn: async ()=>{
+    const txt = `${hr.room} · ยังไม่ส่ง "${d.title}" (${miss.length}/${all.length} คน)\n` + miss.map(s=>`${s.no!==undefined && s.no!=="" ? s.no+" " : ""}${s.name}`).join("\n");
+    toast((await copyToClipboard(txt)) ? "คัดลอกรายชื่อแล้ว ✓" : "คัดลอกไม่สำเร็จ");
+  } });
+  openSheet({ title:`ยังไม่ส่ง: ${d.title}`, who:`${esc(hr.room)} · ค้าง ${miss.length} จาก ${all.length} คน`, body, actions });
+}
+/* หน้าต่างสรุปรวม: ใครค้างอะไรบ้าง — คนที่ส่งครบทุกชิ้นไม่แสดง */
+function showHrdSummary(){
+  if(!hrd.docs.length){ toast("ยังไม่มีหัวข้อเอกสาร"); return; }
+  const rows = hrStudents().map(s=>({ s, miss: hrd.docs.filter(d=>!d.set.has(s.key)).map(d=>d.title) })).filter(r=>r.miss.length);
+  const body = rows.length
+    ? `<div class="hrm-list">${rows.map(r=>`<div class="hrm-row">${snum(r.s.no)}<div><span>${esc(hrLabel(r.s))}</span><div class="hrm-docs">${r.miss.map(t=>`<i>${esc(t)}</i>`).join("")}</div></div></div>`).join("")}</div>`
+    : `<div class="hrm-done">🎉 ทุกคนส่งเอกสารครบแล้ว</div>`;
+  const actions = [{ text:"ปิด", cls:"btn-outline" }];
+  if(rows.length) actions.unshift({ text:"📋 คัดลอกสรุป", cls:"btn-primary", keep:true, fn: async ()=>{
+    const txt = `${hr.room} · สรุปเอกสารที่ยังไม่ส่ง (${rows.length} คน)\n` + rows.map(r=>`${r.s.no!==undefined && r.s.no!=="" ? r.s.no+" " : ""}${r.s.name}: ${r.miss.join(", ")}`).join("\n");
+    toast((await copyToClipboard(txt)) ? "คัดลอกสรุปแล้ว ✓" : "คัดลอกไม่สำเร็จ");
+  } });
+  openSheet({ title:"สรุปเอกสารที่ยังไม่ส่ง", who:`${esc(hr.room)} · ค้าง ${rows.length} คน (ส่งครบแล้วไม่แสดง)`, body, actions });
+}
 
 function openHrDocModal(i){
   hrd.cur = i;
@@ -4136,4 +4170,149 @@ paintThemeSwitch();
     qs("#splashBg").classList.add("fade");
     setTimeout(done, 1000);
   }catch(e){ done(); }
+})();
+
+/* Dock.js — ตัวเลือกห้อง/ชั้นปีแบบ "ลูกบอลเลื่อน" (Meniscus) แทน <select class="room-select">
+   select เดิมยังอยู่ (ซ่อนไว้) โค้ดเดิมทุกอย่างยังอ่านค่าจาก select ได้เหมือนเดิม — dock แค่ตั้งค่าแล้วยิง change */
+(function(){
+  const CELL = 38, SIDE = 34, TOP = 30, TAB_H = 90, DEPTH = 34, RAD = 22, BEAD = 52;
+  let uid = 0;
+  const strip = r => String(r).replace(/^\s*ม\.?\s*/, "");
+  /* ลำดับห้องบนแถบเลือก (ตามคาบที่สอน) — แก้ลำดับตรงนี้ได้ ห้องที่ไม่อยู่ในรายการจะต่อท้ายตามลำดับเดิม */
+  const DOCK_ORDER = ["4", "5", "6", "2/1", "2/2", "3/1", "3/2"];
+  const orderOf = r => { const i = DOCK_ORDER.indexOf(strip(r)); return i < 0 ? 999 : i; };
+  const docks = [];
+  let raf = 0;
+
+  function make(sel){
+    const field = sel.closest(".field"); if(!field) return;
+    const wrap = document.createElement("div");
+    wrap.className = "mn-wrap";
+    wrap.innerHTML = `<div class="mn-scroll"><div class="mn-dock"><svg class="mn-skin"><defs><linearGradient id="mnG${++uid}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" class="s1"/><stop offset="1" class="s2"/></linearGradient></defs><path style="fill:url(#mnG${uid})"/></svg><span class="mn-bead"></span><div class="mn-tabs" role="tablist"></div><div class="mn-sub"></div></div></div>`;
+    /* ถ้าอยู่ในการ์ดขาว ให้ดึงแถบออกมาวางเหนือการ์ด (ไม่มีกรอบขาวล้อม) แล้วซ่อนการ์ดถ้าเหลือว่างเปล่า */
+    const card = field.closest(".card");
+    if(card && card.parentNode) card.parentNode.insertBefore(wrap, card); else field.parentNode.insertBefore(wrap, field);
+    field.style.display = "none";
+    /* ย้ายช่องรายวิชาเข้ามาอยู่ในกรอบเดียวกับแถบห้อง (select เดิมยังเป็นตัวเดิม โค้ดเดิมใช้ต่อได้) */
+    const view = sel.closest(".view, .modal-sheet"), subSel = view && view.querySelector("select.subject-select"), subField = subSel && subSel.closest(".field");
+    if(subField && !subField.closest(".mn-sub")) wrap.querySelector(".mn-sub").appendChild(subField);
+    const d = { sel, wrap, card, scroll:wrap.querySelector(".mn-scroll"), dock:wrap.querySelector(".mn-dock"),
+      svg:wrap.querySelector("svg"), path:wrap.querySelector("path"), H:TAB_H, bead:wrap.querySelector(".mn-bead"),
+      tabsEl:wrap.querySelector(".mn-tabs"), rooms:[], W:0, x:-200, tx:-200, v:0, active:-1, drag:false, down:false, sx:0, pid:null, key:"" };
+    docks.push(d);
+    d.dock.addEventListener("pointerdown", e=>{ d.down = true; d.sx = e.clientX; d.pid = e.pointerId; });
+    d.dock.addEventListener("pointermove", e=>{
+      if(!d.down || !d.W) return;
+      if(!d.drag){ if(Math.abs(e.clientX - d.sx) < 6) return; d.drag = true; d.dock.setPointerCapture(d.pid); d.dock.classList.add("grab"); }
+      const nx = Math.max(cx(d, 0), Math.min(cx(d, d.rooms.length - 1), e.clientX - d.dock.getBoundingClientRect().left));
+      d.v = nx - d.x; d.x = nx;
+      const i = Math.max(0, Math.min(d.rooms.length - 1, Math.floor((d.x - SIDE) / ((d.W - 2 * SIDE) / d.rooms.length))));
+      if(i !== d.active) paint(d, i);
+      kick();
+    });
+    const end = ()=>{
+      d.down = false;
+      if(d.drag){ d.drag = false; d.dock.classList.remove("grab"); commit(d, d.active); }
+    };
+    d.dock.addEventListener("pointerup", end); d.dock.addEventListener("pointercancel", end);
+    const ro = new ResizeObserver(()=>layout(d)); ro.observe(d.scroll); ro.observe(d.dock);
+    rebuild(d);
+  }
+
+  function rebuild(d){
+    const raw = [...d.sel.options].map(o=>o.value).filter(Boolean);
+    d.key = raw.join("|");
+    const rooms = raw.map((r,i)=>({ r, i })).sort((a,b)=> orderOf(a.r) - orderOf(b.r) || a.i - b.i).map(x=>x.r);
+    d.rooms = rooms;
+    d.tabsEl.innerHTML = "";
+    rooms.forEach((r,i)=>{
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "mn-tab"; b.role = "tab"; b.setAttribute("aria-label", r);
+      b.innerHTML = `<span class="mn-lb">${strip(r).replace(/</g,"&lt;")}</span>`;
+      b.addEventListener("click", ()=>{ if(!d.drag) commit(d, i); });
+      d.tabsEl.appendChild(b);
+    });
+    d.wrap.style.display = rooms.length ? "" : "none";
+    layout(d); sync(d, true);
+  }
+
+  function layout(d){
+    const n = d.rooms.length; if(!n) return;
+    const w = d.scroll.clientWidth - 8; if(w <= 0) return;   // 8 = padding ซ้าย/ขวาของ .mn-scroll
+    d.W = Math.max(w, n * CELL + 2 * SIDE);
+    d.tabsEl.style.boxSizing = "border-box"; d.tabsEl.style.padding = `0 ${SIDE}px`;
+    d.dock.style.width = d.W + "px"; d.dock.style.setProperty("--vw", w + "px");
+    d.H = d.dock.offsetHeight || TAB_H;
+    d.svg.setAttribute("viewBox", `0 0 ${d.W} ${d.H}`); d.svg.setAttribute("width", d.W); d.svg.setAttribute("height", d.H);
+    d.tabsEl.style.gridTemplateColumns = `repeat(${n},1fr)`;
+    d.tx = d.active >= 0 ? cx(d, d.active) : -200; d.x = d.tx; draw(d);
+  }
+  const cx = (d, i) => SIDE + (i + .5) * (d.W - 2 * SIDE) / d.rooms.length;
+
+  /* แต่ละห้องมีสีของตัวเอง ไล่เฉดอ่อนๆ จากเขียวอมฟ้า → ฟ้า → ม่วง → ชมพู ตามลำดับบนแถบ */
+  function tone(i, n){
+    const h = n > 1 ? 170 + (i / (n - 1)) * 160 : 215;
+    return `hsl(${Math.round(h)} 68% 60%)`;
+  }
+  function paint(d, i){
+    d.active = i;
+    if(i >= 0) d.dock.style.setProperty("--mn-c", tone(i, d.rooms.length));
+    [...d.tabsEl.children].forEach((b,k)=> b.setAttribute("aria-selected", k === i));
+    d.dock.classList.toggle("empty", i < 0);
+  }
+  function commit(d, i){
+    if(i < 0) return;
+    paint(d, i); d.tx = cx(d, i);
+    if(d.sel.value !== d.rooms[i]){ d.sel.value = d.rooms[i]; d.sel.dispatchEvent(new Event("change", { bubbles:true })); }
+    const t = d.tabsEl.children[i];
+    if(t) d.scroll.scrollTo({ left: Math.max(0, cx(d, i) - w0(d)/2), behavior:"smooth" });
+    kick();
+  }
+  const w0 = d => d.scroll.clientWidth;
+  function sync(d, first){
+    const i = d.rooms.indexOf(d.sel.value);
+    if(i === d.active && !first) return;
+    paint(d, i); d.tx = i >= 0 ? cx(d, i) : -200;
+    if(first) d.x = d.tx;
+    kick();
+  }
+
+  function draw(d){
+    const W = d.W; if(!W) return;
+    const st = Math.min(Math.abs(d.v) * 1.2, 22), w = 30 + st * .6, lean = Math.max(-10, Math.min(10, d.v * .8)), c = d.x;
+    const hi = W - RAD, cl = x => Math.max(RAD, Math.min(hi, x)), bot = d.H;
+    /* ใกล้ขอบแถบ → รอยเว้าบีบแคบ+ตื้นลงตามพื้นที่ที่เหลือ (ไม่ล้นมุมโค้ง) · อยู่นอกแถบ (ยังไม่เลือกห้อง) → ขอบเรียบ */
+    const room = Math.min(c - RAD, W - c - RAD) / 1.15, ww = Math.max(0, Math.min(w, room)), dep = DEPTH * (ww / w);
+    const top = ww < 1 ? `L${hi},${TOP}` :
+      `L${cl(c - ww*1.7 + lean*.3)},${TOP} C${cl(c - ww*.7)},${TOP} ${cl(c - ww)},${TOP+dep} ${c},${TOP+dep}`+
+      ` C${cl(c + ww)},${TOP+dep} ${cl(c + ww*.7)},${TOP} ${cl(c + ww*1.7 + lean*.3)},${TOP} L${hi},${TOP}`;
+    d.path.setAttribute("d",
+      `M0,${TOP+RAD} Q0,${TOP} ${RAD},${TOP} ${top} Q${W},${TOP} ${W},${TOP+RAD}`+
+      ` L${W},${bot-RAD} Q${W},${bot} ${W-RAD},${bot} L${RAD},${bot} Q0,${bot} 0,${bot-RAD} Z`);
+    d.bead.style.transform = `translate(${c - BEAD/2}px,0) scale(${1 + st/90},${1 - st/140})`;
+  }
+
+  function loop(){
+    raf = 0; let busy = false;
+    docks.forEach(d=>{
+      if(!d.W) return;
+      if(!d.drag){ d.v += (d.tx - d.x) * .12; d.v *= .72; d.x += d.v; }
+      if(d.drag || Math.abs(d.tx - d.x) > .2 || Math.abs(d.v) > .2) busy = true; else { d.x = d.tx; d.v = 0; }
+      draw(d);
+    });
+    if(busy) raf = requestAnimationFrame(loop);
+  }
+  function kick(){ if(!raf) raf = requestAnimationFrame(loop); }
+
+  function scan(){
+    document.querySelectorAll("select.room-select").forEach(sel=>{
+      if(!docks.some(d=>d.sel === sel)) make(sel);
+    });
+    docks.forEach(d=>{
+      if(d.card){ const empty = [...d.card.children].every(c=> c.style.display === "none" || !c.firstElementChild && !c.textContent.trim()); d.card.style.display = empty ? "none" : ""; }
+      const key = [...d.sel.options].map(o=>o.value).filter(Boolean).join("|");
+      if(key !== d.key) rebuild(d); else sync(d, false);
+    });
+  }
+  scan(); setInterval(scan, 350);
 })();
