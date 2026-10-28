@@ -10,7 +10,7 @@
 /* โหมดหน้าจอ: pc / mobile (จำค่าที่เลือกไว้ ถ้ายังไม่เคยเลือกจะเดาจากความกว้างจอ) — ตั้งก่อนวาดหน้าเพื่อกันภาพกระพริบ */
 (function(){var m="mobile";try{var s=localStorage.getItem("kc_mode");m=(s==="pc"||s==="mobile")?s:(window.innerWidth>=900?"pc":"mobile");}catch(e){}document.documentElement.classList.add("mode-"+m);})();
 </script>
-<link rel="stylesheet" href="StyleKruChauy.css?v=38">
+<link rel="stylesheet" href="StyleKruChauy.css?v=43">
 <script>try{var T={light:"#d7defc",cream:"#efe3c4",dark:"#121624",black:"#000000"};var t=localStorage.getItem("kc_theme");if(!T[t])t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t;var mt=document.querySelector('meta[name="theme-color"]');if(mt)mt.setAttribute("content",T[t]);}catch(e){}</script>
 </head>
 <body>
@@ -314,6 +314,7 @@
     <div class="period-bar" data-mode="term" data-compact="1"></div>
     <div class="table-toolbar">
       <button id="hrdocsAddBtn" class="btn btn-gold btn-sm">＋ เพิ่มหัวข้อเอกสาร</button>
+      <button id="hrdocsSumBtn" class="btn btn-outline btn-sm">📋 สรุปคนค้างส่ง</button>
       <span class="score-info" id="hrdocsInfo"></span>
     </div>
     <div class="score-scroll"><div id="hrdocsWrap"></div></div>
@@ -656,7 +657,7 @@
     </div>
   </div>
 </div>
-<script src="ScriptKruChauy.js?v=50"></script>
+<script src="ScriptKruChauy.js?v=59"></script>
 <script src="tool.js?v=9"></script>
 <script src="Khosob.js?v=2"></script>
 </body>
