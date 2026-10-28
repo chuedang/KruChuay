@@ -2140,3 +2140,47 @@ html[data-theme="black"] .rcv-legacy{background:#2D2612; color:#F3D490;}
 html[data-theme="black"] .rcv-cash-state{background:#2A2411; border-color:#544829;}
 html[data-theme="black"] .rcv-cash-state.on{background:#1A2720; border-color:#21342A;}
 html[data-theme="black"] table.hr-sum tbody td.cash-td.none{background:#2A2411;}
+/* ===== Room dock (Meniscus) — ตัวเลือกห้อง/ชั้นปีแบบลูกบอลเลื่อน ===== */
+.mn-wrap{margin:6px 0 16px;}
+.mn-cap{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:2px;}
+.mn-cap span{font-size:13px; font-weight:700; color:var(--ink);}
+.mn-cap small{font-size:11.5px; color:var(--ink-soft);}
+.mn-scroll{overflow-x:auto; overflow-y:hidden; scrollbar-width:none; margin:0 -4px -6px; padding:0 4px 16px;}
+.mn-scroll::-webkit-scrollbar{display:none;}
+.mn-dock{position:relative; min-height:90px; touch-action:pan-y; user-select:none; -webkit-user-select:none; cursor:grab;}
+.mn-dock.grab{cursor:grabbing;}
+.mn-skin{position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
+.mn-skin path{stroke:color-mix(in srgb,var(--mn-c,var(--c-main,var(--gold))) 35%,var(--line)); stroke-width:1.5; transition:stroke .4s;}
+.mn-bead{position:absolute; top:4px; left:0; width:52px; height:52px; border-radius:50%; pointer-events:none; will-change:transform;
+  background:var(--mn-c,var(--c-main,var(--gold))); box-shadow:0 6px 18px -2px color-mix(in srgb,var(--mn-c,var(--c-main,var(--gold))) 60%,transparent); transition:background .4s,box-shadow .4s,opacity .3s;}
+.mn-dock.empty .mn-bead{opacity:0;}
+.mn-tabs{position:relative; height:90px; display:grid;}
+.mn-tab{position:relative; background:none; border:0; padding:0; font:inherit; cursor:pointer; -webkit-tap-highlight-color:transparent; color:var(--ink-soft);}
+.mn-tab:focus-visible{outline:2px solid var(--c-main,var(--gold)); outline-offset:-4px; border-radius:14px;}
+.mn-lb{position:absolute; left:0; right:0; top:60px; margin-top:-11px; line-height:22px; font-size:15px; font-weight:700; letter-spacing:.01em;
+  transition:transform .55s cubic-bezier(.3,1.4,.5,1),color .3s,font-size .3s;}
+.mn-tab[aria-selected="true"] .mn-lb{transform:translateY(-30px); color:var(--c-on,#fff); font-size:17px;}
+/* ปุ่ม "ค้าง" บนหัวคอลัมน์เช็คเอกสาร + รายการในหน้าต่างสรุป */
+table.hr-docs th .hd-miss{display:inline-block; margin-top:6px; padding:3px 9px; border-radius:999px; border:1px solid color-mix(in srgb,var(--absent) 45%,var(--line)); background:color-mix(in srgb,var(--absent) 9%,var(--surface)); color:var(--absent); font:inherit; font-size:11px; font-weight:700; cursor:pointer;}
+table.hr-docs th .hd-miss.ok{border-color:color-mix(in srgb,var(--present) 45%,var(--line)); background:color-mix(in srgb,var(--present) 9%,var(--surface)); color:var(--present);}
+.hrm-list{max-height:52vh; overflow-y:auto; display:flex; flex-direction:column; gap:6px; margin-top:6px;}
+.hrm-row{display:flex; gap:8px; align-items:flex-start; padding:9px 12px; border-radius:12px; background:var(--bg); font-size:14px; font-weight:600; color:var(--ink);}
+.hrm-row .hrm-docs{display:flex; flex-wrap:wrap; gap:5px; margin-top:5px;}
+.hrm-row .hrm-docs i{font-style:normal; font-size:11.5px; font-weight:700; padding:2px 8px; border-radius:999px; background:color-mix(in srgb,var(--absent) 12%,var(--surface)); color:var(--absent);}
+.hrm-done{text-align:center; padding:22px 10px; color:var(--present); font-weight:700;}
+
+/* กรอบเดียว: พื้นไล่เฉดตามสีห้อง + ช่องรายวิชาอยู่ในกรอบ */
+.mn-skin .s1{stop-color:color-mix(in srgb,var(--mn-c,var(--c-main,var(--gold))) 13%,var(--surface)); transition:stop-color .4s;}
+.mn-skin .s2{stop-color:color-mix(in srgb,var(--mn-c,var(--c-main,var(--gold))) 4%,var(--surface)); transition:stop-color .4s;}
+.mn-sub{position:sticky; left:0; width:var(--vw,100%); box-sizing:border-box; padding:0 14px 14px; margin-top:-8px;}
+.mn-sub .field{margin:0; position:relative;}
+.mn-sub .field label{display:none;}
+.mn-sub .field::before{content:"📖"; position:absolute; left:15px; top:50%; transform:translateY(-50%); font-size:19px; pointer-events:none; z-index:1;}
+.mn-sub select{width:100%; appearance:none; -webkit-appearance:none; font:inherit; font-size:15px; font-weight:600; color:var(--ink);
+  padding:14px 42px 14px 44px; text-overflow:ellipsis; border-radius:20px; cursor:pointer; outline:0;
+  border:1.5px solid color-mix(in srgb,var(--mn-c,var(--c-main,var(--gold))) 28%,var(--line));
+  background:color-mix(in srgb,var(--surface) 82%,var(--mn-c,var(--c-main,var(--gold))) 4%)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%235F6B85' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 16px center;
+  box-shadow:inset 0 2px 6px rgba(27,34,51,.05), 0 6px 14px -8px color-mix(in srgb,var(--mn-c,var(--c-main,var(--gold))) 55%,transparent);
+  transition:border-color .3s,box-shadow .3s;}
+.mn-sub select:focus{border-color:var(--mn-c,var(--c-main,var(--gold))); box-shadow:0 0 0 4px color-mix(in srgb,var(--mn-c,var(--c-main,var(--gold))) 22%,transparent);}
