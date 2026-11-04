@@ -1077,6 +1077,16 @@ function saveHoursWeek(room, subject, v){
 function msThreshold(hoursWeek){
   return hoursWeek>0 ? Math.round(hoursWeek * GEN_WEEKS * 0.2) : null;
 }
+/* Homeroom ไม่ลงใน Act และไม่มีจำนวนคาบ → แสดงทุกวัน จ.-ศ. นับจากวันที่เริ่ม ยาว GEN_WEEKS สัปดาห์ */
+const isRepHomeroom = subject => isHomeroomName(subject);
+function homeroomWeekdays(from){
+  const out = [];
+  for(let i=0; i<GEN_WEEKS*7; i++){
+    const iso = addDays(from, i), wd = wdOf(iso);
+    if(wd>=1 && wd<=5) out.push(iso);
+  }
+  return out;
+}
 function setRepPeriods(n){
   rep.periods = n;
   qsa("#repPeriods button").forEach(b => b.classList.toggle("on", Number(b.dataset.n)===n));
@@ -1087,7 +1097,16 @@ function setRepPeriods(n){
 function updateRepSource(){
   const room = qs("#repRoom").value, subject = qs("#repSubject").value, start = qs("#repStart").value;
   const note = qs("#repSourceNote"), box = qs("#repCalcBox");
+  const hrMode = !!subject && isRepHomeroom(subject);
+  qs("#repHoursField").style.display = hrMode ? "none" : "";
+  qs("#repStartLbl").textContent = hrMode ? "ตั้งแต่วันที่" : "ตั้งแต่วันที่ (วันสอน A)";
   if(!room || !subject || !start){ note.style.display = "none"; box.style.display = "none"; rep.mode = ""; return; }
+  if(hrMode){
+    const ds = homeroomWeekdays(start);
+    rep.mode = "hr"; box.style.display = "none"; note.style.display = "";
+    note.innerHTML = `<b>Homeroom · แสดงทุกวัน จันทร์–ศุกร์ · ${GEN_WEEKS} สัปดาห์</b><span>${ds.length} วัน · ${fmtLong(ds[0])} → ${fmtLong(ds[ds.length-1])} (ไม่ใช้ข้อมูลจาก Act)</span>`;
+    return;
+  }
   const acts = actDatesFor(room, subject, start);
   note.style.display = "";
   if(acts.length){
@@ -1128,7 +1147,9 @@ qs("#repStartBtn").addEventListener("click", async ()=>{
   hideSaving();
   updateRepSource();
   let dates;
-  if(rep.mode === "act"){
+  if(rep.mode === "hr"){
+    dates = homeroomWeekdays(start);
+  }else if(rep.mode === "act"){
     dates = actDatesFor(room, subject, start);
   }else{
     const raw = [start, qs("#repDateB").value, qs("#repDateC").value].slice(0, rep.periods);
@@ -1138,8 +1159,8 @@ qs("#repStartBtn").addEventListener("click", async ()=>{
     const bases = raw.map((d,i)=> i===0 ? d : addDays(start, (wdOf(d)-wdOf(start)+7)%7));
     dates = buildHeaderDates(bases);
   }
-  const hoursWeek = Math.max(0, numOrNull(qs("#repHoursWeek").value) ?? 0);
-  saveHoursWeek(room, subject, hoursWeek);
+  const hoursWeek = rep.mode === "hr" ? 0 : Math.max(0, numOrNull(qs("#repHoursWeek").value) ?? 0);
+  if(rep.mode !== "hr") saveHoursWeek(room, subject, hoursWeek);
   Object.assign(rep, { room, subject, start, dates, hoursWeek });
   qs("#repHeadSub").textContent = `${room} · ${subject}`;
   renderPeriodBars();
@@ -1168,7 +1189,7 @@ function renderRepTable(){
   const threshold = msThreshold(rep.hoursWeek);
 
   let thead = `<tr><th class="name-head">ชื่อ</th><th class="sum">ขาด</th><th class="sum">ลา</th><th class="sum">สาย</th>` +
-    rep.dates.map(d=>`<th class="${d===today?"today-col":""}">${fmtShort(d)}<small class="wd">${fmtWd(d)}</small></th>`).join("") + `</tr>`;
+    rep.dates.map(d=>`<th class="${d===today?"today-col":""}${rep.mode==="hr"&&wdOf(d)===1?" wk-start":""}">${fmtShort(d)}<small class="wd">${fmtWd(d)}</small></th>`).join("") + `</tr>`;
   let rows = "";
   const msNames = [];
   roster.forEach(st=>{
@@ -1176,7 +1197,7 @@ function renderRepTable(){
     const cells = rep.dates.map(d=>{
       const s = statusOf(st.label, d);
       if(cnt[s]!==undefined) cnt[s]++;
-      return `<td><span class="ar ar-${s}">${LBL[s]}</span></td>`;
+      return `<td class="${rep.mode==="hr"&&wdOf(d)===1?"wk-start":""}"><span class="ar ar-${s}">${LBL[s]}</span></td>`;
     }).join("");
     const sum = k => `<td class="sum"><b class="s-${k} ${cnt[k]?"on":""}">${cnt[k]}</b></td>`;
     const overMs = threshold!=null && (cnt.absent + cnt.leave) > threshold;
@@ -1959,6 +1980,191 @@ async function openPending(room, subject){
 }
 qs("#scorePendingBtn").addEventListener("click", ()=> openPending(qs("#scoreRoom").value, qs("#scoreSubject").value.trim()));
 qs("#pendBackBtn").addEventListener("click", ()=> showView(pendBack));
+
+/* ================= พิมพ์ตารางเช็คงาน (ใช้ได้จากหน้าลงคะแนน + หน้างานค้าง) =================
+   ซ้าย: เลขที่ · ชื่อ · ระดับชั้น แล้วตามด้วยคอลัมน์ตามหัวคะแนนใน Act (หัวคอลัมน์ = วันที่)
+   ช่องที่ส่งงานแล้ว = ✓ (ไม่แสดงคะแนน) · ช่องว่าง = ยังไม่ส่ง · เลือกช่วงได้ทั้ง "ตามงาน" และ "ตามวันที่" */
+const PR_ST = { mode: (()=>{ try{ return localStorage.getItem("kc_prMode")==="date" ? "date" : "work"; }catch(e){ return "work"; } })(), names: (()=>{ try{ return localStorage.getItem("kc_prNames")==="1"; }catch(e){ return false; } })() };
+/* งานทั้งหมดของ ห้อง+วิชา+ภาคเรียน/ประเภทที่เลือก เรียงตามวันที่ (อิงชีท Act) */
+function printActs(){
+  const { room, subject } = state.score;
+  const list = state.activities
+    .filter(a=> sameStr(a["รายวิชา"],subject) && sameStr(a["ระดับชั้น"],room) && inPeriod(a) && dateKey(a["วันที่"]))
+    .map(a=> ({ date: dateKey(a["วันที่"]), name: String(a["งาน"]||"").trim() }))
+    .sort((x,y)=> x.date.localeCompare(y.date));
+  if(list.length) return list;
+  return (state.score.headers||[]).map(d=>({ date:d, name:"" })).sort((x,y)=> x.date.localeCompare(y.date));   // กันกรณี Act ยังไม่โหลด: ใช้หัวตารางที่เห็นอยู่
+}
+function ensurePrintModal(){
+  if(qs("#modalPrintSheet")) return;
+  const st = document.createElement("style");
+  st.textContent = `
+  #modalPrintSheet .pr-quick{display:flex; gap:8px; flex-wrap:wrap; margin:-6px 0 14px;}
+  #modalPrintSheet .pr-quick button{border:1.5px solid #E1E7F3; background:#fff; border-radius:999px; padding:6px 14px; font:600 12.5px 'Noto Sans Thai',sans-serif; color:var(--c-ink,#0D652D); cursor:pointer;}
+  #modalPrintSheet .pr-quick button:active{transform:scale(.95);}
+  #modalPrintSheet .pr-row{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  #modalPrintSheet .pr-sum{margin:6px 0 12px; padding:10px 12px; border-radius:12px; background:#F1F8F3; color:#0D652D; font-size:13px; line-height:1.5;}
+  #modalPrintSheet .pr-sum.bad{background:#FDECEC; color:#B3261E;}
+  #modalPrintSheet .sw{margin:2px 0 6px;}`;
+  document.head.appendChild(st);
+  const m = document.createElement("div");
+  m.className = "modal-backdrop"; m.id = "modalPrintSheet";
+  m.innerHTML = `<div class="modal-sheet">
+    <h3>🖨 พิมพ์ตารางเช็คงาน</h3>
+    <p class="hint" id="prSub" style="margin:-8px 0 12px;"></p>
+    <div class="field"><label>เลือกช่วงโดย</label>
+      <div class="seg" id="prMode"><button type="button" data-pm="work">📝 ตามงาน</button><button type="button" data-pm="date">📅 ตามวันที่</button></div>
+    </div>
+    <div id="prByWork" class="pr-row">
+      <div class="field"><label>ตั้งแต่งาน</label><select id="prFromW"></select></div>
+      <div class="field"><label>ถึงงาน</label><select id="prToW"></select></div>
+    </div>
+    <div id="prByDate" class="pr-row" style="display:none;">
+      <div class="field"><label>ตั้งแต่วันที่</label><input type="date" id="prFromD"></div>
+      <div class="field"><label>ถึงวันที่</label><input type="date" id="prToD"></div>
+    </div>
+    <div class="pr-quick"><button type="button" data-q="all">📚 ทั้งเทอม</button><button type="button" data-q="today">📅 ถึงวันนี้</button></div>
+    <label class="sw"><input type="checkbox" id="prNames"><span class="sw-track"></span>แสดงชื่องานในหัวคอลัมน์</label>
+    <div class="pr-sum" id="prSum"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" data-close>ยกเลิก</button>
+      <button class="btn btn-primary" id="prGoBtn">🖨 เปิดหน้าพิมพ์</button>
+    </div>
+  </div>`;
+  document.body.appendChild(m);
+  qs("[data-close]", m).addEventListener("click", ()=> m.classList.remove("active"));
+  m.addEventListener("click", e=>{ if(e.target===m) m.classList.remove("active"); });
+  qs("#prMode", m).addEventListener("click", e=>{
+    const b = e.target.closest("button[data-pm]"); if(!b) return;
+    PR_ST.mode = b.dataset.pm; try{ localStorage.setItem("kc_prMode", PR_ST.mode); }catch(err){}
+    prSyncMode();
+  });
+  ["#prFromW","#prToW","#prFromD","#prToD"].forEach(s=> qs(s,m).addEventListener("change", prUpdateSum));
+  qs("#prNames", m).addEventListener("change", e=>{ PR_ST.names = e.target.checked; try{ localStorage.setItem("kc_prNames", PR_ST.names ? "1":"0"); }catch(err){} });
+  qs(".pr-quick", m).addEventListener("click", e=>{
+    const b = e.target.closest("button[data-q]"); if(!b) return;
+    const acts = printActs(); if(!acts.length) return;
+    const today = todayISO();
+    let last = acts.length-1;
+    if(b.dataset.q==="today"){ last = -1; acts.forEach((a,i)=>{ if(a.date<=today) last = i; }); if(last<0){ toast("ยังไม่ถึงวันของงานแรก"); return; } }
+    qs("#prFromW",m).value = "0"; qs("#prToW",m).value = String(last);
+    qs("#prFromD",m).value = acts[0].date; qs("#prToD",m).value = acts[last].date;
+    prUpdateSum();
+  });
+  qs("#prGoBtn", m).addEventListener("click", ()=>{
+    const sel = prSelected(); if(!sel.length){ toast("ช่วงที่เลือกไม่มีงานเลยครับ"); return; }
+    printCheckSheet(sel, PR_ST.names);
+  });
+}
+function prSyncMode(){
+  const m = qs("#modalPrintSheet"); if(!m) return;
+  qsa("#prMode button", m).forEach(b=> b.classList.toggle("on", b.dataset.pm===PR_ST.mode));
+  qs("#prByWork",m).style.display = PR_ST.mode==="work" ? "" : "none";
+  qs("#prByDate",m).style.display = PR_ST.mode==="date" ? "" : "none";
+  prUpdateSum();
+}
+/* งานที่ถูกเลือกตามโหมดปัจจุบัน (สลับช่วงต้น/ปลายให้เองถ้ากรอกกลับด้าน) */
+function prSelected(){
+  const m = qs("#modalPrintSheet"), acts = printActs();
+  if(PR_ST.mode==="date"){
+    let a = qs("#prFromD",m).value, b = qs("#prToD",m).value;
+    if(!a || !b) return [];
+    if(a>b) [a,b] = [b,a];
+    return acts.filter(x=> x.date>=a && x.date<=b);
+  }
+  let i = +qs("#prFromW",m).value, j = +qs("#prToW",m).value;
+  if(i>j) [i,j] = [j,i];
+  return acts.slice(i, j+1);
+}
+function prUpdateSum(){
+  const m = qs("#modalPrintSheet"), box = qs("#prSum", m), sel = prSelected();
+  if(!sel.length){ box.className = "pr-sum bad"; box.textContent = "ช่วงที่เลือกไม่มีงานเลย — ลองเปลี่ยนช่วง"; return; }
+  box.className = "pr-sum";
+  box.textContent = `จะพิมพ์ ${sel.length} งาน · ${fmtLong(sel[0].date)}${sel.length>1 ? ` – ${fmtLong(sel[sel.length-1].date)}` : ""}`;
+}
+function openPrintModal(){
+  const { room, subject } = state.score;
+  if(!room || !subject){ toast("เลือกห้องและวิชาก่อนครับ"); return; }
+  const acts = printActs();
+  if(!acts.length){ toast("ยังไม่มีหัวคะแนนของวิชานี้ในภาคเรียน/ประเภทที่เลือก"); return; }
+  ensurePrintModal();
+  const m = qs("#modalPrintSheet");
+  qs("#prSub", m).textContent = `${room} · ${subject} · ภาคเรียนที่ ${period.term} · ${period.type}`;
+  const opts = acts.map((a,i)=> `<option value="${i}">${i+1}. ${esc(a.name || "(ไม่มีชื่องาน)")} · ${fmtShort(a.date)}</option>`).join("");
+  qs("#prFromW",m).innerHTML = opts; qs("#prToW",m).innerHTML = opts;
+  qs("#prFromW",m).value = "0"; qs("#prToW",m).value = String(acts.length-1);
+  const lo = acts[0].date, hi = acts[acts.length-1].date;
+  ["#prFromD","#prToD"].forEach(s=>{ const el = qs(s,m); el.min = lo; el.max = hi; });
+  qs("#prFromD",m).value = lo; qs("#prToD",m).value = hi;
+  qs("#prNames",m).checked = PR_ST.names;
+  prSyncMode();
+  m.classList.add("active");
+}
+function buildCheckSheetHTML(acts, showNames){
+  const { room, subject } = state.score;
+  const roster = scoreRoster(room);
+  const NOW = 9, NAMEW = 56, LVW = 15, AVAIL = 281 - NOW - NAMEW - LVW;   // A4 แนวนอน ขอบ 8 มม. (กว้างใช้งาน ~281 มม.)
+  const MAXC = Math.floor(AVAIL / 7);                                      // ช่องละอย่างน้อย 7 มม.
+  const nTab = Math.ceil(acts.length / MAXC), per = Math.ceil(acts.length / nTab);
+  const cw = Math.min(12, +(AVAIL / per).toFixed(2));
+  const headH = showNames ? 36 : 17;
+  let tables = "";
+  for(let t=0; t<nTab; t++){
+    const part = acts.slice(t*per, (t+1)*per);
+    const th = part.map(a=> `<th class="dc"><div class="vt">${fmtShort(a.date)}${showNames && a.name ? ` · ${esc(a.name)}` : ""}</div></th>`).join("");
+    const body = roster.map(st=>{
+      const tds = part.map(a=> `<td class="ck">${savedScore(st.key, a.date)!==null ? "✓" : ""}</td>`).join("");
+      return `<tr><td class="no">${esc(st.no ?? "")}</td><td class="nm">${esc(st.label)}</td><td class="lv">${esc(room)}</td>${tds}</tr>`;
+    }).join("");
+    tables += `<div class="blk${t>0 ? " nb" : ""}">${nTab>1 ? `<div class="part">ส่วนที่ ${t+1}/${nTab} · ${fmtShort(part[0].date)} – ${fmtShort(part[part.length-1].date)}</div>` : ""}
+      <table><colgroup><col style="width:${NOW}mm"><col style="width:${NAMEW}mm"><col style="width:${LVW}mm">${part.map(()=>`<col style="width:${cw}mm">`).join("")}</colgroup>
+      <thead><tr><th>เลขที่</th><th class="nmh">ชื่อ-สกุล</th><th>ระดับชั้น</th>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
+  }
+  const title = `ตารางเช็คงาน · ${room} · ${subject}`;
+  const sub = `ภาคเรียนที่ ${period.term} · ${period.type} · งาน ${acts.length} ครั้ง (${fmtLong(acts[0].date)}${acts.length>1 ? ` – ${fmtLong(acts[acts.length-1].date)}` : ""}) · ✓ = ส่งงานแล้ว`;
+  return `<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><title>${esc(title)}</title>
+<style>
+  @page{ size:A4 landscape; margin:8mm; }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:'Noto Sans Thai','Sarabun',Tahoma,sans-serif; color:#111; -webkit-print-color-adjust:exact; print-color-adjust:exact;}
+  .bar{ text-align:center; padding:10px; font-family:sans-serif; }
+  .bar button{ font-size:16px; padding:8px 22px; cursor:pointer; }
+  .bar p{ font-size:13px; color:#666; margin:6px 0 0; }
+  @media print{ .bar{display:none;} }
+  h1{ font-size:15px; margin:0 0 1mm; } .sub{ font-size:10.5px; color:#444; margin-bottom:2.5mm; }
+  .part{ font-size:10.5px; font-weight:700; margin:0 0 1.5mm; }
+  .blk.nb{ break-before:page; page-break-before:always; }
+  table{ border-collapse:collapse; table-layout:fixed; width:auto; }
+  th,td{ border:.25mm solid #333; padding:0; text-align:center; }
+  thead{ display:table-header-group; } tr{ break-inside:avoid; page-break-inside:avoid; }
+  th{ background:#EDEDED; font-size:9.5px; font-weight:700; height:${headH}mm; }
+  th.nmh{ text-align:center; }
+  th.dc{ padding:0; overflow:hidden; }
+  .vt{ writing-mode:vertical-rl; transform:rotate(180deg); white-space:nowrap; margin:0 auto; font-size:9px; max-height:${headH-2}mm; overflow:hidden; text-overflow:ellipsis; }
+  td{ height:6.3mm; font-size:10.5px; }
+  td.no{ font-weight:700; } td.nm{ text-align:left; padding-left:1.5mm; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } td.lv{ font-size:9.5px; }
+  td.ck{ font-family:'Segoe UI Symbol','Noto Sans Symbols2',sans-serif; font-size:12px; font-weight:700; }
+</style></head><body>
+  <div class="bar"><button onclick="window.print()">🖨 พิมพ์</button> <button onclick="window.close()" style="margin-left:8px;">‹ ปิดหน้านี้</button>
+    <p>กระดาษ A4 แนวนอน · ตั้งค่าพิมพ์เป็นขนาด 100% และปิดส่วนหัว/ท้ายกระดาษของเบราว์เซอร์</p></div>
+  <h1>${esc(title)}</h1><div class="sub">${esc(sub)}</div>
+  ${tables}
+</body></html>`;
+}
+function printCheckSheet(acts, showNames){
+  const roster = scoreRoster(state.score.room);
+  if(!roster.length){ toast("ไม่พบรายชื่อนักเรียนในห้องนี้"); return; }
+  const win = window.open("", "_blank");
+  if(!win){ toast("เบราว์เซอร์บล็อกป๊อปอัป กรุณาอนุญาตแล้วลองใหม่"); return; }
+  win.document.open(); win.document.write(buildCheckSheetHTML(acts, showNames)); win.document.close();
+}
+/* ปุ่มพิมพ์: หน้าลงคะแนน + หน้างานค้าง (สร้างเองด้วย JS ไม่ต้องแก้ HTML) */
+(function addPrintButtons(){
+  const mk = () => { const b = document.createElement("button"); b.type = "button"; b.className = "btn btn-outline btn-sm"; b.textContent = "🖨 พิมพ์ตาราง"; b.addEventListener("click", openPrintModal); return b; };
+  const a = qs("#addHeaderBtn"); if(a) a.after(mk());
+  const tb = qs("#pendInfo")?.parentElement; if(tb) tb.insertBefore(mk(), qs("#pendInfo"));
+})();
+
 
 /* ================= รายชื่อ มส. / ติด 0 ทุกห้อง =================
    เก็บในชีท Blocked (แยกตาม ภาคเรียน + ห้อง + รายวิชา) · 1 แถว = นักเรียน 1 คน × ประเภท (มส / 0)
@@ -3609,7 +3815,11 @@ function showHrdSummary(){
     : `<div class="hrm-done">🎉 ทุกคนส่งเอกสารครบแล้ว</div>`;
   const actions = [{ text:"ปิด", cls:"btn-outline" }];
   if(rows.length) actions.unshift({ text:"📋 คัดลอกสรุป", cls:"btn-primary", keep:true, fn: async ()=>{
-    const txt = `${hr.room} · สรุปเอกสารที่ยังไม่ส่ง (${rows.length} คน)\n` + rows.map(r=>`${r.s.no!==undefined && r.s.no!=="" ? r.s.no+" " : ""}${r.s.name}: ${r.miss.join(", ")}`).join("\n");
+    const all = hrStudents();
+const txt = `📋 สรุปเอกสารที่ยังไม่ส่ง · ${hr.room}\n\n` + hrd.docs.map(d=>{
+  const m = all.filter(s=>!d.set.has(s.key));
+  return m.length ? `📄 ยังไม่ส่ง${d.title} (${m.length} คน)\n` + m.map(s=>`   ⏳ ${s.name}`).join("\n") : "";
+}).filter(Boolean).join("\n\n");
     toast((await copyToClipboard(txt)) ? "คัดลอกสรุปแล้ว ✓" : "คัดลอกไม่สำเร็จ");
   } });
   openSheet({ title:"สรุปเอกสารที่ยังไม่ส่ง", who:`${esc(hr.room)} · ค้าง ${rows.length} คน (ส่งครบแล้วไม่แสดง)`, body, actions });
@@ -4124,17 +4334,107 @@ function setMode(m){
   window.dispatchEvent(new Event("resize"));   // ให้ส่วนที่คำนวณขนาดตามจอ (กราฟ ฯลฯ) วัดใหม่
 }
 qs("#modeSwitch")?.addEventListener("click", e=>{ const b = e.target.closest("[data-mode]"); if(b && b.dataset.mode!==currentMode()) setMode(b.dataset.mode); });
+paintModeSwitch();   // ไฮไลต์ปุ่มโหมดที่ใช้อยู่ตั้งแต่เปิดแอป
 
-/* ===== ธีมสี 4 แบบ: สว่าง / ครีม / เข้ม / ดำ ===== */
-const THEME_COLORS = { light:"#d7defc", cream:"#efe3c4", dark:"#121624", black:"#000000" };
+/* ===== ธีมสี 5 แบบ: สว่าง / ครีม / เข้ม / ดำ / แฟนตาซี ===== */
+const THEME_COLORS = { light:"#d7defc", cream:"#efe3c4", dark:"#121624", black:"#000000", fantasy:"#2a74d6" };
 function currentTheme(){ const t = document.documentElement.dataset.theme; return THEME_COLORS[t] ? t : "light"; }
 function paintThemeSwitch(){ qsa("#themeGrid [data-theme]").forEach(b=>{ const on = b.dataset.theme===currentTheme(); b.classList.toggle("on", on); b.setAttribute("aria-checked", on); }); }
+/* ===== เพลงประกอบโหมดแฟนตาซี: image/music.mp3 วนซ้ำไปเรื่อยๆ (เล่นเฉพาะตอนใช้ธีมแฟนตาซี) ===== */
+const fantasyMusic = new Audio("image/music.mp3");
+fantasyMusic.loop = true; fantasyMusic.preload = "auto"; fantasyMusic.volume = 0.5;
+let musicWaitGesture = false;
+function syncMusic(){
+  if(currentTheme() === "fantasy" && !document.hidden){
+    const p = fantasyMusic.play();
+    if(p && p.catch) p.catch(()=>{   // เบราว์เซอร์บล็อกเล่นเอง → รอให้ผู้ใช้แตะ/กดอะไรสักครั้งแล้วค่อยเริ่ม
+      if(musicWaitGesture) return; musicWaitGesture = true;
+      const go = ()=>{ musicWaitGesture = false; ["pointerdown","keydown","touchend"].forEach(ev=> document.removeEventListener(ev, go, true)); syncMusic(); };
+      ["pointerdown","keydown","touchend"].forEach(ev=> document.addEventListener(ev, go, true));
+    });
+  }else{
+    fantasyMusic.pause();
+  }
+}
+document.addEventListener("visibilitychange", syncMusic);   // พักเพลงตอนสลับแท็บ/ล็อกจอ แล้วเล่นต่อเมื่อกลับมา
+/* ===== ฉากเปลี่ยนเข้าโหมดแฟนตาซี: ซูมภาพพื้นหลังเข้าที่เมืองบนหน้าผา แล้วค่อยๆ ไล่ลงมาพร้อมซูมออก จนลงตัวเป็นหน้าจริง ===== */
+let fantasyIntroBusy = false;
+function playFantasyIntro(applyFn){
+  if(fantasyIntroBusy) return;
+  const reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if(reduce || !Element.prototype.animate){ applyFn(); return; }
+  fantasyIntroBusy = true;
+  const pc = currentMode() === "pc";
+  const src = pc ? "image/OceanPC.png" : "image/OceanMB.png";   // ใช้ภาพเดียวกับพื้นหลังธีมจริง จะได้ต่อกันพอดี
+  const img = new Image();
+  let started = false;
+  const bail = ()=>{ if(started) return; started = true; fantasyIntroBusy = false; applyFn(); };   // ภาพโหลดไม่ขึ้น → สลับธีมเฉยๆ
+  img.onerror = bail; setTimeout(bail, 2500);
+  img.onload = ()=>{ if(started) return; started = true; run(); };
+  img.src = src;
+
+  function run(){
+    if(!document.getElementById("fxZoomCss")){
+      const st = document.createElement("style"); st.id = "fxZoomCss";
+      st.textContent = `
+#fxZoom{position:fixed; inset:0; z-index:100000; overflow:hidden; background:#1c63c8; opacity:0; pointer-events:auto; touch-action:none;}
+#fxZoom .fx-img{position:absolute; inset:0; background-repeat:no-repeat; will-change:transform;}
+#fxZoom .fx-vig{position:absolute; inset:0; pointer-events:none; background:radial-gradient(ellipse at center,rgba(6,32,78,0) 50%,rgba(6,32,78,.6) 100%); animation:fxVig 3.2s ease-out forwards;}
+@keyframes fxVig{to{opacity:0;}}
+#fxZoom .fx-msg{position:absolute; left:0; right:0; bottom:13%; text-align:center; color:#fff; opacity:0; pointer-events:none; animation:fxTitle 2.6s ease-in-out .5s forwards;
+  font-family:'Cinzel','Noto Serif Thai',serif; text-shadow:0 2px 18px rgba(6,32,78,.8);}
+#fxZoom .fx-msg b{display:block; font-size:clamp(26px,7vw,46px); letter-spacing:1.5px; font-weight:700;}
+#fxZoom .fx-msg small{display:block; margin-top:6px; font-size:clamp(13px,3.2vw,16px); letter-spacing:.8px; opacity:.92; font-family:'Sarabun','Noto Sans Thai',sans-serif;}
+@keyframes fxTitle{0%{opacity:0; transform:translateY(10px);} 22%{opacity:1; transform:none;} 72%{opacity:1;} 100%{opacity:0;}}`;
+      document.head.appendChild(st);
+    }
+    const ov = document.createElement("div"); ov.id = "fxZoom";
+    ov.innerHTML = `<div class="fx-img"></div><div class="fx-vig"></div><div class="fx-msg"><b>โหมดแฟนตาซี</b><small>ล่องเรือออกสู่ท้องทะเล…</small></div>`;
+    document.body.appendChild(ov);
+    const W = ov.clientWidth, H = ov.clientHeight, el = ov.firstChild;
+    el.style.backgroundImage = `url("${src}")`;
+    el.style.backgroundSize = "cover";
+    el.style.backgroundPosition = pc ? "center" : "center bottom";   // ตรงกับ body::before ของธีมแฟนตาซี
+    /* หาตำแหน่งเมืองบนหน้าผาในจอ (ภาพ cover) เพื่อใช้เป็นจุดศูนย์กลางการซูม */
+    const iw = img.naturalWidth, ih = img.naturalHeight, sc = Math.max(W/iw, H/ih);
+    const offX = (W - iw*sc)/2, offY = pc ? (H - ih*sc)/2 : (H - ih*sc);
+    const CITY_X = 0.64, CITY_Y = 0.30;   // ตำแหน่งเมืองในภาพ (สัดส่วน กว้าง/สูง) — ปรับตรงนี้ถ้าอยากเปลี่ยนจุดที่ซูมเข้าไป
+    const ox = Math.min(W*0.9, Math.max(W*0.3, offX + iw*sc*CITY_X));
+    const oy = Math.min(H*0.9, Math.max(H*0.25, offY + ih*sc*CITY_Y));
+    const z0 = pc ? 2.3 : 1.8;
+    const tx = W*0.5 - ox, ty = H*0.42 - oy;
+    el.style.transformOrigin = `${ox}px ${oy}px`;
+    const from = `translate(${tx}px,${ty}px) scale(${z0})`;
+    el.style.transform = from;
+    (async ()=>{
+      try{
+        el.animate([{transform:from},{transform:"translate(0px,0px) scale(1)"}], {duration:3400, easing:"cubic-bezier(.45,0,.2,1)", fill:"forwards"});
+        await ov.animate([{opacity:0},{opacity:1}], {duration:280, fill:"forwards"}).finished;
+        applyFn();   // จอถูกภาพคลุมเต็มแล้ว สลับธีมข้างหลังได้เลย
+        await new Promise(r=>setTimeout(r, 2800));
+        await ov.animate([{opacity:1},{opacity:0}], {duration:550, fill:"forwards"}).finished;
+      }catch(e){ try{ applyFn(); }catch(_){} }
+      ov.remove(); fantasyIntroBusy = false;
+    })();
+  }
+}
 function setTheme(t){
   if(!THEME_COLORS[t]) t = "light";
+  if(t === "fantasy" && currentTheme() !== "fantasy" && !fantasyIntroBusy){
+    try{ fantasyMusic.volume = 0; const p = fantasyMusic.play(); if(p && p.catch) p.catch(()=>{}); }catch(e){}   // เริ่มเพลงตอนกด (ยังอยู่ในจังหวะที่ผู้ใช้แตะ) แล้วค่อยๆ ดังขึ้น
+    const tgt = 0.5, t0 = performance.now();
+    (function up(now){ const k = Math.min(1, ((now||performance.now()) - t0)/2500); fantasyMusic.volume = tgt*k; if(k<1) requestAnimationFrame(up); })(t0);
+    playFantasyIntro(()=> applyTheme(t));
+    return;
+  }
+  applyTheme(t);
+}
+function applyTheme(t){
   document.documentElement.dataset.theme = t;
   try{ localStorage.setItem("kc_theme", t); }catch(e){}
   const mt = document.querySelector('meta[name="theme-color"]'); if(mt) mt.setAttribute("content", THEME_COLORS[t]);
   paintThemeSwitch();
+  syncMusic();
 }
 qs("#themeBtn")?.addEventListener("click", ()=>{ paintThemeSwitch(); qs("#modalTheme").classList.add("active"); });
 qs("#modalTheme")?.addEventListener("click", e=>{
@@ -4144,6 +4444,7 @@ qs("#modalTheme")?.addEventListener("click", e=>{
 });
 qsa("#modalTheme [data-close]").forEach(b=> b.addEventListener("click", ()=> qs("#modalTheme").classList.remove("active")));
 paintThemeSwitch();
+syncMusic();   // เปิดแอปมาด้วยธีมแฟนตาซีอยู่แล้วก็เล่นเพลงเลย
 
 /* ================= SPLASH (ค้างจนกว่าจะโหลดข้อมูลเสร็จ) ================= */
 (async function splash(){
