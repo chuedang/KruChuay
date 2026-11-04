@@ -644,6 +644,14 @@ function findActivity(date){
   if(!date) return null;
   return state.activities.find(a => a["รายวิชา"]===state.score.subject && a["ระดับชั้น"]===state.score.room && inPeriod(a) && dateKey(a["วันที่"])===date);
 }
+/* Extra = หัวคะแนนที่คิดคะแนน ×2 (ต้องส่ง 2 งานในวันเดียวกัน)
+   เก็บธงไว้ที่หน้า "คำอธิบายงาน" ในชีท Act ด้วยแท็ก [Extra] — ไม่ต้องแก้ Apps Script หรือเพิ่มคอลัมน์ */
+const EXTRA_TAG = "[Extra]";
+const isExtraText = d => String(d ?? "").trim().startsWith(EXTRA_TAG);
+const stripExtra = d => String(d ?? "").replace(/^\s*\[Extra\]\s*/, "");
+const isExtraAct = a => !!a && isExtraText(a["คำอธิบายงาน"]);
+const colMult = date => isExtraAct(findActivity(date)) ? 2 : 1;
+
 function findScore(name, date){
   if(!date) return null;
   return state.scores.find(s => s["ระดับชั้น"]===state.score.room && inPeriod(s) && sameStr(s["รายวิชา"], state.score.subject) && s["ชื่อ"]===name && dateKey(s["วันที่"])===date);
@@ -710,7 +718,8 @@ function renderScoreTable(){
   let thead = `<tr><th class="name-head">ชื่อ</th>`;
   state.score.headers.forEach(d=>{
     const title = String(findActivity(d)?.["งาน"] ?? "").trim();
-    thead += `<th data-date="${d}" class="${d===todayISO()?"today-col":""}">${fmtShort(d)}<small class="wd">${fmtWd(d)}</small>${title ? `<span class="head-badge">${esc(title)}</span>` : `<span class="head-badge noname">＋ ชื่องาน</span>`}</th>`;
+    const ex = colMult(d)===2;
+    thead += `<th data-date="${d}" class="${d===todayISO()?"today-col":""}${ex?" extra-col":""}">${fmtShort(d)}<small class="wd">${fmtWd(d)}</small>${ex?`<span class="x2-badge">⭐ Extra ×2</span>`:""}${title ? `<span class="head-badge">${esc(title)}</span>` : `<span class="head-badge noname">＋ ชื่องาน</span>`}</th>`;
   });
   const emptyCount = 0;   // แสดงเฉพาะหัวคะแนนที่มีจริงในชีท Act (ลบแถวใน Act แล้วคอลัมน์หายตามทันที) — เพิ่มวันที่ใช้ปุ่ม "＋ เพิ่มวันที่"
   for(let i=0;i<emptyCount;i++){
@@ -724,10 +733,11 @@ function renderScoreTable(){
     state.score.headers.forEach(d=>{
       const pend = state.score.pending.get(pendingKey(st.key, d));
       const saved = savedScore(st.key, d);
+      const m = colMult(d);                                               // Extra = ×2 (ในชีทเก็บคะแนนดิบ 1-5 ไว้เหมือนเดิม)
       let val = "", cls = "";
       if(pend===null){ val = "✕"; cls = "pending removing"; }            // รอลบตอนกดบันทึก
-      else if(pend!==undefined){ val = pend; cls = `pending v${pend}`; }   // ลงแล้วแต่ยังไม่บันทึก
-      else if(saved!==null){ val = saved; cls = `filled v${saved}`; }
+      else if(pend!==undefined){ val = pend*m; cls = `pending v${pend}${m>1?" x2":""}`; }   // ลงแล้วแต่ยังไม่บันทึก
+      else if(saved!==null){ val = saved*m; cls = `filled v${saved}${m>1?" x2":""}`; }
       rows += `<td class="${d===todayISO()?"today-col":""}"><div class="score-circle ${cls}" data-name="${esc(st.key)}" data-date="${d}">${val}</div></td>`;
     });
     for(let i=0;i<emptyCount;i++){
@@ -736,7 +746,7 @@ function renderScoreTable(){
     rows += `</tr>`;
   });
 
-  const hint = `<div class="hint" style="padding:10px 12px 0;">แตะวงกลมเพื่อให้คะแนน · แตะหัวคอลัมน์เพื่อแก้วันที่/ชื่องาน · ลงเสร็จกด "บันทึกคะแนน" ด้านล่างครั้งเดียว</div>`;
+  const hint = `<div class="hint" style="padding:10px 12px 0;">แตะวงกลมเพื่อให้คะแนน · แตะหัวคอลัมน์เพื่อแก้วันที่/ชื่องาน หรือติ๊ก ⭐ Extra (คะแนน ×2) · ลงเสร็จกด "บันทึกคะแนน" ด้านล่างครั้งเดียว</div>`;
   wrap.innerHTML = `<table class="score-table"><thead>${thead}</thead><tbody>${rows}</tbody></table>${hint}`;
 
   const info = qs("#scoreInfo");
@@ -942,7 +952,8 @@ function openAssignmentModal(date){
   qs("#actDateLabel").textContent = date ? fmtLong(date) : "หัวคะแนนใหม่";
   qs("#actDateInput").value = date || "";
   qs("#actName").value = act?.["งาน"] || "";
-  qs("#actDesc").value = act?.["คำอธิบายงาน"] || "";
+  qs("#actDesc").value = stripExtra(act?.["คำอธิบายงาน"] || "");
+  qs("#actExtra").checked = isExtraAct(act);
   qs("#modalAssignment").classList.add("active");
 }
 qsa("#modalAssignment [data-close]").forEach(b=>b.addEventListener("click", ()=> qs("#modalAssignment").classList.remove("active")));
@@ -950,7 +961,7 @@ qs("#actSaveBtn").addEventListener("click", async ()=>{
   const oldDate = state.score.editingDate;
   const newDate = qs("#actDateInput").value;
   const assignment = qs("#actName").value.trim();
-  const description = qs("#actDesc").value.trim();
+  const description = (qs("#actExtra").checked ? EXTRA_TAG + " " : "") + qs("#actDesc").value.trim();   // Extra = ใส่แท็ก [Extra] นำหน้าคำอธิบาย
   if(!newDate){ toast("เลือกวันที่ก่อนครับ"); return; }
   const existedInAct = !!findActivity(newDate);
   if(oldDate && newDate!==oldDate && existedInAct){
@@ -982,8 +993,14 @@ function openScorePick(name, date, mode="weekly"){
   if(mode==="weekly" && !date){ openAssignmentModal(null); return; }   // ช่องว่างที่ยังไม่มีวันที่ -> เปิดหน้าเพิ่มวันที่
   state.score.pickCell = { name, date, mode };
   const cur = mode==="examBeh" ? (state.examUi.vals.get(name)?.beh ?? null) : currentScore(name, date);
-  qs("#pickLabel").textContent = mode==="examBeh" ? `${name} · จิตพิสัย (${period.type})` : `${name} · ${fmtLong(date)}`;
-  qsa("#scorePickGrid button").forEach(b=> b.classList.toggle("cur", cur!==null && Number(b.dataset.v)===cur));
+  const m = mode==="weekly" ? colMult(date) : 1;
+  qs("#pickLabel").textContent = mode==="examBeh" ? `${name} · จิตพิสัย (${period.type})` : `${name} · ${fmtLong(date)}${m>1 ? " · ⭐ Extra ×2 (ต้องส่ง 2 งาน)" : ""}`;
+  qsa("#scorePickGrid button").forEach(b=>{
+    const v = Number(b.dataset.v);
+    b.innerHTML = m>1 ? `${v}<small>×2 = ${v*m}</small>` : String(v);
+    b.classList.toggle("x2", m>1);
+    b.classList.toggle("cur", cur!==null && v===cur);
+  });
   const clr = qs("#scoreClearBtn"); if(clr) clr.style.display = (cur===null) ? "none" : "";     // มีคะแนนอยู่ถึงจะมีปุ่มลบ
   qs("#modalScorePick").classList.add("active");
 }
@@ -1451,7 +1468,7 @@ function computeSummary(w, ov){
     const d = dateKey(a["วันที่"]), t = T(a["ประเภท"]);
     if(!d || !TYPES.includes(t) || seen.has(t+"|"+d)) return;
     seen.add(t+"|"+d);
-    if(T(a["งาน"])) cols.push({ t, d });
+    if(T(a["งาน"])) cols.push({ t, d, m: isExtraAct(a) ? 2 : 1 });   // m = น้ำหนักคอลัมน์ (Extra = 2 งาน)
   });
   const smap = new Map();
   state.scores.forEach(s=>{
@@ -1463,7 +1480,7 @@ function computeSummary(w, ov){
   const sk = (c, st) => `${c.t}|${T(st.key)}|${c.d}`;
   // นับเฉพาะคอลัมน์ที่มีคนได้คะแนนแล้ว (ยังไม่ถึงวันสอนจะไม่ถูกนับเป็นคะแนนที่หายไป)
   const used = cols.filter(c => roster.some(st => smap.has(sk(c, st))));
-  const usedWork = used.length;
+  const usedWork = used.reduce((a,c)=> a + c.m, 0);   // นับ Extra เป็น 2 งาน
 
   const full = {}, exW = {}, fb = {};
   TYPES.forEach(t=>{
@@ -1478,7 +1495,7 @@ function computeSummary(w, ov){
   const fbSum = TYPES.reduce((a,t)=> a + (fb[t]>0 ? fb[t] : 0), 0);
   // คะแนนเต็มที่ "ได้จริง" ของแต่ละครึ่งภาค (ใช้หาเปอร์เซ็นต์ข้างช่องรวม): งาน + จิตพิสัย + สอบ เฉพาะส่วนที่ตั้งค่าไว้แล้ว
   const maxOf = t => {
-    const wk = usedWork ? used.filter(c=>c.t===t).length / usedWork * w.work : 0;
+    const wk = usedWork ? used.filter(c=>c.t===t).reduce((a,c)=>a+c.m,0) / usedWork * w.work : 0;
     const bh = (fbSum>0 && fb[t]>0) ? fb[t] / fbSum * w.beh : 0;
     const ex = full[t]>0 ? (t==="กลางภาค" ? w.mid : w.fin) : 0;
     return wk + bh + ex;
@@ -1501,7 +1518,7 @@ function computeSummary(w, ov){
     o.bRaw = {};
     o.workm = 0; o.workf = 0;
     TYPES.forEach(t=>{
-      const sum = used.filter(c=>c.t===t).reduce((a,c)=> a + (smap.get(sk(c,st))||0), 0);
+      const sum = used.filter(c=>c.t===t).reduce((a,c)=> a + (smap.get(sk(c,st))||0) * c.m, 0);   // Extra คูณ 2
       o["work"+TK[t]] = usedWork ? sum / (5*usedWork) * w.work : 0;
       const r = findExamRow(term, t, room, subject, st.key);
       let b = numOrNull(r?.["จิตพิสัย"]);
@@ -1913,7 +1930,7 @@ function renderPending(){
   /* งานทั้งหมดของ ห้องนี้ + วิชานี้ + ภาคเรียน/ประเภทที่เลือก เรียงจากงานแรก */
   const allActs = state.activities
     .filter(a=> sameStr(a["รายวิชา"],subject) && sameStr(a["ระดับชั้น"],room) && inPeriod(a) && dateKey(a["วันที่"]))
-    .map(a=> ({ date: dateKey(a["วันที่"]), name: String(a["งาน"]||"").trim() }))
+    .map(a=> ({ date: dateKey(a["วันที่"]), name: String(a["งาน"]||"").trim(), extra: isExtraAct(a) }))
     .sort((x,y)=> x.date.localeCompare(y.date));
   /* โหมด "ถึงวันนี้" = ตั้งแต่งานแรกจนถึงวันนี้ (ไม่นับงานของวันข้างหน้า) · โหมด "ทั้งหมด" = ทั้งเทอม */
   const today = todayISO();
@@ -1942,7 +1959,7 @@ function renderPending(){
     matched++;
     if(onlyMissing && !sq && missing.length===0) return "";   // ติ๊ก "เฉพาะคนที่มีงานค้าง" (ตอนค้นหาชื่อ จะโชว์คนนั้นเสมอ)
     shown++;
-    const chips = missing.map(a=> `<span class="pend-chip">${fmtLong(a.date)}${a.name ? ` · ${esc(a.name)}` : ""}</span>`).join("");
+    const chips = missing.map(a=> `<span class="pend-chip">${fmtLong(a.date)}${a.name ? ` · ${esc(a.name)}` : ""}${a.extra ? " · ⭐ ส่ง 2 งาน" : ""}</span>`).join("");
     return `<tr><td class="name-cell">${snum(st.no)}${esc(st.label)}</td>
       <td class="pend-cell">${missing.length ? chips : `<span class="pend-ok">✅ ครบแล้ว</span>`}</td></tr>`;
   }).join("");
@@ -1990,7 +2007,7 @@ function printActs(){
   const { room, subject } = state.score;
   const list = state.activities
     .filter(a=> sameStr(a["รายวิชา"],subject) && sameStr(a["ระดับชั้น"],room) && inPeriod(a) && dateKey(a["วันที่"]))
-    .map(a=> ({ date: dateKey(a["วันที่"]), name: String(a["งาน"]||"").trim() }))
+    .map(a=> ({ date: dateKey(a["วันที่"]), name: String(a["งาน"]||"").trim(), extra: isExtraAct(a) }))
     .sort((x,y)=> x.date.localeCompare(y.date));
   if(list.length) return list;
   return (state.score.headers||[]).map(d=>({ date:d, name:"" })).sort((x,y)=> x.date.localeCompare(y.date));   // กันกรณี Act ยังไม่โหลด: ใช้หัวตารางที่เห็นอยู่
@@ -2111,7 +2128,7 @@ function buildCheckSheetHTML(acts, showNames){
   let tables = "";
   for(let t=0; t<nTab; t++){
     const part = acts.slice(t*per, (t+1)*per);
-    const th = part.map(a=> `<th class="dc"><div class="vt">${fmtShort(a.date)}${showNames && a.name ? ` · ${esc(a.name)}` : ""}</div></th>`).join("");
+    const th = part.map(a=> `<th class="dc"><div class="vt">${fmtShort(a.date)}${a.extra ? " ⭐×2" : ""}${showNames && a.name ? ` · ${esc(a.name)}` : ""}</div></th>`).join("");
     const body = roster.map(st=>{
       const tds = part.map(a=> `<td class="ck">${savedScore(st.key, a.date)!==null ? "✓" : ""}</td>`).join("");
       return `<tr><td class="no">${esc(st.no ?? "")}</td><td class="nm">${esc(st.label)}</td><td class="lv">${esc(room)}</td>${tds}</tr>`;
