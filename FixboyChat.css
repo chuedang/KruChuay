@@ -172,3 +172,25 @@ a.fb-cmd b{flex-shrink:1; min-width:0; word-break:break-all; overflow-wrap:anywh
 /* ปุ่ม 🖼️ + 📎 ซ้ายช่องพิมพ์ — ไม่มีแถวชิปคำสั่งแล้ว */
 .fb-form .fb-attach{width:42px;}
 .fb-form{align-items:stretch;}
+/* ===== แกลเลอรีรูปจาก Drive (/ขอไฟล์ รูปภาพ) ===== */
+.fb-row.wide .fb-col{width:100%;}
+.fb-row.wide .fb-bub{width:100%; box-sizing:border-box;}
+.fb-igrid{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:8px; white-space:normal;}
+body.fb-full .fb-igrid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));}
+.fb-ic{display:flex; flex-direction:column; min-width:0; border:1px solid var(--fb-line); background:var(--fb-sur); border-radius:14px; overflow:hidden;}
+.fb-ithumb{display:flex; align-items:center; justify-content:center; aspect-ratio:1/1; background:var(--fb-bg); font-size:30px; text-decoration:none;}
+.fb-ithumb img{width:100%; height:100%; object-fit:cover; display:block;}
+.fb-iname{display:flex; align-items:center; gap:4px; padding:5px 4px 5px 9px; min-height:36px;}
+.fb-itxt{flex:1; min-width:0; font-size:12px; font-weight:600; line-height:1.35; overflow-wrap:anywhere; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
+.fb-iedit{flex-shrink:0; width:30px; height:30px; border-radius:10px; border:1px solid var(--fb-line); background:var(--fb-bg); font-size:13px; cursor:pointer; padding:0;}
+.fb-iedit:active{transform:scale(.9);}
+.fb-ied{display:flex; flex-direction:column; gap:6px; padding:8px;}
+.fb-irow{display:flex; gap:6px; align-items:center;}
+.fb-iinput{flex:1; min-width:0; width:100%; box-sizing:border-box; padding:7px 8px; border-radius:10px; border:1.5px solid var(--fb-acc); background:var(--fb-bg); color:var(--fb-ink); font:inherit; font-size:16px; outline:none;}
+.fb-iext{flex-shrink:0; font-size:12px; font-weight:700; color:var(--fb-soft);}
+.fb-iok,.fb-ino{flex:1; padding:7px 4px; border-radius:10px; border:1.5px solid var(--fb-line); background:var(--fb-sur); color:var(--fb-ink); font:inherit; font-size:12.5px; font-weight:700; cursor:pointer;}
+.fb-iok{background:var(--fb-acc); border-color:var(--fb-acc); color:#fff;}
+.fb-iok:disabled,.fb-ino:disabled{opacity:.55;}
+.fb-ierr{min-height:0; font-size:11.5px; line-height:1.4; color:var(--fb-soft);}
+.fb-ihint{margin-top:8px; font-size:11.5px; color:var(--fb-soft);}
+.fb-imore{width:100%; box-sizing:border-box; margin-top:8px;}
