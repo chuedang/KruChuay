@@ -1,6 +1,7 @@
 /* ===== FixboyChat.js — น้อง Fixboy แชทบอทบนหน้าแรก KruChauy =====
    - ปุ่มเรียกน้อง (ลอยอยู่มุมขวา เฉพาะหน้าแรก) → เปิดแชท
    - พิมพ์ help หรือ /help เพื่อดูคำสั่งทั้งหมด (พิมพ์มี / หรือไม่มี / ก็ได้ ตัวพิมพ์เล็ก/ใหญ่ไม่สำคัญ)
+   - /ขอไฟล์ รูปภาพ (หรือ ภาพ / .png) = แสดงรูปทั้งหมดใน Drive จากนามสกุลไฟล์ + แก้ชื่อรูปในแชทได้ (ต้องวางโค้ด Apps Script ใหม่)
    - 1 ข้อความตอบได้หลายคำสั่ง: ใส่หลายชื่อคั่นด้วย , เช่น  a, b, c · ค้นหาไฟล์ใน Drive: /drive ชื่อไฟล์ หรือ /ขอไฟล์ ชื่อไฟล์
    - คำสั่งเก็บในชีท Config (แถว ID = S1, S2, … · รหัสวิชา = ชื่อคำสั่ง · รายวิชา = ข้อความตอบ) แก้ในชีทตรง ๆ ได้
    - เพิ่ม/แก้/ลบที่ปุ่ม ⚙️ ในแชทก็ได้ (ถ้าเชื่อมชีทแล้วจะเขียนลงชีทให้ด้วย) · แคชไว้ในเครื่อง localStorage: kc_fixboy_cmds
@@ -26,6 +27,18 @@
   var DRIVE_WORDS = ["drive", "ไดรฟ์", "ไดร์ฟ", "ไดรว์"];
   var FILE_WORDS = ["ขอไฟล์"];                      // /ขอไฟล์ ชื่อไฟล์  (เหมือน /drive ชื่อไฟล์)
   var SEARCH_WORDS = DRIVE_WORDS.concat(FILE_WORDS);
+  /* /ขอไฟล์ รูปภาพ (หรือ ภาพ) = หาจาก "นามสกุลไฟล์ที่เป็นรูป" ไม่ใช้ชื่อไฟล์ · /ขอไฟล์ .png = เฉพาะนามสกุลนั้น */
+  var IMAGE_WORDS = ["รูปภาพ", "รูป", "ภาพ", "รูปถ่าย", "image", "images", "photo", "photos", "picture", "pictures", "pic", "pics"];
+  var IMG_EXTS = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif", "svg", "tif", "tiff"];
+  var IMG_PAGE = 20;                    // โหลดรูปครั้งละกี่รูป (กด “โหลดเพิ่ม” ต่อได้จนครบ)
+  /* คืน "" = รูปทุกนามสกุล, "png" = เฉพาะนามสกุลนั้น, null = ไม่ใช่คำสั่งหารูป (ไปค้นหาตามชื่อไฟล์ตามเดิม) */
+  function imageQuery(q) {
+    var n = norm(q);
+    if (IMAGE_WORDS.indexOf(n) >= 0) return "";
+    var m = n.match(/^\.?([a-z0-9]+)$/);
+    if (m && IMG_EXTS.indexOf(m[1]) >= 0) return m[1];
+    return null;
+  }
 
   /* ---------- คำสั่งเริ่มต้น (แก้ตรงนี้ได้ หรือไปแก้/เพิ่ม/ลบใน ⚙️ ก็ได้) ----------
      k = ชื่อคำสั่ง (ไม่ต้องใส่ /)   d = คำอธิบายสั้นที่โชว์ใน /help
@@ -176,6 +189,7 @@
       "// Fixboy → Google Drive  (วางทับโค้ดเดิมทั้งหมด)",
       "var KEY = " + JSON.stringify(key || "") + ";",
       "var FOLDER_NAME = 'Fixboy Uploads';",
+      "var IMG_EXT = ['jpg','jpeg','png','gif','webp','bmp','heic','heif','svg','tif','tiff'];",
       "",
       "function out_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }",
       "function folder_(id) {",
@@ -184,6 +198,8 @@
       "  return it.hasNext() ? it.next() : DriveApp.createFolder(FOLDER_NAME);",
       "}",
       "function n_(s) { return String(s).toLowerCase().replace(/[\\s.\\-_()\\[\\]]+/g, ''); }",
+      "function extOf_(name) { var m = String(name).toLowerCase().match(/\\.([a-z0-9]+)$/); return m ? m[1] : ''; }",
+      "function day_(f) { return Utilities.formatDate(f.getLastUpdated(), Session.getScriptTimeZone(), 'yyyy-MM-dd'); }",
       "function search_(root, q) {",
       "  var words = q.split(/\\s+/).map(n_).filter(Boolean).slice(0, 6);",
       "  if (!words.length) return [];",
@@ -199,13 +215,43 @@
       "    while (sub.hasNext()) todo.push(sub.next());",
       "  }",
       "  hit.sort(function (a, b) { return b.getLastUpdated() - a.getLastUpdated(); });",
-      "  return hit.slice(0, 10).map(function (f) { return { name: f.getName(), url: f.getUrl(), size: f.getSize(), date: Utilities.formatDate(f.getLastUpdated(), Session.getScriptTimeZone(), 'yyyy-MM-dd') }; });",
+      "  return hit.slice(0, 10).map(function (f) { return { name: f.getName(), url: f.getUrl(), size: f.getSize(), date: day_(f) }; });",
+      "}",
+      "// หารูปภาพทั้งหมดจาก \"นามสกุลไฟล์/ชนิดไฟล์\" (ไม่ใช้ชื่อไฟล์) — ext ว่าง = ทุกนามสกุลรูป, แบ่งหน้าด้วย offset/limit",
+      "function images_(root, ext, offset, limit) {",
+      "  var hit = [], todo = [root], scanned = 0, t0 = new Date().getTime();",
+      "  while (todo.length && scanned < 5000 && new Date().getTime() - t0 < 20000) {",
+      "    var fo = todo.shift(), it = fo.getFiles();",
+      "    while (it.hasNext() && scanned < 5000) {",
+      "      var f = it.next(); scanned++;",
+      "      var e = extOf_(f.getName());",
+      "      if (IMG_EXT.indexOf(e) < 0 && String(f.getMimeType()).indexOf('image/') !== 0) continue;",
+      "      if (ext) {",
+      "        var same = (e === ext) || (ext === 'jpg' && e === 'jpeg') || (ext === 'jpeg' && e === 'jpg');",
+      "        if (!same) continue;",
+      "      }",
+      "      hit.push(f);",
+      "    }",
+      "    var sub = fo.getFolders();",
+      "    while (sub.hasNext()) todo.push(sub.next());",
+      "  }",
+      "  hit.sort(function (a, b) { return b.getLastUpdated() - a.getLastUpdated(); });",
+      "  var page = hit.slice(offset, offset + limit).map(function (f) {",
+      "    var th = '';",
+      "    try { var b = f.getThumbnail(); if (b) th = 'data:' + b.getContentType() + ';base64,' + Utilities.base64Encode(b.getBytes()); } catch (x) {}",
+      "    return { id: f.getId(), name: f.getName(), url: f.getUrl(), size: f.getSize(), date: day_(f), thumb: th };",
+      "  });",
+      "  return { total: hit.length, files: page };",
       "}",
       "function doGet(e) {",
       "  var p = (e && e.parameter) || {};",
       "  if (KEY && p.key !== KEY) return out_({ ok: false, error: 'bad key' });",
       "  try {",
       "    var fo = folder_(p.folderId);",
+      "    if (p.kind === 'images') {",
+      "      var r = images_(fo, String(p.ext || '').toLowerCase().replace(/^\\./, ''), parseInt(p.offset, 10) || 0, Math.min(parseInt(p.limit, 10) || 20, 30));",
+      "      return out_({ ok: true, folder: fo.getUrl(), total: r.total, files: r.files });",
+      "    }",
       "    if (p.q) return out_({ ok: true, folder: fo.getUrl(), files: search_(fo, String(p.q)) });",
       "    return out_({ ok: true, folder: fo.getUrl() });",
       "  } catch (err) { return out_({ ok: false, error: String(err) }); }",
@@ -214,6 +260,13 @@
       "  try {",
       "    var d = JSON.parse(e.postData.contents);",
       "    if (KEY && d.key !== KEY) return out_({ ok: false, error: 'bad key' });",
+      "    if (d.action === 'rename') {   // แก้ชื่อไฟล์จากแชท",
+      "      var nm = String(d.name || '').replace(/[\\\\\\/:*?\"<>|]+/g, ' ').trim();",
+      "      if (!nm) return out_({ ok: false, error: 'ชื่อว่าง' });",
+      "      var rf = DriveApp.getFileById(String(d.id));",
+      "      rf.setName(nm);",
+      "      return out_({ ok: true, name: rf.getName(), url: rf.getUrl() });",
+      "    }",
       "    var fo = folder_(d.folderId);",
       "    var f = fo.createFile(Utilities.newBlob(Utilities.base64Decode(d.data), d.type || 'application/octet-stream', d.name));",
       "    return out_({ ok: true, name: f.getName(), url: f.getUrl(), folder: fo.getUrl() });",
@@ -244,7 +297,7 @@
     '<section id="fbPanel" class="fb-panel" role="dialog" aria-label="แชทน้อง Fixboy" aria-hidden="true">' +
       '<div class="fb-stage"><img id="fbStage" src="' + IMG + '2.png" alt="Fixboy"></div>' +
       '<header class="fb-head">' +
-        '<div class="fb-title"><b>น้อง Fixboy</b><small>ผู้ช่วยครู · พิมพ์ /help · /drive ชื่อไฟล์ ค้นหาไฟล์ใน Drive</small></div>' +
+        '<div class="fb-title"><b>น้อง Fixboy</b><small>ผู้ช่วยครู · พิมพ์ /help · /drive ชื่อไฟล์ · /ขอไฟล์ รูปภาพ</small></div>' +
         '<button type="button" class="fb-ico" id="fbGear" aria-label="ตั้งค่า">⚙️</button>' +
         '<button type="button" class="fb-ico" id="fbFull" aria-label="ขยายแชทเต็มจอ" title="ขยายเต็มจอ">⤢</button>' +
         '<button type="button" class="fb-ico" id="fbClose" aria-label="ปิด">✕</button>' +
@@ -297,7 +350,7 @@
   function addBot(html, opts) {
     opts = opts || {};
     var d = document.createElement("div");
-    d.className = "fb-row bot";
+    d.className = "fb-row bot" + (opts.wide ? " wide" : "");
     var body = html;
     if (opts.lock) {
       body = '<div class="fb-lock"><div class="fb-lock-in">' + html + '</div>' +
@@ -332,6 +385,7 @@
       sysBtn("/help", "แสดงคำสั่งทั้งหมด (พิมพ์ help ไม่ใส่ / ก็ได้)", "data-cmd", "help") +
       sysBtn("/drive ชื่อไฟล์", "ค้นหาไฟล์ในโฟลเดอร์ Google Drive (แตะแล้วพิมพ์ชื่อไฟล์ต่อ)", "data-fill", "/drive ") +
       sysBtn("/ขอไฟล์ ชื่อไฟล์", "เหมือน /drive — ค้นหาไฟล์ใน Drive", "data-fill", "/ขอไฟล์ ") +
+      sysBtn("/ขอไฟล์ รูปภาพ", "แสดงรูปทั้งหมดใน Drive (หาจากนามสกุลไฟล์ ไม่ใช้ชื่อ) · แก้ชื่อรูปในแชทได้ · พิมพ์ /ขอไฟล์ .png เพื่อเลือกนามสกุล", "data-cmd", "ขอไฟล์ รูปภาพ") +
     '</div>';
   }
 
@@ -407,6 +461,120 @@
       });
   }
 
+  /* ---------- แกลเลอรีรูปภาพใน Drive (หาจากนามสกุลไฟล์) + แก้ชื่อในแชท ---------- */
+  function extOfName(n) { var m = String(n).match(/\.([A-Za-z0-9]+)$/); return m ? m[1] : ""; }
+  function driveErr(err) {
+    var m = String(err && err.message || err);
+    if (/bad key/i.test(m)) return "รหัสในแชทไม่ตรงกับโค้ดใน Apps Script ของ Drive ❌";
+    if (/Failed to fetch|NetworkError|Load failed|unknown|JSON|Unexpected/i.test(m)) return "ติดต่อ Drive ไม่ได้ ❌ เช็กว่า Deploy เป็น Web app, Who has access = Anyone และลิงก์ลงท้าย /exec";
+    return "Drive ตอบกลับว่า: " + esc(m);
+  }
+  var OLD_SCRIPT_MSG = "โค้ด Apps Script ของ Drive ยังเป็นเวอร์ชันเก่า (ยังไม่รองรับดูรูป/แก้ชื่อ) 😅<br>คัดลอกโค้ดใหม่ไปวางทับ แล้ว Deploy เป็นเวอร์ชันใหม่นะ";
+  function fetchImages(ext, offset) {
+    var u = drive.url, fid = parseFolder(drive.folder) || "";
+    return fetch(u + (u.indexOf("?") >= 0 ? "&" : "?") + "key=" + encodeURIComponent(drive.key) + "&folderId=" + encodeURIComponent(fid) +
+        "&kind=images&ext=" + encodeURIComponent(ext || "") + "&offset=" + (offset || 0) + "&limit=" + IMG_PAGE)
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.ok) throw new Error((j && j.error) || "unknown");
+        if (!Array.isArray(j.files)) { var o = new Error("old"); o.old = true; throw o; }
+        return { files: j.files.filter(function (f) { return safeDriveUrl(f.url) && f.id; }), total: Number(j.total) || j.files.length };
+      });
+  }
+  function imgCard(f) {
+    var ext = extOfName(f.name);
+    var th = /^data:image\//.test(String(f.thumb || "")) ? '<img src="' + esc(f.thumb) + '" alt="" loading="lazy">' : "<span>🖼️</span>";
+    return '<div class="fb-ic" data-id="' + esc(f.id) + '" data-ext="' + esc(ext) + '" data-url="' + esc(f.url) + '">' +
+      '<a class="fb-ithumb" href="' + esc(f.url) + '" target="_blank" rel="noopener" title="เปิดไฟล์">' + th + '</a>' +
+      imgNameRow(f.name) + '</div>';
+  }
+  function imgNameRow(name) {
+    return '<div class="fb-iname"><span class="fb-itxt">' + esc(name) + '</span>' +
+      '<button type="button" class="fb-iedit" data-imgedit aria-label="แก้ชื่อภาพ" title="แก้ชื่อภาพ">✏️</button></div>';
+  }
+  function imgMoreBtn(ext, offset, left) {
+    return '<button type="button" class="fb-cmd fb-imore" data-imgmore data-ext="' + esc(ext) + '" data-offset="' + offset + '"><b>⬇ โหลดเพิ่ม</b><span>เหลืออีก ' + left + ' รูป</span></button>';
+  }
+  /* คืน Promise ของ {html, pose, wide} เสมอ ไม่ reject */
+  function loadImages(ext) {
+    if (!drive.url) return Promise.resolve({ html: "ยังไม่ได้เชื่อม Google Drive เลยหารูปให้ไม่ได้ 😅" + driveBtn("ตั้งค่า Google Drive", "มีขั้นตอนสั้น ๆ พาทำให้"), pose: 5 });
+    return fetchImages(ext, 0).then(function (r) {
+      var label = ext ? "นามสกุล <b>." + esc(ext) + "</b>" : "ที่เป็นรูปภาพ";
+      if (!r.files.length) return { html: "ไม่เจอไฟล์" + label + "ในโฟลเดอร์ Drive เลย 🥲" + (ext ? "<br>ลองพิมพ์ <b>/ขอไฟล์ รูปภาพ</b> เพื่อดูทุกนามสกุลดูนะ" : ""), pose: 5 };
+      var left = r.total - r.files.length;
+      return {
+        html: "🖼️ เจอไฟล์" + label + " <b>" + r.total + "</b> รูป" +
+          '<div class="fb-igrid">' + r.files.map(imgCard).join("") + '</div>' +
+          (left > 0 ? imgMoreBtn(ext, r.files.length, left) : "") +
+          '<div class="fb-ihint">แตะรูปเพื่อเปิดไฟล์ · แตะ ✏️ ใต้รูปเพื่อแก้ชื่อ</div>',
+        pose: 3, wide: true
+      };
+    }).catch(function (err) {
+      if (err && err.old) return { html: OLD_SCRIPT_MSG + driveBtn("เปิดตั้งค่า Drive", "คัดลอกโค้ดใหม่ได้ที่นี่"), pose: 5 };
+      return { html: driveErr(err) + driveBtn("เปิดตั้งค่า Drive", "ตรวจลิงก์/รหัสอีกครั้ง"), pose: 5 };
+    });
+  }
+  function loadMoreImages(btn) {
+    var grid = btn.parentNode.querySelector(".fb-igrid");
+    var ext = btn.getAttribute("data-ext") || "", off = Number(btn.getAttribute("data-offset")) || 0;
+    if (btn.disabled || !grid) return;
+    btn.disabled = true; btn.querySelector("b").textContent = "⏳ กำลังโหลด…";
+    fetchImages(ext, off).then(function (r) {
+      grid.insertAdjacentHTML("beforeend", r.files.map(imgCard).join(""));
+      var next = off + r.files.length, left = r.total - next;
+      if (left > 0 && r.files.length) { btn.setAttribute("data-offset", next); btn.disabled = false; btn.querySelector("b").textContent = "⬇ โหลดเพิ่ม"; btn.querySelector("span").textContent = "เหลืออีก " + left + " รูป"; }
+      else btn.remove();
+      scrollEnd();
+    }).catch(function (err) {
+      btn.disabled = false; btn.querySelector("b").textContent = "⬇ โหลดเพิ่ม";
+      btn.querySelector("span").innerHTML = err && err.old ? "โค้ด Apps Script ยังเป็นเวอร์ชันเก่า" : driveErr(err);
+    });
+  }
+  /* แก้ชื่อภาพ: แก้เฉพาะชื่อ (นามสกุลล็อกไว้) แล้วส่งไปให้ Apps Script ของ Drive เปลี่ยนชื่อจริง */
+  function startRename(card) {
+    var nameEl = card.querySelector(".fb-itxt"); if (!nameEl || card.querySelector(".fb-ied")) return;
+    var ext = card.getAttribute("data-ext") || "", full = nameEl.textContent;
+    var base = ext && full.toLowerCase().slice(-(ext.length + 1)) === "." + ext.toLowerCase() ? full.slice(0, -(ext.length + 1)) : full;
+    card.querySelector(".fb-iname").style.display = "none";
+    var ed = document.createElement("div");
+    ed.className = "fb-ied";
+    ed.innerHTML = '<div class="fb-irow"><input type="text" class="fb-iinput" value="' + esc(base) + '" autocomplete="off" spellcheck="false" aria-label="ชื่อภาพใหม่">' +
+      (ext ? '<span class="fb-iext">.' + esc(ext) + '</span>' : "") + '</div>' +
+      '<div class="fb-irow"><button type="button" class="fb-iok" data-imgsave>✓ บันทึก</button><button type="button" class="fb-ino" data-imgcancel>ยกเลิก</button></div>' +
+      '<div class="fb-ierr"></div>';
+    card.appendChild(ed);
+    var inp = ed.querySelector("input"); inp.focus(); inp.select();
+  }
+  function endRename(card) {
+    var ed = card.querySelector(".fb-ied"); if (ed) ed.remove();
+    card.querySelector(".fb-iname").style.display = "";
+  }
+  function saveRename(card) {
+    var ed = card.querySelector(".fb-ied"); if (!ed || ed.dataset.busy) return;
+    var inp = ed.querySelector("input"), err = ed.querySelector(".fb-ierr"), ext = card.getAttribute("data-ext") || "";
+    var nm = inp.value.replace(/[\\\/:*?"<>|]+/g, " ").trim();
+    if (ext && nm.toLowerCase().slice(-(ext.length + 1)) === "." + ext.toLowerCase()) nm = nm.slice(0, -(ext.length + 1)).trim();
+    if (!nm) { err.textContent = "ใส่ชื่อก่อนนะ"; return; }
+    var full = nm + (ext ? "." + ext : "");
+    if (full === card.querySelector(".fb-itxt").textContent) { endRename(card); return; }
+    ed.dataset.busy = "1"; err.textContent = "⏳ กำลังเปลี่ยนชื่อ…";
+    ed.querySelectorAll("button,input").forEach(function (x) { x.disabled = true; });
+    fetch(drive.url, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ key: drive.key, action: "rename", id: card.getAttribute("data-id"), name: full }) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.ok) throw new Error((j && j.error) || "unknown");
+        card.querySelector(".fb-itxt").textContent = j.name || full;
+        endRename(card); setPose(3); backToIdle(3000);
+      })
+      .catch(function (e) {
+        delete ed.dataset.busy;
+        ed.querySelectorAll("button,input").forEach(function (x) { x.disabled = false; });
+        var m = String(e && e.message || e);
+        err.innerHTML = (/bad key|Failed to fetch|NetworkError|Load failed|JSON|Unexpected/i.test(m) ? driveErr(e) : esc(m) + " — ถ้ายังไม่ได้อัปเดตโค้ด Apps Script ให้คัดลอกโค้ดใหม่ใน ⚙️ → ☁️ Drive แล้ว Deploy ใหม่");
+      });
+  }
+
   function handleFiles(list) {
     var files = Array.prototype.slice.call(list || []);
     if (!files.length) return;
@@ -429,8 +597,12 @@
     if (!n) return null;
     if (HELP_WORDS.indexOf(n) >= 0) return { html: helpHtml(), pose: 4 };
     var sm = t0.match(/^\/*\s*(\S+)\s+([\s\S]+)$/);          // /ขอไฟล์ ชื่อไฟล์  หรือ  /drive ชื่อไฟล์
-    if (sm && SEARCH_WORDS.indexOf(norm(sm[1])) >= 0) { var q = sm[2].trim(); return { task: function () { return searchDrive(q); }, pose: 6 }; }
-    if (FILE_WORDS.indexOf(n) >= 0) return { html: "พิมพ์ชื่อไฟล์ต่อท้ายได้เลย เช่น <b>/ขอไฟล์ ใบงาน</b> น้องจะหาในโฟลเดอร์ Drive ให้ 🔎", pose: 4 };
+    if (sm && SEARCH_WORDS.indexOf(norm(sm[1])) >= 0) {
+      var q = sm[2].trim(), iq = imageQuery(q);
+      if (iq !== null) return { task: function () { return loadImages(iq); }, pose: 6 };   // รูปภาพ/ภาพ/.png → หาจากนามสกุลไฟล์
+      return { task: function () { return searchDrive(q); }, pose: 6 };
+    }
+    if (FILE_WORDS.indexOf(n) >= 0) return { html: "พิมพ์ชื่อไฟล์ต่อท้ายได้เลย เช่น <b>/ขอไฟล์ ใบงาน</b> น้องจะหาในโฟลเดอร์ Drive ให้ 🔎<br>อยากดูรูปทั้งหมด พิมพ์ <b>/ขอไฟล์ รูปภาพ</b> 🖼️", pose: 4 };
     if (DRIVE_WORDS.indexOf(n) >= 0) {
       return drive.url
         ? { html: "☁️ เชื่อม Google Drive แล้ว ลากไฟล์มาวางในแชท หรือกด 📎 ได้เลย<br>🔎 ค้นหาไฟล์: พิมพ์ <b>/drive ชื่อไฟล์</b> หรือ <b>/ขอไฟล์ ชื่อไฟล์</b><br>ตั้งค่าใหม่ได้ที่ปุ่ม ⚙️" + driveBtn("แก้ไขการเชื่อมต่อ", "กดเพื่อเปิดหน้าตั้งค่า Drive"), pose: 3 }
@@ -464,7 +636,7 @@
       var x = a[0];
       stopTyping();
       t.remove();
-      addBot(x.html, { lock: x.lock, copy: x.copy });
+      addBot(x.html, { lock: x.lock, copy: x.copy, wide: x.wide });
       setPose(x.pose);
       backToIdle(4200);
       busy = false;
@@ -523,7 +695,7 @@
       '<div class="fb-shead"><b>☁️ เชื่อม Google Drive</b><button type="button" class="fb-ico" data-cancel aria-label="กลับ">✕</button></div>' +
       '<div class="fb-sform">' +
         '<div class="fb-steps"><b>ทำครั้งเดียว ไม่ถึง 2 นาที</b><ol>' +
-          '<li>กด <b>คัดลอกโค้ด</b> → กด <b>เปิด Apps Script</b> → วางทับโค้ดเดิมทั้งหมด → กด 💾 บันทึก (เคยตั้งไว้แล้ว? ต้องวางโค้ดใหม่ทับ + Deploy เวอร์ชันใหม่ จึงจะใช้ /drive ค้นหาไฟล์ได้)</li>' +
+          '<li>กด <b>คัดลอกโค้ด</b> → กด <b>เปิด Apps Script</b> → วางทับโค้ดเดิมทั้งหมด → กด 💾 บันทึก (เคยตั้งไว้แล้ว? ต้องวางโค้ดใหม่ทับ + Deploy เวอร์ชันใหม่ จึงจะใช้ /drive ค้นหาไฟล์ และ /ขอไฟล์ รูปภาพ (ดู/แก้ชื่อรูป) ได้)</li>' +
           '<li><b>ขออนุมัติ:</b> กด ▶ Run 1 ครั้ง → Review permissions → เลือกบัญชี → Advanced → Go to … → Allow</li>' +
           '<li>กด <b>Deploy → New deployment → ⚙ Web app</b> ตั้ง Execute as = <b>Me</b>, Who has access = <b>Anyone</b> → Deploy</li>' +
           '<li>คัดลอก <b>Web app URL</b> (ลงท้าย /exec) มาวางช่องล่างนี้ แล้วกด <b>ทดสอบ</b></li>' +
@@ -703,12 +875,26 @@
   });
 
   function onCmdClick(e) {
+    var im = e.target.closest("[data-imgmore]");
+    if (im) { loadMoreImages(im); return; }
+    var ie = e.target.closest("[data-imgedit]");
+    if (ie) { startRename(ie.closest(".fb-ic")); return; }
+    var is = e.target.closest("[data-imgsave]");
+    if (is) { saveRename(is.closest(".fb-ic")); return; }
+    var ic = e.target.closest("[data-imgcancel]");
+    if (ic) { endRename(ic.closest(".fb-ic")); return; }
     if (e.target.closest("[data-opendrive]")) { openSettings(-3); return; }
     var fl = e.target.closest("[data-fill]");
     if (fl) { elInput.value = fl.getAttribute("data-fill"); elInput.focus(); return; }
     var b = e.target.closest("[data-cmd]");
     if (b) { send("/" + b.getAttribute("data-cmd")); }
   }
+  elMsgs.addEventListener("keydown", function (e) {     // ช่องแก้ชื่อภาพ: Enter = บันทึก, Esc = ยกเลิก (ไม่ให้ Esc ปิดแชททั้งอัน)
+    var inp = e.target.closest && e.target.closest(".fb-iinput"); if (!inp || e.isComposing) return;
+    var card = inp.closest(".fb-ic");
+    if (e.key === "Enter") { e.preventDefault(); saveRename(card); }
+    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); endRename(card); }
+  });
   elMsgs.addEventListener("click", function (e) {
     onCmdClick(e);
     var rv = e.target.closest(".fb-reveal");
