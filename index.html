@@ -10,8 +10,9 @@
 /* โหมดหน้าจอ: pc / mobile (จำค่าที่เลือกไว้ ถ้ายังไม่เคยเลือกจะเดาจากความกว้างจอ) — ตั้งก่อนวาดหน้าเพื่อกันภาพกระพริบ */
 (function(){var m="mobile";try{var s=localStorage.getItem("kc_mode");m=(s==="pc"||s==="mobile")?s:(window.innerWidth>=900?"pc":"mobile");}catch(e){}document.documentElement.classList.add("mode-"+m);})();
 </script>
-<link rel="stylesheet" href="StyleKruChauy.css?v=43">
-<script>try{var T={light:"#d7defc",cream:"#efe3c4",dark:"#121624",black:"#000000"};var t=localStorage.getItem("kc_theme");if(!T[t])t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t;var mt=document.querySelector('meta[name="theme-color"]');if(mt)mt.setAttribute("content",T[t]);}catch(e){}</script>
+<link rel="stylesheet" href="StyleKruChauy.css?v=48">
+<link rel="stylesheet" href="FixboyChat.css?v=2">
+<script>try{var T={light:"#d7defc",cream:"#efe3c4",dark:"#121624",black:"#000000",fantasy:"#2a74d6"};var t=localStorage.getItem("kc_theme");if(!T[t])t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t;var mt=document.querySelector('meta[name="theme-color"]');if(mt)mt.setAttribute("content",T[t]);}catch(e){}</script>
 </head>
 <body>
 <div id="splash"><div id="splashBg"><i class="orb o1"></i><i class="orb o2"></i><i class="orb o3"></i></div>
@@ -28,8 +29,6 @@
       <div class="mode-switch" id="modeSwitch" role="group" aria-label="เลือกขนาดหน้าจอ">
         <button type="button" data-mode="mobile">📱 มือถือ</button>
         <button type="button" data-mode="pc">💻 PC</button>
-      </div>
-      <div class="mode-switch" id="themeSwitch" style="margin-top:8px">
         <button type="button" id="themeBtn" aria-haspopup="dialog">🎨 ธีม</button>
       </div>
     </div>
@@ -109,8 +108,8 @@
     <div class="card">
       <div class="field"><label>ห้อง / ชั้นปี</label><select id="repRoom" class="room-select"></select></div>
       <div class="field"><label>วิชา</label><select id="repSubject" class="subject-select"><option value="">เลือกห้องก่อน</option></select></div>
-      <div class="field"><label>ตั้งแต่วันที่ (วันสอน A)</label><input id="repStart" type="date"></div>
-      <div class="field"><label>สอนกี่คาบต่อสัปดาห์ (ใช้คำนวณ มส.)</label><input id="repHoursWeek" type="number" inputmode="numeric" min="1" max="40" step="1" placeholder="ไม่บังคับ — เว้นว่างได้ถ้าไม่ต้องการเช็ค มส."></div>
+      <div class="field"><label id="repStartLbl">ตั้งแต่วันที่ (วันสอน A)</label><input id="repStart" type="date"></div>
+      <div class="field" id="repHoursField"><label>สอนกี่คาบต่อสัปดาห์ (ใช้คำนวณ มส.)</label><input id="repHoursWeek" type="number" inputmode="numeric" min="1" max="40" step="1" placeholder="ไม่บังคับ — เว้นว่างได้ถ้าไม่ต้องการเช็ค มส."></div>
       <div id="repSourceNote" class="gen-preview" style="display:none;"></div>
       <div id="repCalcBox" style="display:none;">
         <div class="field"><label>สอนกี่คาบต่อสัปดาห์</label>
@@ -549,6 +548,7 @@
         <button type="button" class="theme-opt" data-theme="cream" role="radio"><span class="theme-prev tp-cream"><i></i><i></i></span><b>ครีม</b><small>ถนอมสายตา</small></button>
         <button type="button" class="theme-opt" data-theme="dark" role="radio"><span class="theme-prev tp-dark"><i></i><i></i></span><b>เข้ม</b><small>โทนกรมออกเทา</small></button>
         <button type="button" class="theme-opt" data-theme="black" role="radio"><span class="theme-prev tp-black"><i></i><i></i></span><b>ดำ</b></button>
+        <button type="button" class="theme-opt" data-theme="fantasy" role="radio"><span class="theme-prev tp-fantasy"><i></i><i></i></span><b>🌊 แฟนตาซี</b><small>ทะเล เรือใบ เมืองบนหน้าผา</small></button>
       </div>
       <div class="modal-actions">
         <button class="btn btn-outline" data-close>ปิด</button>
@@ -657,8 +657,9 @@
     </div>
   </div>
 </div>
-<script src="ScriptKruChauy.js?v=59"></script>
-<script src="tool.js?v=9"></script>
+<script src="ScriptKruChauy.js?v=62"></script>
+<script src="tool.js?v=20"></script>
 <script src="Khosob.js?v=2"></script>
+<script src="FixboyChat.js?v=2"></script>
 </body>
 </html>
