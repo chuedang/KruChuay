@@ -10,7 +10,7 @@
 /* โหมดหน้าจอ: pc / mobile (จำค่าที่เลือกไว้ ถ้ายังไม่เคยเลือกจะเดาจากความกว้างจอ) — ตั้งก่อนวาดหน้าเพื่อกันภาพกระพริบ */
 (function(){var m="mobile";try{var s=localStorage.getItem("kc_mode");m=(s==="pc"||s==="mobile")?s:(window.innerWidth>=900?"pc":"mobile");}catch(e){}document.documentElement.classList.add("mode-"+m);})();
 </script>
-<link rel="stylesheet" href="StyleKruChauy.css?v=48">
+<link rel="stylesheet" href="StyleKruChauy.css?v=49">
 <link rel="stylesheet" href="FixboyChat.css?v=2">
 <script>try{var T={light:"#d7defc",cream:"#efe3c4",dark:"#121624",black:"#000000",fantasy:"#2a74d6"};var t=localStorage.getItem("kc_theme");if(!T[t])t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t;var mt=document.querySelector('meta[name="theme-color"]');if(mt)mt.setAttribute("content",T[t]);}catch(e){}</script>
 </head>
@@ -515,6 +515,10 @@
       <div class="field"><label>วันที่ (แก้ไขได้ เช่น เลื่อนเพราะวันหยุด)</label><input id="actDateInput" type="date"></div>
       <div class="field"><label>ชื่องาน (ไม่ใส่ก็ได้)</label><input id="actName"></div>
       <div class="field"><label>คำอธิบายงาน (ไม่ใส่ก็ได้)</label><textarea id="actDesc"></textarea></div>
+      <div class="field extra-field">
+        <label class="sw"><input type="checkbox" id="actExtra"><span class="sw-track"></span>⭐ Extra · คะแนน ×2</label>
+        <p class="hint" style="margin:8px 0 0;">ใช้กับวันที่มอบหมาย 2 งานในวันเดียวกัน — นักเรียนต้องส่งครบ 2 งาน คะแนนช่องนี้จึงคิด ×2 (1-5 → 2-10) และนับเป็น 2 งานในสรุปคะแนน</p>
+      </div>
       <div class="modal-actions">
         <button class="btn btn-outline" data-close>ยกเลิก</button>
         <button id="actSaveBtn" class="btn btn-primary">บันทึก</button>
@@ -657,7 +661,7 @@
     </div>
   </div>
 </div>
-<script src="ScriptKruChauy.js?v=62"></script>
+<script src="ScriptKruChauy.js?v=63"></script>
 <script src="tool.js?v=20"></script>
 <script src="Khosob.js?v=2"></script>
 <script src="FixboyChat.js?v=2"></script>
