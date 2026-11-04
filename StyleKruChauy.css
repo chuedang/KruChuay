@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&family=Cinzel:wght@600;700&display=swap');
 
 :root{
   --bg:#F4F6FB; --surface:#FFFFFF; --ink:#1B2233; --ink-soft:#5F6B85;
@@ -2184,3 +2184,291 @@ table.hr-docs th .hd-miss.ok{border-color:color-mix(in srgb,var(--present) 45%,v
   box-shadow:inset 0 2px 6px rgba(27,34,51,.05), 0 6px 14px -8px color-mix(in srgb,var(--mn-c,var(--c-main,var(--gold))) 55%,transparent);
   transition:border-color .3s,box-shadow .3s;}
 .mn-sub select:focus{border-color:var(--mn-c,var(--c-main,var(--gold))); box-shadow:0 0 0 4px color-mix(in srgb,var(--mn-c,var(--c-main,var(--gold))) 22%,transparent);}
+/* สรุปมาเรียน Homeroom: เส้นคั่นต้นสัปดาห์ (วันจันทร์) */
+#view-attend-report table.score-table th.wk-start, #view-attend-report table.score-table td.wk-start{border-left:2px solid #C9D2E3;}
+
+/* =====================================================================
+   โหมดแฟนตาซี (data-theme="fantasy") — ทะเลฟ้า เรือใบ เมืองบนหน้าผา
+   พื้นหลัง: image/OceanMB.png (มือถือ) · image/OceanPC.png (โหมด PC)
+   UI = "กระจกฝ้า" ลอยบนภาพ · ใช้ :where() กับส่วนฐาน เพื่อไม่ทับสถานะ .on/.active
+   ===================================================================== */
+html[data-theme="fantasy"]{
+  color-scheme:light; background:#1c63c8;
+  --bg:transparent; --surface:rgba(255,255,255,.82); --ink:#0E2A4F; --ink-soft:#456189;
+  --gold:#1F7AE0; --gold-soft:#BBD9FB; --line:rgba(31,122,224,.16);
+  --fx-glass:linear-gradient(160deg,rgba(255,255,255,.88),rgba(238,247,255,.68));
+  --fx-edge:rgba(255,255,255,.78);
+  --fx-shadow:0 16px 36px -18px rgba(6,32,78,.6), inset 0 1px 0 rgba(255,255,255,.9);
+  --fx-lantern:#F2B84B; --fx-teal:#14B3C4; --fx-ocean:#1F7AE0;
+}
+html[data-theme="fantasy"] body{background:transparent; color:var(--ink);}
+html[data-theme="fantasy"] body::before{
+  content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
+  background:#1c63c8 url("image/OceanMB.png") center bottom/cover no-repeat;
+}
+html.mode-pc[data-theme="fantasy"] body::before{background-image:url("image/OceanPC.png"); background-position:center;}
+html[data-theme="fantasy"] ::selection{background:rgba(31,122,224,.3);}
+
+/* ---- สีประจำหมวด ให้เข้าชุดภาพ ---- */
+html[data-theme="fantasy"] .c-blue{--c-bg:#E1EFFF; --c-main:#1F7AE0; --c-ink:#0B3A7A; --c-sh:rgba(31,122,224,.7);}
+html[data-theme="fantasy"] .c-green{--c-bg:#DDF4E8; --c-main:#2DAA78; --c-ink:#115B3D; --c-sh:rgba(45,170,120,.7);}
+html[data-theme="fantasy"] .c-yellow{--c-bg:#FFF0CC; --c-main:#F2B84B; --c-ink:#7A4A00; --c-sh:rgba(242,184,75,.85);}
+html[data-theme="fantasy"] .c-purple{--c-bg:#E9E6FF; --c-main:#7C6CF0; --c-ink:#3E2FA8; --c-sh:rgba(124,108,240,.7);}
+html[data-theme="fantasy"] .c-rose{--c-bg:#FFE3EC; --c-main:#EE6B8E; --c-ink:#9D1F4B; --c-sh:rgba(238,107,142,.7);}
+
+/* ---- โลโก้หน้าแรก ---- */
+html[data-theme="fantasy"] .brand{position:relative;}
+html[data-theme="fantasy"] .brand .mark{font-family:'Cinzel','Noto Serif Thai',serif; font-size:44px; font-weight:700; letter-spacing:1.5px; color:#fff;
+  text-shadow:0 2px 0 rgba(8,40,100,.35), 0 8px 28px rgba(8,40,100,.6);}
+html[data-theme="fantasy"] .brand .mark span{color:var(--fx-lantern);}
+html[data-theme="fantasy"] .brand .rule{position:relative; width:112px; height:3px; overflow:visible; border-radius:3px;
+  background:linear-gradient(90deg,transparent,#fff 22%,var(--fx-lantern) 50%,#fff 78%,transparent);}
+html[data-theme="fantasy"] .brand .rule::after{content:""; position:absolute; left:50%; top:50%; width:11px; height:11px; border-radius:3px;
+  background:var(--fx-lantern); transform:translate(-50%,-50%) rotate(45deg); box-shadow:0 0 16px 4px rgba(242,184,75,.85);}
+html[data-theme="fantasy"] .brand .tag{color:#fff; font-size:14px; letter-spacing:.7px; text-shadow:0 1px 12px rgba(8,40,100,.8);}
+/* นกนางนวลบินผ่าน: สไปรต์ image/SeagullFly.png (8 เฟรมกางปีก-หุบปีก เรียงแนวนอน)
+   ใช้ position:fixed → นกบินพ้นขอบจอก็ไม่ทำให้หน้าเว็บมีแถบเลื่อนด้านข้าง */
+html[data-theme="fantasy"] .brand::before,html[data-theme="fantasy"] .brand::after{
+  content:""; position:fixed; left:0; top:calc(env(safe-area-inset-top,0px) + 12px); z-index:1; pointer-events:none;
+  --gw:68px; width:var(--gw); height:calc(var(--gw) * .98);
+  background:url("image/SeagullFly.png") 0 0/calc(var(--gw) * 8) 100% no-repeat;
+  filter:drop-shadow(0 3px 5px rgba(8,40,100,.35)); transform:translate(8vw,0);
+}
+html[data-theme="fantasy"] .brand::after{--gw:44px; top:calc(env(safe-area-inset-top,0px) + 74px); opacity:.88; transform:translate(62vw,0);}
+@media (prefers-reduced-motion:no-preference){
+  html[data-theme="fantasy"] .brand::before{animation:fxGull 26s linear infinite, fxFlap .8s steps(8) infinite;}
+  html[data-theme="fantasy"] .brand::after{animation:fxGull 34s linear infinite -14s, fxFlap .9s steps(8) infinite -.3s;}
+  html[data-theme="fantasy"] .menu-item .ico{animation:fxBob 4.4s ease-in-out infinite; animation-delay:calc(var(--i,0) * -.8s);}
+  html[data-theme="fantasy"] #splashBg{animation:fxDrift 14s ease-out both;}
+}
+@keyframes fxGull{0%{transform:translate(-16vw,6px)}25%{transform:translate(22vw,-8px)}50%{transform:translate(52vw,4px)}75%{transform:translate(82vw,-8px)}100%{transform:translate(116vw,6px)}}
+@keyframes fxFlap{to{background-position-x:calc(var(--gw) * -8)}}
+@keyframes fxBob{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-3px) rotate(3deg)}}
+@keyframes fxDrift{from{transform:scale(1)}to{transform:scale(1.09)}}
+
+html[data-theme="fantasy"] .mode-switch{background:rgba(255,255,255,.74); border:1px solid var(--fx-edge); backdrop-filter:blur(10px) saturate(1.4); -webkit-backdrop-filter:blur(10px) saturate(1.4);}
+html[data-theme="fantasy"] .mode-switch button.on{background:linear-gradient(135deg,#1F7AE0,#14B3C4); box-shadow:0 6px 12px -6px rgba(31,122,224,.8);}
+
+/* ---- เมนูหน้าแรก: การ์ดกระจก + ไอคอนเป็นช่องหน้าต่างเรือ ---- */
+html[data-theme="fantasy"] .menu-item{
+  background:var(--fx-glass); border:1px solid var(--fx-edge); color:var(--c-ink);
+  backdrop-filter:blur(14px) saturate(1.5); -webkit-backdrop-filter:blur(14px) saturate(1.5);
+  box-shadow:var(--fx-shadow); position:relative; overflow:hidden;
+}
+html[data-theme="fantasy"] .menu-item::before{content:""; position:absolute; left:0; top:14%; bottom:14%; width:4px; border-radius:0 4px 4px 0; background:var(--c-main); box-shadow:0 0 14px var(--c-main);}
+html[data-theme="fantasy"] .menu-item:hover{transform:translateY(-3px); border-color:#fff; box-shadow:0 22px 40px -18px rgba(6,32,78,.7), inset 0 1px 0 #fff;}
+html[data-theme="fantasy"] .menu-item .ico{border-radius:50%; border:3px solid rgba(255,255,255,.95);
+  background:radial-gradient(circle at 32% 28%, color-mix(in srgb,var(--c-main) 45%,#fff) 0, var(--c-main) 62%);
+  box-shadow:0 0 0 2px var(--c-main), 0 10px 18px -8px var(--c-sh);}
+html[data-theme="fantasy"] .menu-item h3{font-weight:700;}
+html[data-theme="fantasy"] .menu-item p{opacity:.8;}
+
+/* ---- แถบหัวหน้า / การ์ด / กล่องต่างๆ = กระจกฝ้า ---- */
+html[data-theme="fantasy"] .topbar{
+  background:var(--fx-glass); border:1px solid var(--fx-edge);
+  backdrop-filter:blur(14px) saturate(1.5); -webkit-backdrop-filter:blur(14px) saturate(1.5); box-shadow:var(--fx-shadow);
+}
+html[data-theme="fantasy"] :where(.card,.score-scroll,.exam-setup){
+  background:var(--fx-glass); border:1px solid var(--fx-edge);
+  backdrop-filter:blur(14px) saturate(1.4); -webkit-backdrop-filter:blur(14px) saturate(1.4); box-shadow:var(--fx-shadow);
+}
+html[data-theme="fantasy"] .score-scroll{background:rgba(255,255,255,.93);}
+html[data-theme="fantasy"] :where(.roster-row,.hr-row,.so-card,.tot-card,.w-card,.examset-card,.ek-row,.blk-room,.rcv-col,.scan-result,.empty-note,.sum-all,.so-bar){
+  background:rgba(255,255,255,.84); border:1px solid var(--fx-edge); box-shadow:0 10px 24px -16px rgba(6,32,78,.55);
+}
+html[data-theme="fantasy"] .modal-backdrop{background:rgba(6,36,84,.48); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);}
+html[data-theme="fantasy"] .modal-sheet{
+  background:linear-gradient(170deg,rgba(255,255,255,.96),rgba(236,246,255,.92)); border:1px solid var(--fx-edge);
+  box-shadow:0 -10px 40px -12px rgba(6,32,78,.55);
+}
+html[data-theme="fantasy"] .modal-sheet::before{background:rgba(31,122,224,.25);}
+html[data-theme="fantasy"] .table-toolbar{background:var(--fx-glass); border:1px solid var(--fx-edge); border-radius:16px; padding:8px 12px; align-items:center;}
+html[data-theme="fantasy"] #view-attend-list .actions-fixed{background:linear-gradient(180deg,rgba(14,60,140,0),rgba(14,60,140,.38) 55%);}
+
+/* ---- ช่องกรอก ---- */
+html[data-theme="fantasy"] :where(.field input,.field select,.field textarea,.hr-search input,.stu-search input){
+  background:rgba(255,255,255,.9); border:1.5px solid rgba(31,122,224,.26); color:var(--ink);
+}
+html[data-theme="fantasy"] .field input:focus,html[data-theme="fantasy"] .field select:focus,html[data-theme="fantasy"] .field textarea:focus{
+  outline:3px solid rgba(31,122,224,.22); border-color:var(--fx-ocean); background:#fff;}
+html[data-theme="fantasy"] .field label{color:var(--ink-soft); font-weight:600;}
+
+/* ---- ปุ่ม ---- */
+html[data-theme="fantasy"] .btn-primary{
+  background:linear-gradient(135deg,var(--c-main,#1F7AE0),color-mix(in srgb,var(--c-main,#1F7AE0) 55%,#14B3C4));
+  border:1px solid rgba(255,255,255,.4); box-shadow:0 14px 26px -14px var(--c-sh,rgba(31,122,224,.8)), inset 0 1px 0 rgba(255,255,255,.5);
+}
+html[data-theme="fantasy"] :where(.btn-outline,.btn-gold,.back-btn,.focus-btn,.seg button,.score-tabs button,.blk-filters button,.hr-rooms button,.ek-opts button,.so-chip,.so-step button,.rcv-step button,.rc-step button,.scan-num-btn){
+  background:rgba(255,255,255,.86); border-color:rgba(31,122,224,.22); color:var(--ink);
+}
+html[data-theme="fantasy"] .btn-outline{backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); box-shadow:0 8px 18px -12px rgba(6,32,78,.5);}
+html[data-theme="fantasy"] .btn-danger{background:rgba(255,236,238,.92);}
+
+/* ---- แถบภาคเรียน/ประเภท ---- */
+html[data-theme="fantasy"] .period-bar{background:linear-gradient(135deg,#0D3270,#1F6FD1); border:1px solid rgba(255,255,255,.35); box-shadow:0 16px 30px -16px rgba(6,32,78,.75), inset 0 1px 0 rgba(255,255,255,.35);}
+html[data-theme="fantasy"] .period-bar[data-type="กลางภาค"]{background:linear-gradient(135deg,#0B6F86,#19B6B0);}
+html[data-theme="fantasy"] .period-bar[data-type="ปลายภาค"]{background:linear-gradient(135deg,#B8501B,#F2B84B);}
+html[data-theme="fantasy"] .period-bar[data-mode="term"]{background:linear-gradient(135deg,#14408F,#3A8BF0);}
+
+/* ---- ตัวชี้นำ ---- */
+html[data-theme="fantasy"] .loading-overlay{
+  background:linear-gradient(180deg,rgba(10,50,130,.62),rgba(10,100,180,.5)), url("image/OceanMB.png") center/cover no-repeat;
+}
+html.mode-pc[data-theme="fantasy"] .loading-overlay{background-image:linear-gradient(180deg,rgba(10,50,130,.62),rgba(10,100,180,.5)), url("image/OceanPC.png");}
+
+/* ---- Splash ---- */
+html[data-theme="fantasy"] #splashBg{
+  background:linear-gradient(180deg,rgba(6,30,80,.4),rgba(6,30,80,.05) 45%,rgba(6,30,80,.5)), url("image/OceanMB.png") center/cover no-repeat;
+}
+html.mode-pc[data-theme="fantasy"] #splashBg{background-image:linear-gradient(180deg,rgba(6,30,80,.4),rgba(6,30,80,.05) 45%,rgba(6,30,80,.5)), url("image/OceanPC.png");}
+html[data-theme="fantasy"] #splashBg .orb{display:none;}
+html[data-theme="fantasy"] #splashLogo{font-family:'Cinzel','Noto Serif Thai',serif; letter-spacing:1.5px; text-shadow:0 6px 24px rgba(8,40,100,.7);}
+html[data-theme="fantasy"] #splashLogo span,html[data-theme="fantasy"] #splashLogo.go span{color:var(--fx-lantern);}
+html[data-theme="fantasy"] #splashLogo.go{color:#fff;}
+
+/* ---- ตัวอย่างในหน้าเลือกธีม ---- */
+.theme-opt[data-theme="fantasy"]{grid-column:1/-1;}
+.tp-fantasy{height:84px !important; justify-content:flex-end; background:url("image/OceanPC.png") center/cover no-repeat;}
+.tp-fantasy i{background:rgba(255,255,255,.8); backdrop-filter:blur(4px);} .tp-fantasy i:last-child{background:#F2B84B;}
+
+/* =====================================================================
+   โหมดแฟนตาซี · หน้าแรกแบบป้ายผ้าม้วน (image/banner-*.webp + image/icon-*.webp)
+   ===================================================================== */
+html[data-theme="fantasy"] .c-teal{--c-bg:#DDF3F6; --c-main:#14A3B8; --c-ink:#0C5A66; --c-sh:rgba(20,163,184,.7);}
+html[data-theme="fantasy"] .menu{gap:22px;}
+html.mode-pc[data-theme="fantasy"] .menu{gap:26px 30px;}
+
+html[data-theme="fantasy"] .menu-item[data-go]{
+  background:var(--ban) center/100% 100% no-repeat; border:none; box-shadow:none; overflow:visible;
+  backdrop-filter:none; -webkit-backdrop-filter:none; border-radius:0;
+  min-height:130px; padding:22px 44px 22px 104px; gap:0; color:var(--c-ink);
+  filter:drop-shadow(0 12px 12px rgba(6,32,78,.38)); transition:transform .18s ease, filter .18s ease;
+}
+html[data-theme="fantasy"] .menu-item[data-go]::before{display:none;}
+html[data-theme="fantasy"] .menu-item[data-go]:hover{transform:translateY(-4px) scale(1.012); filter:drop-shadow(0 18px 16px rgba(6,32,78,.45)) brightness(1.04);}
+html[data-theme="fantasy"] .menu-item[data-go]:active{transform:scale(.985);}
+html[data-theme="fantasy"] .menu-item[data-go] .txt{padding-top:2px;}
+html[data-theme="fantasy"] .menu-item[data-go] h3{font-size:19px; font-weight:700; color:var(--c-ink); text-shadow:0 1px 0 rgba(255,255,255,.7);}
+html[data-theme="fantasy"] .menu-item[data-go] p{font-size:12.5px; line-height:1.45; color:var(--c-ink); opacity:.86;}
+html[data-theme="fantasy"] .menu-item[data-go] .arrow{position:absolute; right:28px; top:50%; transform:translateY(-50%); color:var(--c-ink); opacity:.8; font-size:30px;}
+html[data-theme="fantasy"] .menu-item[data-go] .ico{
+  position:absolute; left:4px; top:50%; width:96px; height:96px; margin-top:-48px; flex:none; padding:0;
+  font-size:0; border:none; border-radius:0; background:var(--icn) center/contain no-repeat; box-shadow:none;
+  filter:drop-shadow(0 6px 6px rgba(6,32,78,.35));
+}
+html[data-theme="fantasy"] .menu-item[data-go="attend"]{--ban:url("image/banner-attend.webp"); --c-ink:#1E4C94;}
+html[data-theme="fantasy"] .menu-item[data-go="attend"] .ico{--icn:url("image/icon-attend.webp");}
+html[data-theme="fantasy"] .menu-item[data-go="scores"]{--ban:url("image/banner-scores.webp"); --c-ink:#3F6A24;}
+html[data-theme="fantasy"] .menu-item[data-go="scores"] .ico{--icn:url("image/icon-scores.webp");}
+html[data-theme="fantasy"] .menu-item[data-go="homeroom"]{--ban:url("image/banner-homeroom.webp"); --c-ink:#A32C57;}
+html[data-theme="fantasy"] .menu-item[data-go="homeroom"] .ico{--icn:url("image/icon-homeroom.webp");}
+html[data-theme="fantasy"] .menu-item[data-go="teaching"]{--ban:url("image/banner-teaching.webp"); --c-ink:#855210;}
+html[data-theme="fantasy"] .menu-item[data-go="teaching"] .ico{--icn:url("image/icon-teaching.webp");}
+html[data-theme="fantasy"] .menu-item[data-go="exam"]{--ban:url("image/banner-exam.webp"); --c-ink:#43359A;}
+html[data-theme="fantasy"] .menu-item[data-go="tools"]{--ban:url("image/banner-tools.webp"); --c-ink:#0F5F6E;}
+html[data-theme="fantasy"] .menu-item[data-go="tools"] .ico{--icn:url("image/icon-tools.webp");}
+/* ตรวจข้อสอบ: ยังไม่มีไอคอนในชุดภาพ → วาดเหรียญทองม่วงด้วย CSS (ถ้ามี image/icon-exam.webp ให้เปลี่ยนเป็นภาพ) */
+html[data-theme="fantasy"] .menu-item[data-go="exam"] .ico{
+  left:14px; width:78px; height:78px; margin-top:-39px; font-size:34px; display:flex; align-items:center; justify-content:center;
+  border-radius:50%; border:6px solid #E8B64A; background:radial-gradient(circle at 35% 30%,#BDB0FF,#6A56E0 60%,#3F2FA8);
+  box-shadow:inset 0 0 0 2px #FFF1C2, 0 8px 12px -6px rgba(63,47,168,.8);
+}
+html.mode-pc[data-theme="fantasy"] .menu-item[data-go]{min-height:172px; padding-left:132px; padding-right:56px;}
+html.mode-pc[data-theme="fantasy"] .menu-item[data-go] h3{font-size:23px;}
+html.mode-pc[data-theme="fantasy"] .menu-item[data-go] p{font-size:14px;}
+html.mode-pc[data-theme="fantasy"] .menu-item[data-go] .ico{width:118px; height:118px; margin-top:-59px; left:8px;}
+html.mode-pc[data-theme="fantasy"] .menu-item[data-go="exam"] .ico{left:22px; width:96px; height:96px; margin-top:-48px; font-size:42px;}
+html.mode-pc[data-theme="fantasy"] .menu-item[data-go] .arrow{right:40px;}
+
+/* ---- โลโก้แบบในภาพตัวอย่าง ---- */
+html[data-theme="fantasy"] .brand .mark{text-transform:uppercase; font-size:46px; letter-spacing:2px; color:#fff;
+  text-shadow:0 0 22px rgba(255,255,255,.55), 0 4px 18px rgba(8,40,100,.65);}
+html.mode-pc[data-theme="fantasy"] .brand .mark{font-size:62px;}
+html[data-theme="fantasy"] .brand .mark span{background:linear-gradient(180deg,#FFE9A8 0,#F2B84B 55%,#C98A22 100%); -webkit-background-clip:text; background-clip:text; color:transparent; -webkit-text-fill-color:transparent; text-shadow:none; filter:drop-shadow(0 3px 6px rgba(8,40,100,.5));}
+html[data-theme="fantasy"] .brand .mark::before{content:""; display:block; height:26px; margin:0 auto 2px; max-width:300px;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 30'%3E%3Cpath d='M30 15H128M172 15H270' stroke='%23F7D98A' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M150 1L155 11L165 15L155 19L150 29L145 19L135 15L145 11Z' fill='%23FFEDB0' stroke='%23F2B84B' stroke-width='1.2'/%3E%3C/svg%3E") center/contain no-repeat;
+  filter:drop-shadow(0 0 8px rgba(255,220,130,.9));}
+html[data-theme="fantasy"] .brand .tag::before,html[data-theme="fantasy"] .brand .tag::after{content:""; display:inline-block; width:44px; height:2px; margin:0 12px; vertical-align:middle; border-radius:2px;
+  background:linear-gradient(90deg,transparent,#fff);}
+html[data-theme="fantasy"] .brand .tag::after{transform:scaleX(-1);}
+
+/* ---- สวิตช์มือถือ/PC/ธีม: กรอบทองคู่ ---- */
+html[data-theme="fantasy"] .mode-switch{
+  border:3px solid transparent; padding:4px 6px; gap:2px;
+  background:linear-gradient(180deg,#FFFBF0,#F1E5CE) padding-box, linear-gradient(135deg,#FBE3A0,#C58A2B 45%,#FBE3A0 70%,#B9771C) border-box;
+  box-shadow:0 10px 22px -10px rgba(6,32,78,.7), inset 0 0 0 1px rgba(255,255,255,.7);
+}
+html[data-theme="fantasy"] .mode-switch button{color:#4A3A22; font-weight:700;}
+html[data-theme="fantasy"] .mode-switch button.on{background:linear-gradient(135deg,#1C63D8,#2AA6F2); color:#fff; box-shadow:0 0 16px rgba(60,160,255,.85), inset 0 1px 0 rgba(255,255,255,.5);}
+
+/* =====================================================================
+   โหมดแฟนตาซี · กรอบป้ายทะเล (image/frame-01..10.webp ตัดจาก Oceanic_Fantasy_Banner_Collection)
+   ใช้กับเมนูย่อยที่ยังไม่มีกรอบ (ตรวจข้อสอบ/เครื่องมือครู ฯลฯ) และปุ่มใหญ่ระดับหน้า เช่น เริ่มเช็คชื่อ · สรุปคะแนน · สรุปงานค้าง
+   สลับลายกรอบตามลำดับปุ่มในหน้า · --pl/--pr = สัดส่วนที่เว้นให้ลายตกแต่งซ้าย/ขวา
+   ===================================================================== */
+html[data-theme="fantasy"] .menu > .menu-item:not([data-go]){
+  background:var(--fr) center/100% 100% no-repeat; border:none; border-radius:0; box-shadow:none; overflow:visible;
+  backdrop-filter:none; -webkit-backdrop-filter:none; box-sizing:border-box;
+  width:min(100%,600px); margin-left:auto; margin-right:auto; height:auto; aspect-ratio:var(--ar);
+  padding:calc(min(100%,600px) * .05) calc(min(100%,600px) * var(--pr)) calc(min(100%,600px) * .012) calc(min(100%,600px) * var(--pl));
+  color:#12407F; font-weight:700; text-shadow:0 1px 0 rgba(255,255,255,.85);
+  filter:drop-shadow(0 8px 8px rgba(6,32,78,.35)); transition:transform .18s ease, filter .18s ease;
+  gap:10px;
+}
+html[data-theme="fantasy"] .view > button.btn:not(.btn-sm):not(#teachSaveBtn){
+  background:var(--fr) center/100% 100% no-repeat; border:none; border-radius:0; box-shadow:none; overflow:visible;
+  backdrop-filter:none; -webkit-backdrop-filter:none; box-sizing:border-box;
+  width:min(100%,600px); margin-left:auto; margin-right:auto; height:auto; aspect-ratio:var(--ar);
+  padding:calc(min(100%,600px) * .05) calc(min(100%,600px) * var(--pr)) calc(min(100%,600px) * .012) calc(min(100%,600px) * var(--pl));
+  color:#12407F; font-weight:700; text-shadow:0 1px 0 rgba(255,255,255,.85);
+  filter:drop-shadow(0 8px 8px rgba(6,32,78,.35)); transition:transform .18s ease, filter .18s ease;
+  display:flex; align-items:center; justify-content:center; font-size:16px; line-height:1.3;
+}
+html[data-theme="fantasy"] .view > button.btn:not(.btn-sm):not(#teachSaveBtn).btn-primary{filter:drop-shadow(0 0 10px rgba(242,184,75,.75)) drop-shadow(0 8px 8px rgba(6,32,78,.35));}
+html[data-theme="fantasy"] .menu > .menu-item:not([data-go]):hover{transform:translateY(-3px) scale(1.012); filter:drop-shadow(0 14px 12px rgba(6,32,78,.45)) brightness(1.05);}
+html[data-theme="fantasy"] .menu > .menu-item:not([data-go]):active{transform:scale(.985);}
+html[data-theme="fantasy"] .view > button.btn:not(.btn-sm):not(#teachSaveBtn):hover{transform:translateY(-3px) scale(1.012); filter:drop-shadow(0 14px 12px rgba(6,32,78,.45)) brightness(1.05);}
+html[data-theme="fantasy"] .view > button.btn:not(.btn-sm):not(#teachSaveBtn):active{transform:scale(.985);}
+html[data-theme="fantasy"] .menu > .menu-item:not([data-go]):nth-of-type(6n+1),
+html[data-theme="fantasy"] .view > button.btn:not(.btn-sm):not(#teachSaveBtn):nth-of-type(6n+1){--fr:url("image/frame-04.webp"); --ar:4.899; --pl:0.12; --pr:0.12;}
+html[data-theme="fantasy"] .menu > .menu-item:not([data-go]):nth-of-type(6n+2),
+html[data-theme="fantasy"] .view > button.btn:not(.btn-sm):not(#teachSaveBtn):nth-of-type(6n+2){--fr:url("image/frame-03.webp"); --ar:4.395; --pl:0.18; --pr:0.11;}
+html[data-theme="fantasy"] .menu > .menu-item:not([data-go]):nth-of-type(6n+3),
+html[data-theme="fantasy"] .view > button.btn:not(.btn-sm):not(#teachSaveBtn):nth-of-type(6n+3){--fr:url("image/frame-07.webp"); --ar:4.772; --pl:0.15; --pr:0.14;}
+html[data-theme="fantasy"] .menu > .menu-item:not([data-go]):nth-of-type(6n+4),
+html[data-theme="fantasy"] .view > button.btn:not(.btn-sm):not(#teachSaveBtn):nth-of-type(6n+4){--fr:url("image/frame-10.webp"); --ar:5.184; --pl:0.18; --pr:0.1;}
+html[data-theme="fantasy"] .menu > .menu-item:not([data-go]):nth-of-type(6n+5),
+html[data-theme="fantasy"] .view > button.btn:not(.btn-sm):not(#teachSaveBtn):nth-of-type(6n+5){--fr:url("image/frame-05.webp"); --ar:4.79; --pl:0.23; --pr:0.11;}
+html[data-theme="fantasy"] .menu > .menu-item:not([data-go]):nth-of-type(6n),
+html[data-theme="fantasy"] .view > button.btn:not(.btn-sm):not(#teachSaveBtn):nth-of-type(6n){--fr:url("image/frame-08.webp"); --ar:4.519; --pl:0.13; --pr:0.16;}
+/* ไอคอน/ข้อความในกรอบเมนูย่อย */
+html[data-theme="fantasy"] .menu > .menu-item:not([data-go]){padding-left:calc(min(100%,600px) * (var(--pl) + .025)); gap:14px;}
+html[data-theme="fantasy"] .menu > .menu-item:not([data-go])::before{display:none;}
+html[data-theme="fantasy"] .menu > .menu-item:not([data-go]) .ico{width:40px; height:40px; font-size:20px; border-width:2px; flex:none;}
+html[data-theme="fantasy"] .menu > .menu-item:not([data-go]) h3{font-size:16px; line-height:1.25; text-shadow:0 1px 0 rgba(255,255,255,.85);}
+html[data-theme="fantasy"] .menu > .menu-item:not([data-go]) p{font-size:11.5px; line-height:1.3; margin-top:2px; opacity:.85;}
+html[data-theme="fantasy"] .menu > .menu-item:not([data-go]) .arrow{font-size:24px; opacity:.75;}
+html.mode-pc[data-theme="fantasy"] .menu > .menu-item:not([data-go]) h3{font-size:19px;}
+html.mode-pc[data-theme="fantasy"] .menu > .menu-item:not([data-go]) p{font-size:13px;}
+html.mode-pc[data-theme="fantasy"] .view > button.btn:not(.btn-sm):not(#teachSaveBtn){font-size:19px;}
+
+/* ---- เมนูหน้าแรกอื่นๆ ที่ฉีดมาจากไฟล์อื่น (เช่น คลังข้อสอบจาก Khosob.js) และยังไม่มีป้ายของตัวเอง: ใช้กรอบทะเลแทน ---- */
+html[data-theme="fantasy"] .menu-item[data-go]:not([data-go="attend"]):not([data-go="scores"]):not([data-go="homeroom"]):not([data-go="teaching"]):not([data-go="exam"]):not([data-go="tools"]){
+  --ban:url("image/frame-05.webp"); --c-ink:#12407F;
+  min-height:0; aspect-ratio:4; box-sizing:border-box; gap:12px; align-items:center;
+  padding:calc(100% * .05) calc(100% * .15) calc(100% * .012) calc(100% * .255);
+  filter:drop-shadow(0 8px 8px rgba(6,32,78,.35));
+}
+html.mode-pc[data-theme="fantasy"] .menu-item[data-go]:not([data-go="attend"]):not([data-go="scores"]):not([data-go="homeroom"]):not([data-go="teaching"]):not([data-go="exam"]):not([data-go="tools"]){min-height:0; padding:calc(100% * .05) calc(100% * .15) calc(100% * .012) calc(100% * .255);}
+html[data-theme="fantasy"] .menu-item[data-go]:not([data-go="attend"]):not([data-go="scores"]):not([data-go="homeroom"]):not([data-go="teaching"]):not([data-go="exam"]):not([data-go="tools"]) .ico{
+  position:static; width:44px; height:44px; margin:0; flex:none; display:flex; align-items:center; justify-content:center; font-size:22px;
+  border-radius:50%; border:3px solid #fff; background:radial-gradient(circle at 32% 28%,#9fd0ff,#1F7AE0 65%); box-shadow:0 0 0 2px #1F7AE0, 0 6px 10px -6px rgba(6,32,78,.7);
+  filter:none;
+}
+html.mode-pc[data-theme="fantasy"] .menu-item[data-go]:not([data-go="attend"]):not([data-go="scores"]):not([data-go="homeroom"]):not([data-go="teaching"]):not([data-go="exam"]):not([data-go="tools"]) .ico{width:56px; height:56px; font-size:28px; margin:0; left:auto;}
+html[data-theme="fantasy"] .menu-item[data-go]:not([data-go="attend"]):not([data-go="scores"]):not([data-go="homeroom"]):not([data-go="teaching"]):not([data-go="exam"]):not([data-go="tools"]) h3{font-size:16px; line-height:1.25;}
+html[data-theme="fantasy"] .menu-item[data-go]:not([data-go="attend"]):not([data-go="scores"]):not([data-go="homeroom"]):not([data-go="teaching"]):not([data-go="exam"]):not([data-go="tools"]) .txt{padding-top:0;}
+html[data-theme="fantasy"] .menu-item[data-go]:not([data-go="attend"]):not([data-go="scores"]):not([data-go="homeroom"]):not([data-go="teaching"]):not([data-go="exam"]):not([data-go="tools"]) p{font-size:11px; line-height:1.3; margin-top:2px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
+html[data-theme="fantasy"] .menu-item[data-go]:not([data-go="attend"]):not([data-go="scores"]):not([data-go="homeroom"]):not([data-go="teaching"]):not([data-go="exam"]):not([data-go="tools"]) .arrow{right:7%; font-size:26px;}
+html.mode-pc[data-theme="fantasy"] .menu-item[data-go]:not([data-go="attend"]):not([data-go="scores"]):not([data-go="homeroom"]):not([data-go="teaching"]):not([data-go="exam"]):not([data-go="tools"]) h3{font-size:21px;}
+html.mode-pc[data-theme="fantasy"] .menu-item[data-go]:not([data-go="attend"]):not([data-go="scores"]):not([data-go="homeroom"]):not([data-go="teaching"]):not([data-go="exam"]):not([data-go="tools"]) p{font-size:13px;}
