@@ -2520,3 +2520,117 @@ html .period-bar[data-term="2"][data-type=""]{--pb1:#5B21B6 !important; --pb2:#8
 /* ===== กันมือถือซูมเองตอนแตะช่องพิมพ์ (iOS ซูมถ้าตัวอักษรในช่อง < 16px) ===== */
 .stu-search input,.hr-search input,.field input,.field select,.field textarea,.hr-f input,.hr-f textarea,.w-hours input,.mn-sub select,.ex-grid input,.w-grid input{font-size:16px !important;}
 .stu-search .ss-clear{width:30px; height:30px; touch-action:manipulation;}
+
+/* ================= ตารางเรียนนักเรียน (ลากวาง) ================= */
+#view-hr-table,#modalHrtSub{--c-bg:#E6F4EA}
+.hr-tile.tbl{background:#E6F4EA; color:#0D652D; box-shadow:0 1px 2px rgba(27,34,51,.06), 0 10px 20px -12px rgba(52,168,83,.8);}
+.hr-tile.tbl .t-ico{background:#34A853; box-shadow:0 8px 14px -8px rgba(52,168,83,.95);}
+html[data-theme="dark"] .hr-tile.tbl,html[data-theme="black"] .hr-tile.tbl{background:#1B3326; color:#8FD3A4;}
+#view-hr-table .table-toolbar{flex-wrap:wrap; gap:8px; justify-content:flex-start;}
+#view-hr-table .table-toolbar .score-info{flex-basis:100%; font-size:12.5px;}
+#hrtEditSub.on{background:var(--ink); color:#fff; border-color:var(--ink);}
+.tt-palbox{background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:10px 12px 12px; margin:10px 0; transition:border-color .15s, box-shadow .15s;}
+.tt-palbox.tt-over{border-color:#E5484D; box-shadow:0 0 0 3px rgba(229,72,77,.2);}
+.tt-pal-h{display:flex; flex-direction:column; gap:2px; margin-bottom:6px;}
+.tt-pal-h b{font-size:14px;} .tt-pal-h span{font-size:11.5px; color:var(--ink-soft); line-height:1.4;}
+.tt-pal{display:flex; flex-wrap:wrap; gap:7px;}
+.tt-grp{flex-basis:100%; font-size:11.5px; font-weight:700; color:var(--ink-soft); margin:6px 0 0; letter-spacing:.2px;}
+.tt-none{font-size:12.5px; color:var(--ink-soft);}
+.tt-chip,.tt-it,.tt-ghost{--tb:#E8F0FE; --tf:#174EA6; background:var(--tb); color:var(--tf); font-weight:700; line-height:1.25;}
+.tt-chip.tt-m,.tt-it.tt-m,.tt-ghost.tt-m{--tb:#4F6BF5; --tf:#fff;}
+.tt-chip.tt-x0,.tt-it.tt-x0,.tt-ghost.tt-x0{--tb:#F1F1F1; --tf:#8A8A8A;}
+.tt-chip{display:inline-flex; align-items:center; gap:5px; padding:8px 13px; border-radius:999px; font-size:13.5px; cursor:grab; user-select:none; -webkit-user-select:none; touch-action:none; border:2px solid transparent; box-shadow:0 1px 2px rgba(27,34,51,.1);}
+.tt-chip.sel,.tt-it.sel{border-color:var(--ink); box-shadow:0 0 0 3px rgba(27,34,51,.12);}
+.tt-chip.edit{cursor:pointer; touch-action:auto; outline:2px dashed rgba(27,34,51,.35); outline-offset:1px;}
+.tt-chip i{font-style:normal; font-size:11px;}
+.tt-wrap{overflow-x:auto; padding-bottom:6px;}
+.tt-table{width:100%; border-collapse:separate; border-spacing:4px; table-layout:fixed; min-width:330px;}
+.tt-table th{font-size:12px; font-weight:700; color:var(--ink-soft); padding:4px 2px; text-align:center;}
+.tt-table thead th{color:var(--ink); font-size:13px;}
+.tt-dshort{display:none;}
+@media (max-width:520px){ .tt-dfull{display:none;} .tt-dshort{display:inline;} }
+.tt-corner{width:54px;}
+.tt-ph{width:54px; line-height:1.2;} .tt-ph b{display:block; font-size:12px; color:var(--ink);} .tt-ph small{display:block; font-size:10px; font-weight:400; white-space:nowrap;}
+.tt-cell{height:56px; padding:0; background:var(--surface); border:1.5px dashed var(--line); border-radius:12px; vertical-align:middle; transition:background .12s, border-color .12s, transform .12s;}
+.tt-cell.has{border-style:solid; border-color:transparent; background:transparent;}
+.tt-cell.tt-over{background:#DDF3E4; border-color:#34A853; border-style:solid; transform:scale(1.04);}
+.tt-it{position:relative; height:100%; min-height:54px; border-radius:11px; display:flex; align-items:center; justify-content:center; text-align:center; padding:3px 14px 3px 4px; font-size:12px; cursor:grab; user-select:none; -webkit-user-select:none; touch-action:none; border:2px solid transparent; overflow:hidden; word-break:break-word;}
+.tt-it span{display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;}
+.tt-rm{position:absolute; top:1px; right:1px; width:20px; height:20px; border:none; border-radius:50%; background:rgba(0,0,0,.14); color:inherit; font-size:14px; line-height:1; cursor:pointer; padding:0; display:flex; align-items:center; justify-content:center;}
+.tt-break td{text-align:center; font-size:11px; color:var(--ink-soft); background:rgba(127,127,127,.1); border-radius:8px; padding:2px 0;}
+.tt-src{opacity:.35;}
+.tt-ghost{position:fixed; z-index:9999; pointer-events:none; transform:translate(-50%,-60%) scale(1.06); padding:9px 15px; border-radius:14px; font-size:13.5px; box-shadow:0 12px 26px -8px rgba(0,0,0,.45); opacity:.95; white-space:nowrap;}
+body.tt-dragging{cursor:grabbing; -webkit-user-select:none; user-select:none;}
+body.tt-dragging *{cursor:grabbing !important;}
+
+/* --- ตารางเรียน: แถว = วัน · คอลัมน์ = คาบ --- */
+.tt-table{min-width:340px;}
+.tt-corner{width:40px;}
+.tt-dh{width:40px; font-size:13px !important; color:var(--ink) !important; text-align:center;}
+.tt-ph b{font-size:11px;} .tt-ph small{font-size:9.5px; line-height:1.15; margin-top:1px;}
+.tt-bh{width:15px; padding:0 !important;}
+.tt-table td.tt-break{width:15px; padding:0; background:rgba(127,127,127,.12); border-radius:8px; text-align:center; vertical-align:middle; font-size:10px; color:var(--ink-soft);}
+.tt-break span{writing-mode:vertical-rl; display:inline-block; white-space:nowrap; letter-spacing:.5px;}
+.tt-cell{height:62px;}
+.tt-it{font-size:11px; padding:2px 10px 2px 2px; min-height:60px;}
+.tt-rm{width:18px; height:18px; font-size:13px;}
+@media (min-width:521px){ .tt-it{font-size:13px;} .tt-dh{width:78px;} .tt-corner{width:78px;} .tt-ph b{font-size:12.5px;} .tt-ph small{font-size:11px;} .tt-cell{height:72px;} }
+
+/* --- วิเคราะห์ขาด ลา สาย --- */
+#view-hr-absent{--c-bg:#FDE7F1}
+.hr-tile.abs{background:#FDE7F1; color:#9D174D; box-shadow:0 1px 2px rgba(27,34,51,.06), 0 10px 20px -12px rgba(219,39,119,.7);}
+.hr-tile.abs .t-ico{background:#EC4899; box-shadow:0 8px 14px -8px rgba(219,39,119,.9);}
+html[data-theme="dark"] .hr-tile.abs,html[data-theme="black"] .hr-tile.abs{background:#3F1A2D; color:#F3A9C8;}
+.ab-ctl{display:flex; flex-direction:column; gap:8px; margin:10px 0;}
+.ab-seg{display:flex; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:3px; gap:3px;}
+.ab-seg button{flex:1; border:none; background:transparent; font-family:inherit; font-size:13.5px; padding:8px 4px; border-radius:11px; color:var(--ink-soft); cursor:pointer; font-weight:600;}
+.ab-seg button.on{background:var(--ink); color:#fff;}
+.ab-ov{background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:12px 14px; margin-bottom:12px;}
+.ab-ov-h{display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:8px;} .ab-ov-h b{font-size:14px;} .ab-ov-h span{font-size:12px; color:var(--ink-soft);}
+.ab-days{display:flex; gap:8px; align-items:flex-end; height:92px; margin-bottom:12px;}
+.ab-day{flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; height:100%;}
+.ab-day b{font-size:12.5px;} .ab-day span{font-size:12.5px; font-weight:700; color:var(--ink-soft);}
+.ab-day i{flex:1; width:100%; max-width:38px; background:rgba(127,127,127,.12); border-radius:8px; display:flex; align-items:flex-end; overflow:hidden;}
+.ab-day u{display:block; width:100%; background:linear-gradient(180deg,#F472B6,#DB2777); border-radius:8px; min-height:0; transition:height .4s;}
+.ab-subs{display:flex; flex-direction:column; gap:7px;}
+.ab-sub{display:grid; grid-template-columns:minmax(90px,38%) 1fr 28px; align-items:center; gap:8px; font-size:12.5px;}
+.ab-sub .n{display:flex; flex-direction:column; line-height:1.25; font-weight:600;} .ab-sub .n small{font-size:10.5px; font-weight:400; color:var(--ink-soft);}
+.ab-sub i{height:10px; background:rgba(127,127,127,.12); border-radius:6px; overflow:hidden;} .ab-sub u{display:block; height:100%; background:linear-gradient(90deg,#818CF8,#4F46E5); border-radius:6px;}
+.ab-sub b{text-align:right;}
+table.ab-table th.ab-col{min-width:44px; text-align:center; font-size:13px;}
+table.ab-table th.ab-col.sub{min-width:74px; max-width:96px; white-space:normal; line-height:1.2; font-size:11.5px; vertical-align:bottom;}
+table.ab-table tr.ab-row{cursor:pointer;}
+.ab-c{text-align:center; font-weight:700; font-size:14px; color:var(--ink-soft);}
+.ab-c.h1{background:#FFE4EF; color:#9D174D;} .ab-c.h2{background:#FFC2DA; color:#831843;} .ab-c.h3{background:#FF8FBC; color:#fff;} .ab-c.h4{background:#E11D74; color:#fff;}
+.ab-c.tot{border-left:2px solid var(--line);}
+.ab-chips{display:flex; gap:8px; margin-bottom:10px;}
+.ab-chips span{flex:1; text-align:center; padding:9px 4px; border-radius:14px; font-size:12.5px; font-weight:600;} .ab-chips b{display:block; font-size:20px;}
+.ab-chips .a{background:#FFE4EF; color:#9D174D;} .ab-chips .l{background:#FEF3D0; color:#7A4F00;} .ab-chips .s{background:#E0F2FE; color:#075985;}
+.ab-h{font-size:12px; font-weight:700; color:var(--ink-soft); margin:12px 0 5px;}
+.ab-dt{width:100%; border-collapse:collapse; font-size:13px;}
+.ab-dt th{font-size:11.5px; color:var(--ink-soft); padding:3px 4px; text-align:center;}
+.ab-dt td{padding:6px 4px; text-align:center; border-top:1px solid var(--line); font-weight:700;}
+.ab-dt td.l{text-align:left; font-weight:500;} .ab-dt td.l small{display:block; font-size:10.5px; color:var(--ink-soft); font-weight:400;}
+.ab-dt td.h1,.ab-dt td.h2{background:#FFE4EF;} .ab-dt td.h3,.ab-dt td.h4{background:#FF8FBC; color:#fff;}
+.ab-evs{display:flex; flex-direction:column; gap:5px; max-height:170px; overflow:auto;}
+.ab-ev{display:flex; align-items:center; gap:8px; font-size:12.5px; padding:6px 9px; border-radius:10px; background:rgba(127,127,127,.1);}
+.ab-ev b{white-space:nowrap;} .ab-ev span{flex:1; color:var(--ink-soft);} .ab-ev i{font-style:normal; font-weight:700; font-size:11.5px; padding:2px 8px; border-radius:99px;}
+.ab-ev.absent i{background:#FFC2DA; color:#831843;} .ab-ev.leave i{background:#FDE68A; color:#7A4F00;} .ab-ev.late i{background:#BAE6FD; color:#075985;}
+
+/* --- เช็คชื่อตามตารางเรียน + กราฟวิเคราะห์ (v72) --- */
+#view-hr-absent .table-toolbar{flex-wrap:wrap; gap:8px; justify-content:flex-start;}
+#view-hr-absent .table-toolbar .score-info{flex-basis:100%; font-size:12.5px;}
+/* กราฟแท่งซ้อนสี ขาด/ลา/สาย */
+.ab-lg{display:flex; gap:12px; margin:0 0 8px; font-size:11.5px; color:var(--ink-soft);} .ab-lg span{display:inline-flex; align-items:center; gap:5px;} .ab-lg i{width:10px; height:10px; border-radius:3px; display:inline-block;}
+.ab-h2{display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12.5px; font-weight:700; color:var(--ink-soft); margin:12px 0 6px;} .ab-h2 small{font-weight:400; font-size:11px;}
+.ab-mini{border:1px solid var(--line); background:var(--surface); color:var(--ink-soft); font-family:inherit; font-size:11px; padding:3px 9px; border-radius:99px; cursor:pointer;}
+.ab-day i{flex-direction:column-reverse;} .ab-day u{border-radius:0; background:none; transition:height .4s;}
+.ab-day i u:last-child{border-radius:8px 8px 0 0;}
+.ab-sub i{display:flex; flex-direction:row;} .ab-sub i u{height:100%; border-radius:0; background:none;} .ab-sub i u:last-child{border-radius:0 6px 6px 0;}
+.ab-sub.two{align-items:center;} .ab-sub b.t{font-size:13px;}
+.ab-sub.ab-top{cursor:pointer;} .ab-sub .n em{font-style:normal; display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; margin-right:6px; border-radius:50%; background:#FFE4EF; color:#9D174D; font-size:11px; font-weight:700;}
+table.ab-table th.ab-col{cursor:pointer;} table.ab-table th.ab-col.on{color:#DB2777;}
+
+.ab-dayrow{display:flex; flex-direction:column; gap:3px;}
+.ab-dsub{font-size:11.5px; color:var(--ink-soft); padding-left:2px; line-height:1.4;} .ab-dsub em{font-style:normal; opacity:.7;}
+.ab-sub.two .n small{white-space:normal;}
