@@ -60,6 +60,8 @@ function rget(r, name){
   return "";
 }
 const esc = v => String(v ?? "").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");
+const TH_MON = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+const fmtThShort = iso => { if(!isValidDate(iso)) return "?"; const d=new Date(iso+"T00:00:00"); return `${d.getDate()} ${TH_MON[d.getMonth()]}`; };   // 2/10 → 2 ต.ค.
 const fmtLong = iso => { const d=new Date(iso+"T00:00:00"); return d.toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'2-digit'}); };
 /* เลขที่นักเรียน แสดงหน้าชื่อ */
 const snum = no => (no===undefined||no===null||no==="") ? "" : `<b class="sn">${esc(no)}</b>`;
@@ -71,8 +73,9 @@ const TK = { "กลางภาค":"m", "ปลายภาค":"f" };
 const PERIOD_KEY = "kc_period";
 const period = (()=>{
   try{ const p = JSON.parse(localStorage.getItem(PERIOD_KEY)); if(p && ["1","2"].includes(String(p.term)) && TYPES.includes(p.type)) return { term:String(p.term), type:p.type }; }catch(e){}
-  return { term:"1", type:"กลางภาค" };
+  return { term:"", type:"" };   // ยังไม่เคยเลือก (หรือล้างแคช) → ต้องเลือกที่หน้าแรกก่อนใช้งาน
 })();
+const periodReady = () => ["1","2"].includes(period.term) && TYPES.includes(period.type);
 
 /* ================= ตรวจข้อสอบ (เก็บในเครื่องด้วย localStorage — เฉลย+ชื่อชุด สำรองขึ้นชีท ExamKey ด้วย) =================
    ชุดข้อสอบแต่ละชุด: { id, name, term, level, subject, answerKey:{ "1":"ก", ... }, students:{ "7":{score,total,headerImage,scannedAt}, ... } }
@@ -118,9 +121,13 @@ function renderPeriodBars(){
   qsa(".period-bar").forEach(el=>{
     const mode = el.dataset.mode || "full";
     const termOnly = mode==="term" || mode==="lock-term";   // ไม่แยกกลางภาค/ปลายภาค (เช่น สรุปการมาเรียน — เก็บข้อมูลเป็นรายภาคเรียนเท่านั้น)
-    const locked = mode==="lock" || mode==="lock-term";
-    el.dataset.type = termOnly ? "" : period.type;
-    const now = termOnly ? `ภาคเรียนที่ ${period.term}` : `ภาคเรียนที่ ${period.term} · ${period.type}`;
+    const isHome = mode==="home";            // ตัวเลือกภาคเรียนมีที่เดียวคือหน้าแรก — ทุกหน้าอื่นแสดงเป็นป้ายอ่านอย่างเดียว
+    const locked = !isHome;
+    const ready = periodReady();
+    el.dataset.type = (termOnly || !ready) ? "" : period.type;
+    el.classList.toggle("pb-unset", isHome && !ready);
+    el.dataset.term = ready ? period.term : "";   // ใช้เปลี่ยนสีตามภาคเรียน (ภาค 1 / ภาค 2)
+    const now = !ready ? "ยังไม่ได้เลือก" : termOnly ? `ภาคเรียนที่ ${period.term}` : `ภาคเรียนที่ ${period.term} · ${period.type}`;
     const key = mode + "|" + TYPES.join(",");
     /* โครงปุ่มเดิมอยู่แล้ว → แค่สลับสถานะ .on กับเปลี่ยนข้อความ เพื่อให้ transition/สีไหลได้ (ไม่สร้างปุ่มใหม่ให้กระพริบ) */
     if(el._pbKey === key && el.querySelector(".pb-now")){
@@ -136,7 +143,7 @@ function renderPeriodBars(){
     el._pbKey = key;
     const termBtns = ["1","2"].map(n=>`<button type="button" data-term="${n}" class="${period.term===n?"on":""}">${n}</button>`).join("");
     const typeBtns = TYPES.map(x=>`<button type="button" data-type="${x}" class="${period.type===x?"on":""}">${x}</button>`).join("");
-    el.innerHTML = `<div class="pb-head"><span class="pb-lbl">📌 กำลังทำงานกับ</span><b class="pb-now">${now}</b></div>` +
+    el.innerHTML = `<div class="pb-head"><span class="pb-lbl">${isHome ? "📌 เลือกภาคเรียนที่จะทำงาน (จำไว้ให้ ใช้ทุกหน้า)" : "📌 กำลังทำงานกับ"}</span><b class="pb-now">${now}</b></div>` +
       (locked ? "" :
         `<div class="pb-ctl"><div class="pb-seg pb-term"><em>ภาคเรียนที่</em>${termBtns}</div>` +
         (termOnly ? "" : `<div class="pb-seg pb-type">${typeBtns}</div>`) + `</div>`);
@@ -457,6 +464,11 @@ function studentsOfRoom(room){
 qsa(".menu-item[data-go]").forEach(btn=>{
   btn.addEventListener("click", ()=>{
     const go = btn.dataset.go;
+    if(go!=="tools" && !periodReady()){   // ยังไม่ได้เลือกภาคเรียน/ประเภท → ให้เลือกที่หน้าแรกก่อน
+      toast("เลือกภาคเรียนและกลางภาค/ปลายภาคด้านบนก่อนครับ");
+      const pb = qs("#view-home .period-bar"); if(pb){ pb.classList.remove("pb-shake"); void pb.offsetWidth; pb.classList.add("pb-shake"); pb.scrollIntoView({ block:"center", behavior:_reduceMotion?"auto":"smooth" }); }
+      return;
+    }
     if(go==="attend"){ fillRoomSelects(); qs("#attendDate").value = todayISO(); showView("view-attend-setup"); }
     if(go==="scores"){ fillRoomSelects(); showView("view-scores-setup"); }
     if(go==="teaching"){ fillRoomSelects(); qs("#teachDate").value = todayISO(); showView("view-teaching"); }
@@ -1978,7 +1990,8 @@ qs("#pendModeSeg")?.addEventListener("click", e=>{
 [["score","#scoreSearch","#scoreSearchClear",()=>renderScoreTable()],["pend","#pendSearch","#pendSearchClear",()=>renderPending()]].forEach(([kind,inSel,clrSel,fn])=>{
   const inp = qs(inSel), clr = qs(clrSel); if(!inp) return;
   inp.addEventListener("input", ()=>{ stuSearch[kind].q = inp.value; stuSearch[kind].key = `${state.score.room}|${state.score.subject}`; syncSearchBox(kind); fn(); });
-  clr?.addEventListener("click", ()=>{ inp.value = ""; stuSearch[kind].q = ""; syncSearchBox(kind); fn(); inp.focus(); });
+  clr?.addEventListener("mousedown", e=> e.preventDefault());   // กดกากบาทแล้วไม่ให้ช่องเสียโฟกัส/เด้งคีย์บอร์ดซ้ำ
+  clr?.addEventListener("click", ()=>{ inp.value = ""; stuSearch[kind].q = ""; syncSearchBox(kind); fn(); if(document.activeElement!==inp) inp.focus({ preventScroll:true }); });
 });
 qs("#pendOnly")?.addEventListener("change", e=>{ try{ localStorage.setItem("kc_pendOnly", e.target.checked ? "1" : "0"); }catch(err){} renderPending(); });
 let pendBack = "view-scores-setup";
@@ -2027,7 +2040,7 @@ function ensurePrintModal(){
   const m = document.createElement("div");
   m.className = "modal-backdrop"; m.id = "modalPrintSheet";
   m.innerHTML = `<div class="modal-sheet">
-    <h3>🖨 พิมพ์ตารางเช็คงาน</h3>
+    <h3>🖨️ พิมพ์ / 📸 รูปตารางเช็คงาน</h3>
     <p class="hint" id="prSub" style="margin:-8px 0 12px;"></p>
     <div class="field"><label>เลือกช่วงโดย</label>
       <div class="seg" id="prMode"><button type="button" data-pm="work">📝 ตามงาน</button><button type="button" data-pm="date">📅 ตามวันที่</button></div>
@@ -2043,9 +2056,10 @@ function ensurePrintModal(){
     <div class="pr-quick"><button type="button" data-q="all">📚 ทั้งเทอม</button><button type="button" data-q="today">📅 ถึงวันนี้</button></div>
     <label class="sw"><input type="checkbox" id="prNames"><span class="sw-track"></span>แสดงชื่องานในหัวคอลัมน์</label>
     <div class="pr-sum" id="prSum"></div>
-    <div class="modal-actions">
+    <div class="modal-actions" style="flex-wrap:wrap;">
       <button class="btn btn-outline" data-close>ยกเลิก</button>
-      <button class="btn btn-primary" id="prGoBtn">🖨 เปิดหน้าพิมพ์</button>
+      <button class="btn btn-outline" id="prGoBtn">🖨️ เปิดหน้าพิมพ์</button>
+      <button class="btn btn-primary" id="prCopyBtn" style="flex-basis:100%;">📸 ดูรูป / คัดลอกไปวางในกลุ่ม</button>
     </div>
   </div>`;
   document.body.appendChild(m);
@@ -2071,6 +2085,10 @@ function ensurePrintModal(){
   qs("#prGoBtn", m).addEventListener("click", ()=>{
     const sel = prSelected(); if(!sel.length){ toast("ช่วงที่เลือกไม่มีงานเลยครับ"); return; }
     printCheckSheet(sel, PR_ST.names);
+  });
+  qs("#prCopyBtn", m).addEventListener("click", ()=>{
+    const sel = prSelected(); if(!sel.length){ toast("ช่วงที่เลือกไม่มีงานเลยครับ"); return; }
+    copyCheckSheetImage(sel, PR_ST.names);
   });
 }
 function prSyncMode(){
@@ -2128,12 +2146,12 @@ function buildCheckSheetHTML(acts, showNames){
   let tables = "";
   for(let t=0; t<nTab; t++){
     const part = acts.slice(t*per, (t+1)*per);
-    const th = part.map(a=> `<th class="dc"><div class="vt">${fmtShort(a.date)}${a.extra ? " ⭐×2" : ""}${showNames && a.name ? ` · ${esc(a.name)}` : ""}</div></th>`).join("");
+    const th = part.map(a=> `<th class="dc"><div class="vt">${fmtThShort(a.date)}${a.extra ? " ⭐×2" : ""}${showNames && a.name ? ` · ${esc(a.name)}` : ""}</div></th>`).join("");
     const body = roster.map(st=>{
       const tds = part.map(a=> `<td class="ck">${savedScore(st.key, a.date)!==null ? "✓" : ""}</td>`).join("");
       return `<tr><td class="no">${esc(st.no ?? "")}</td><td class="nm">${esc(st.label)}</td><td class="lv">${esc(room)}</td>${tds}</tr>`;
     }).join("");
-    tables += `<div class="blk${t>0 ? " nb" : ""}">${nTab>1 ? `<div class="part">ส่วนที่ ${t+1}/${nTab} · ${fmtShort(part[0].date)} – ${fmtShort(part[part.length-1].date)}</div>` : ""}
+    tables += `<div class="blk${t>0 ? " nb" : ""}">${nTab>1 ? `<div class="part">ส่วนที่ ${t+1}/${nTab} · ${fmtThShort(part[0].date)} – ${fmtThShort(part[part.length-1].date)}</div>` : ""}
       <table><colgroup><col style="width:${NOW}mm"><col style="width:${NAMEW}mm"><col style="width:${LVW}mm">${part.map(()=>`<col style="width:${cw}mm">`).join("")}</colgroup>
       <thead><tr><th>เลขที่</th><th class="nmh">ชื่อ-สกุล</th><th>ระดับชั้น</th>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
   }
@@ -2159,6 +2177,7 @@ function buildCheckSheetHTML(acts, showNames){
   th.dc{ padding:0; overflow:hidden; }
   .vt{ writing-mode:vertical-rl; transform:rotate(180deg); white-space:nowrap; margin:0 auto; font-size:9px; max-height:${headH-2}mm; overflow:hidden; text-overflow:ellipsis; }
   td{ height:6.3mm; font-size:10.5px; }
+  tbody tr:nth-child(odd) td{ background:#fff; } tbody tr:nth-child(even) td{ background:#EFEFEF; }   /* แถวสลับสี ขาว/เทาอ่อน */
   td.no{ font-weight:700; } td.nm{ text-align:left; padding-left:1.5mm; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } td.lv{ font-size:9.5px; }
   td.ck{ font-family:'Segoe UI Symbol','Noto Sans Symbols2',sans-serif; font-size:12px; font-weight:700; }
 </style></head><body>
@@ -2167,6 +2186,152 @@ function buildCheckSheetHTML(acts, showNames){
   <h1>${esc(title)}</h1><div class="sub">${esc(sub)}</div>
   ${tables}
 </body></html>`;
+}
+/* ================= คัดลอกตารางเช็คงานเป็น "รูปภาพ" (เอาไปวางในกลุ่มนักเรียน) =================
+   วาดลง canvas เอง (ไม่พึ่งไลบรารี) → ฟอนต์/สีออกเหมือนกันทุกเครื่อง · ช่องส่งแล้ว = วงเขียวติ๊กถูก · ไม่แสดงคะแนนจริง */
+const CK_PAL = [["#FF6B6B","#FFE9E9"],["#FFA94D","#FFF1DE"],["#51CF66","#E5F8E9"],["#339AF0","#E3F1FD"],["#845EF7","#EEE8FE"],["#F06595","#FDE8F0"]];
+async function buildCheckSheetImage(acts, showNames){
+  const { room, subject } = state.score;
+  const roster = scoreRoster(room);
+  const FF = "'Noto Sans Thai','Sarabun',Tahoma,sans-serif";
+  try{ await Promise.all(["500","700"].map(w=> document.fonts.load(`${w} 16px 'Noto Sans Thai'`, "กขคง"))); }catch(e){}
+  const SC = 2, F = (w,s)=> `${w} ${s}px ${FF}`;
+  const mctx = document.createElement("canvas").getContext("2d");
+  const mw = (txt, font)=>{ mctx.font = font; return mctx.measureText(txt).width; };
+  const ell = (txt, maxW, font)=>{ txt = String(txt); if(mw(txt,font) <= maxW) return txt; while(txt.length>1 && mw(txt+"…",font) > maxW) txt = txt.slice(0,-1); return txt+"…"; };
+
+  // ---- ขนาด ----
+  const PAD = 22, BAN_H = 78, LEG_H = 34, ROW_H = 34, NOW = 54, CELL = 34, TOTW = 76;
+  const names = roster.map(st=> String(st.label ?? ""));
+  const NAMEW = Math.min(340, Math.max(170, Math.ceil(Math.max(0, ...names.map(n=> mw(n, F(500,15))))) + 30));
+  const labels = acts.map(a=> ({ txt: fmtThShort(a.date) + (showNames && a.name ? ` · ${a.name}` : ""), extra: !!a.extra }));
+  const vMax = 210, vFont = F(600,13);
+  const HEAD_H = Math.min(vMax+26, Math.max(74, Math.ceil(Math.max(0, ...labels.map(l=> mw(l.txt, vFont) + (l.extra ? 24 : 0)))) + 42));
+  const title = `ตารางเช็คงาน · ${room} · ${subject}`;
+  const sub = `ภาคเรียนที่ ${period.term} · ${period.type} · งาน ${acts.length} ครั้ง (${fmtThShort(acts[0].date)}${acts.length>1 ? ` – ${fmtThShort(acts[acts.length-1].date)}` : ""})`;
+  const tblW = NOW + NAMEW + acts.length*CELL + TOTW;
+  const W = Math.max(Math.ceil(tblW + PAD*2), Math.ceil(Math.max(mw(title, F(700,22)), mw(sub, F(500,13))) + PAD*2 + 60), 380);
+  const H = PAD + BAN_H + 12 + LEG_H + 6 + HEAD_H + roster.length*ROW_H + PAD + 8;
+
+  const cv = document.createElement("canvas"); cv.width = W*SC; cv.height = H*SC;
+  const c = cv.getContext("2d"); c.scale(SC, SC); c.textBaseline = "middle";
+  const rr = (x,y,w,h,r)=>{ c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); };
+
+  // พื้นหลังรวม
+  const bg = c.createLinearGradient(0,0,W,H); bg.addColorStop(0,"#F3F7FF"); bg.addColorStop(1,"#FBF3FF");
+  c.fillStyle = bg; c.fillRect(0,0,W,H);
+
+  // แบนเนอร์หัวเรื่อง
+  const bx = PAD, by = PAD, bw = W - PAD*2;
+  c.save(); rr(bx,by,bw,BAN_H,20); c.clip();
+  const bgr = c.createLinearGradient(bx,by,bx+bw,by+BAN_H); bgr.addColorStop(0,"#4C8DF6"); bgr.addColorStop(.55,"#7B61F0"); bgr.addColorStop(1,"#E85DA8");
+  c.fillStyle = bgr; c.fillRect(bx,by,bw,BAN_H);
+  c.fillStyle = "rgba(255,255,255,.14)"; c.beginPath(); c.arc(bx+bw-40,by+10,56,0,7); c.fill();
+  c.fillStyle = "rgba(255,255,255,.10)"; c.beginPath(); c.arc(bx+bw-110,by+BAN_H+6,40,0,7); c.fill();
+  c.fillStyle = "rgba(255,255,255,.10)"; c.beginPath(); c.arc(bx+30,by+BAN_H-4,30,0,7); c.fill();
+  c.restore();
+  c.fillStyle = "#fff"; c.textAlign = "left";
+  c.font = F(700,22); c.fillText(ell(title, bw-36, F(700,22)), bx+20, by+29);
+  c.font = F(500,13); c.globalAlpha = .92; c.fillText(ell(sub, bw-36, F(500,13)), bx+20, by+56); c.globalAlpha = 1;
+
+  // คำอธิบายสัญลักษณ์
+  const ly = by + BAN_H + 12 + LEG_H/2;
+  const tick = (cx,cy,r)=>{ c.fillStyle = "#2FB863"; c.beginPath(); c.arc(cx,cy,r,0,7); c.fill();
+    c.strokeStyle = "#fff"; c.lineWidth = r*.28; c.lineCap = "round"; c.lineJoin = "round";
+    c.beginPath(); c.moveTo(cx-r*.42,cy+r*.02); c.lineTo(cx-r*.1,cy+r*.36); c.lineTo(cx+r*.48,cy-r*.32); c.stroke(); };
+  tick(PAD+10, ly, 9); c.fillStyle = "#3B4A6B"; c.font = F(500,13); c.fillText("ส่งงานแล้ว", PAD+25, ly);
+  const lx2 = PAD + 25 + mw("ส่งงานแล้ว", F(500,13)) + 22;
+  c.fillStyle = "#D3DAEA"; c.beginPath(); c.arc(lx2, ly, 4, 0, 7); c.fill();
+  c.fillStyle = "#3B4A6B"; c.fillText("ยังไม่ส่ง", lx2+11, ly);
+
+  // ตัวตาราง (การ์ดขาวมีเงา)
+  const tx = Math.round((W - tblW)/2), ty = by + BAN_H + 12 + LEG_H + 6, th = HEAD_H + roster.length*ROW_H;
+  c.save(); c.shadowColor = "rgba(60,80,140,.18)"; c.shadowBlur = 16; c.shadowOffsetY = 4; c.fillStyle = "#fff"; rr(tx,ty,tblW,th,16); c.fill(); c.restore();
+  c.save(); rr(tx,ty,tblW,th,16); c.clip();
+
+  // หัวตาราง
+  const hf = c.createLinearGradient(tx,ty,tx,ty+HEAD_H); hf.addColorStop(0,"#E6EDFC"); hf.addColorStop(1,"#D9E4FA");
+  c.fillStyle = hf; c.fillRect(tx,ty,NOW+NAMEW,HEAD_H);
+  c.fillStyle = "#2B3A67"; c.font = F(700,14); c.textAlign = "center";
+  c.fillText("เลขที่", tx+NOW/2, ty+HEAD_H-20);
+  c.fillText("ชื่อ-สกุล", tx+NOW+NAMEW/2, ty+HEAD_H-20);
+  acts.forEach((a,i)=>{
+    const x = tx + NOW + NAMEW + i*CELL, p = CK_PAL[i % CK_PAL.length];
+    c.fillStyle = p[1]; c.fillRect(x,ty,CELL,HEAD_H);
+    c.fillStyle = p[0]; c.fillRect(x,ty,CELL,5);
+    // ข้อความแนวตั้ง (อ่านจากล่างขึ้นบน)
+    const l = labels[i];
+    c.save(); c.translate(x+CELL/2, ty+HEAD_H-10); c.rotate(-Math.PI/2); c.textAlign = "left";
+    const maxT = HEAD_H - 30 - (l.extra ? 24 : 0);
+    const txt = ell(l.txt, maxT, vFont);
+    c.font = vFont; c.fillStyle = "#2B3445"; c.fillText(txt, 0, 0);
+    if(l.extra){ const w0 = mw(txt, vFont) + 6; c.fillStyle = "#E8590C"; c.font = F(700,13); c.fillText("×2", w0, 0); }
+    c.restore();
+  });
+  const tx0 = tx + NOW + NAMEW + acts.length*CELL;
+  c.fillStyle = "#E6EDFC"; c.fillRect(tx0,ty,TOTW,HEAD_H);
+  c.fillStyle = "#2B3A67"; c.font = F(700,14); c.textAlign = "center"; c.fillText("ส่งแล้ว", tx0+TOTW/2, ty+HEAD_H-20);
+
+  // แถวนักเรียน (สลับขาว / เทาอ่อน)
+  roster.forEach((st,r)=>{
+    const y = ty + HEAD_H + r*ROW_H, cy = y + ROW_H/2;
+    c.fillStyle = r%2 ? "#EFF2F8" : "#FFFFFF"; c.fillRect(tx,y,tblW,ROW_H);
+    c.fillStyle = "#4A5778"; c.font = F(700,14); c.textAlign = "center"; c.fillText(String(st.no ?? ""), tx+NOW/2, cy);
+    c.fillStyle = "#1F2A44"; c.font = F(500,15); c.textAlign = "left"; c.fillText(ell(names[r], NAMEW-24, F(500,15)), tx+NOW+12, cy);
+    let done = 0;
+    acts.forEach((a,i)=>{
+      const cx = tx + NOW + NAMEW + i*CELL + CELL/2;
+      if(savedScore(st.key, a.date) !== null){ done++; tick(cx, cy, 10); }
+      else { c.fillStyle = "#D3DAEA"; c.beginPath(); c.arc(cx,cy,3.2,0,7); c.fill(); }
+    });
+    // ป้ายสรุปต่อคน
+    const all = done === acts.length, none = done === 0;
+    const bgc = all ? "#DDF6E4" : none ? "#FDE5E5" : "#FFF0D2", fgc = all ? "#1B8A43" : none ? "#C62828" : "#A65F00";
+    const label = `${done}/${acts.length}`; c.font = F(700,13);
+    const bwid = Math.max(44, mw(label, F(700,13)) + 18);
+    c.fillStyle = bgc; rr(tx0 + (TOTW-bwid)/2, cy-11, bwid, 22, 11); c.fill();
+    c.fillStyle = fgc; c.textAlign = "center"; c.fillText(label, tx0+TOTW/2, cy+.5);
+  });
+  // เส้นแบ่งคอลัมน์บางๆ
+  c.strokeStyle = "rgba(120,140,190,.22)"; c.lineWidth = 1;
+  for(let i=0;i<=acts.length;i++){ const x = Math.round(tx+NOW+NAMEW+i*CELL)+.5; c.beginPath(); c.moveTo(x,ty+5); c.lineTo(x,ty+th); c.stroke(); }
+  c.beginPath(); c.moveTo(tx+NOW+.5,ty+5); c.lineTo(tx+NOW+.5,ty+th); c.stroke();
+  c.restore();
+
+  return await new Promise((ok, no)=> cv.toBlob(b=> b ? ok(b) : no(new Error("สร้างรูปไม่สำเร็จ")), "image/png"));
+}
+/* กดปุ่ม → สร้างรูปแล้ว "แสดงตัวอย่างก่อน" · ในหน้าตัวอย่างมีปุ่มคัดลอก / บันทึกรูป (ถ้าคัดลอกอัตโนมัติไม่ได้ ให้กดค้างที่รูป) */
+async function copyCheckSheetImage(acts, showNames){
+  const roster = scoreRoster(state.score.room);
+  if(!roster.length){ toast("ไม่พบรายชื่อนักเรียนในห้องนี้"); return; }
+  showSaving("กำลังสร้างรูป...");
+  try{ const blob = await buildCheckSheetImage(acts, showNames); hideSaving(); showCheckImagePreview(blob); }
+  catch(e){ hideSaving(); console.error(e); toast("สร้างรูปไม่สำเร็จ ลองใหม่อีกครั้ง"); }
+}
+function showCheckImagePreview(blob){
+  const old = qs("#modalCheckImg"); if(old){ const im = qs("img", old); if(im && im.dataset.url) URL.revokeObjectURL(im.dataset.url); old.remove(); }
+  const url = URL.createObjectURL(blob), { room, subject } = state.score;
+  const m = document.createElement("div"); m.className = "modal-backdrop"; m.id = "modalCheckImg";
+  m.innerHTML = `<div class="modal-sheet"><h3>📸 ตัวอย่างรูปตารางเช็คงาน</h3>
+    <p class="hint" id="ckHint" style="margin:-8px 0 10px;">ดูรูปให้เรียบร้อยก่อน แล้วกด “คัดลอกรูป” ไปวางในกลุ่มได้เลย (ถ้าคัดลอกไม่ได้ ให้กดค้างที่รูป หรือกดบันทึกรูป)</p>
+    <div style="max-height:52vh; overflow:auto; border-radius:12px; border:1px solid #E1E7F3; margin-bottom:12px; background:#fff;"><img alt="ตารางเช็คงาน" style="display:block; width:100%; height:auto;"></div>
+    <div class="modal-actions" style="flex-wrap:wrap;"><button class="btn btn-outline" data-close>ปิด</button><a class="btn btn-outline" id="ckSave" download="ตารางเช็คงาน-${esc(room)}-${esc(subject)}.png" style="text-align:center; text-decoration:none;">💾 บันทึกรูป</a><button class="btn btn-primary" id="ckCopy" style="flex-basis:100%;">📋 คัดลอกรูป</button></div></div>`;
+  const img = qs("img", m); img.src = url; img.dataset.url = url; qs("#ckSave", m).href = url;
+  document.body.appendChild(m);
+  const close = ()=>{ m.classList.remove("active"); setTimeout(()=>{ URL.revokeObjectURL(url); m.remove(); }, 450); };
+  qs("[data-close]", m).addEventListener("click", close);
+  m.addEventListener("click", e=>{ if(e.target===m) close(); });
+  qs("#ckCopy", m).addEventListener("click", async ()=>{
+    try{
+      if(!(navigator.clipboard && window.ClipboardItem)) throw new Error("no clipboard image");
+      await navigator.clipboard.write([ new ClipboardItem({ "image/png": blob }) ]);
+      toast("คัดลอกรูปแล้ว — ไปกดวางในกลุ่มได้เลย");
+    }catch(e){
+      console.warn("clipboard image failed", e);
+      const h = qs("#ckHint", m); h.style.color = "#B3261E"; h.textContent = "เบราว์เซอร์นี้คัดลอกรูปอัตโนมัติไม่ได้ — กดค้างที่รูปแล้วเลือก “คัดลอก/บันทึกรูป” หรือกดปุ่มบันทึกรูปแทน";
+    }
+  });
+  requestAnimationFrame(()=> m.classList.add("active"));
 }
 function printCheckSheet(acts, showNames){
   const roster = scoreRoster(state.score.room);
@@ -2177,7 +2342,7 @@ function printCheckSheet(acts, showNames){
 }
 /* ปุ่มพิมพ์: หน้าลงคะแนน + หน้างานค้าง (สร้างเองด้วย JS ไม่ต้องแก้ HTML) */
 (function addPrintButtons(){
-  const mk = () => { const b = document.createElement("button"); b.type = "button"; b.className = "btn btn-outline btn-sm"; b.textContent = "🖨 พิมพ์ตาราง"; b.addEventListener("click", openPrintModal); return b; };
+  const mk = () => { const b = document.createElement("button"); b.type = "button"; b.className = "btn btn-outline btn-sm"; b.textContent = "🖨️ พิมพ์ / 📸 รูปตาราง"; b.addEventListener("click", openPrintModal); return b; };
   const a = qs("#addHeaderBtn"); if(a) a.after(mk());
   const tb = qs("#pendInfo")?.parentElement; if(tb) tb.insertBefore(mk(), qs("#pendInfo"));
 })();
@@ -3572,6 +3737,52 @@ qs("#hrList")?.addEventListener("click", e=>{
   openHrDetail(row.dataset.k, add ? add.dataset.add : null);
 });
 qs("#hrGoDocs")?.addEventListener("click", openHrDocs);
+/* ปริ้นใบรายชื่อนักเรียน (ขาว-ดำ): ลำดับที่ | เลขประจำตัว | ชื่อ-สกุล | ช่องว่าง 10 ช่องให้ครูท่านอื่นลงคะแนน */
+function openHrPrintList(){
+  const room = hr.room;
+  if(!room){ toast("ยังไม่ได้เลือกห้อง"); return; }
+  const stu = hrStudents(room).slice().sort((a,b)=> (Number(a.no)||0)-(Number(b.no)||0));
+  if(!stu.length){ toast("ห้องนี้ยังไม่มีรายชื่อนักเรียน"); return; }
+  const now = new Date(), yearBE = now.getFullYear() + 543 + (now.getMonth() < 4 ? -1 : 0);   // ปีการศึกษาเริ่ม พ.ค.
+  const m = String(room).trim().match(/^ม\.?\s*(.+)$/);
+  const levelTxt = m ? `ชั้นมัธยมศึกษาปีที่ ${m[1]}` : `ชั้น ${room}`;
+  const COLS = 10;
+  const blank = `<td></td>`.repeat(COLS);
+  const rows = stu.map((s,i)=> `<tr><td class="c">${esc(s.no !== "" && s.no != null ? s.no : i+1)}</td><td class="c">${esc(s.code)}</td><td class="nm">${esc(s.name)}</td>${blank}</tr>`).join("")
+    + Array.from({length:3}, ()=> `<tr><td></td><td></td><td></td>${blank}</tr>`).join("");
+  const html = `<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>รายชื่อนักเรียน ${esc(room)}</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  @page{ size:A4 portrait; margin:12mm 10mm; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:'TH Sarabun New','THSarabunNew','TH SarabunPSK','TH Sarabun PSK','Sarabun','Noto Sans Thai',Tahoma,sans-serif; color:#000; background:#fff; font-size:20px; }
+  h1{ text-align:center; font-size:26px; margin:0 0 12px; }
+  .meta{ text-align:center; margin:0 0 12px; font-size:21px; white-space:nowrap; overflow:hidden; }
+  table{ width:100%; border-collapse:collapse; table-layout:fixed; }
+  th,td{ border:1px solid #000; padding:0 4px; height:8.2mm; font-size:20px; overflow:hidden; }
+  thead{ display:table-header-group; }
+  thead th{ height:38mm; font-weight:400; }
+  tr{ page-break-inside:avoid; }
+  .c{ text-align:center; }
+  .nm{ text-align:left; padding-left:8px; white-space:nowrap; }
+  .noprint{ text-align:center; padding:12px; font-family:sans-serif; }
+  @media print{ .noprint{ display:none; } }
+</style></head><body>
+<div class="noprint"><button onclick="window.print()" style="font-size:16px;padding:8px 22px;cursor:pointer;">🖨 พิมพ์</button>
+<button onclick="window.close()" style="font-size:16px;padding:8px 22px;cursor:pointer;margin-left:8px;">‹ ปิดหน้านี้</button></div>
+<h1>รายชื่อนักเรียน${esc(levelTxt)} ปีการศึกษา ${yearBE}</h1>
+<p class="meta">วิชา.................................................... ครูผู้สอน.............................................................................</p>
+<table>
+  <colgroup><col style="width:11.5%"><col style="width:13.5%"><col style="width:31%">${`<col>`.repeat(COLS)}</colgroup>
+  <thead><tr><th>ลำดับที่</th><th>เลขประจำตัว</th><th>ชื่อ-สกุล</th>${`<th></th>`.repeat(COLS)}</tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+</body></html>`;
+  const win = window.open("", "_blank");
+  if(!win){ toast("เบราว์เซอร์บล็อกป๊อปอัป กรุณาอนุญาตแล้วลองใหม่"); return; }
+  win.document.open(); win.document.write(html); win.document.close();
+}
+qs("#hrPrintBtn")?.addEventListener("click", openHrPrintList);
 qs("#hrGoSubsidy")?.addEventListener("click", openHrOrders);
 
 /* ================= รายละเอียดนักเรียน ================= */
