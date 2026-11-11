@@ -2482,3 +2482,41 @@ table.score-table thead th.today-col .x2-badge{background:rgba(255,255,255,.9); 
 .extra-field{background:#FFFBEB; border:1.5px dashed #F59E0B; border-radius:14px; padding:12px 14px;}
 html[data-theme="dark"] .extra-field, html[data-theme="black"] .extra-field{background:rgba(245,158,11,.1);}
 html[data-theme="cream"] .extra-field{background:#FBF1CC;}
+/* ===== ตัวเลือกภาคเรียนบนหน้าแรก ===== */
+.period-bar[data-mode="home"]{margin:0 0 18px; padding:14px 14px 12px;}
+.period-bar[data-mode="home"] .pb-now{font-size:20px;}
+.period-bar.pb-unset{background:linear-gradient(135deg,#B91C1C,#F97316) !important; box-shadow:0 14px 26px -16px rgba(185,28,28,.85); animation:pbNeed 1.8s ease-in-out infinite;}
+.period-bar.pb-shake{animation:pbShake .45s ease both;}
+@keyframes pbNeed{0%,100%{transform:scale(1);}50%{transform:scale(1.012);}}
+@keyframes pbShake{0%,100%{transform:translateX(0);}20%{transform:translateX(-8px);}40%{transform:translateX(7px);}60%{transform:translateX(-5px);}80%{transform:translateX(3px);}}
+@media (prefers-reduced-motion:reduce){ .period-bar.pb-unset,.period-bar.pb-shake{animation:none;} }
+
+/* ===== หน้าเปิดแอป (Splash) โทนสว่าง: พื้นขาว + สีมัวๆ 4 สีแบบ Google (ธีมแฟนตาซีใช้ภาพทะเลเหมือนเดิม) ===== */
+html:not([data-theme="fantasy"]) #splashBg{background:#FBFCFF;}
+html:not([data-theme="fantasy"]) #splashBg .orb{opacity:.34; filter:blur(70px);}
+html:not([data-theme="fantasy"]) #splashBg .o1{background:#4285F4; opacity:.34;}
+html:not([data-theme="fantasy"]) #splashBg .o2{background:#EA4335; opacity:.26;}
+html:not([data-theme="fantasy"]) #splashBg .o3{background:#34A853; opacity:.3;}
+html:not([data-theme="fantasy"]) #splashBg::after{content:""; position:absolute; width:240px; height:240px; border-radius:50%; background:#FBBC04; filter:blur(70px); opacity:.34; top:16%; right:-80px; animation:orbFloat 9s ease-in-out infinite alternate; animation-delay:-5s;}
+html:not([data-theme="fantasy"]) #splashIcon{background:linear-gradient(145deg,#4285F4,#5B9BF8); border:1px solid rgba(255,255,255,.7); box-shadow:0 16px 34px -14px rgba(66,133,244,.75), inset 0 1px 0 rgba(255,255,255,.5);}
+html:not([data-theme="fantasy"]) #splashLogo{color:#1F2A44;}
+html:not([data-theme="fantasy"]) #splashLogo span{color:#4285F4;}
+html:not([data-theme="fantasy"]) #splashLogo.go{color:var(--ink);}
+html:not([data-theme="fantasy"]) #splashLogo.go span{color:var(--gold);}
+html:not([data-theme="fantasy"]) #splashTag{color:#6B7691;}
+html:not([data-theme="fantasy"]) #splashLoading{color:#4A5578;}
+html:not([data-theme="fantasy"]) #splashLoading .kc-ring{--kc-a:#4285F4; --kc-b:#34A853;}
+html:not([data-theme="fantasy"]) #splashLoading .kc-ring .trk{border-color:rgba(66,133,244,.18);}
+.hr-print-row{margin:0 0 12px; display:flex;}
+.hr-print-row .btn{flex:1;}
+
+/* ===== สีตามภาคเรียน: ภาค 1 ใช้สีเดิม (เขียวอมฟ้า=กลางภาค / ส้ม=ปลายภาค) · ภาค 2 = เขียวมะนาว (กลางภาค) / ชมพู-ม่วง (ปลายภาค) ===== */
+html .period-bar[data-term="2"][data-type="กลางภาค"]{--pb1:#166534 !important; --pb2:#84CC16 !important; background:linear-gradient(135deg,#166534,#84CC16) !important;}
+html .period-bar[data-term="2"][data-type="ปลายภาค"]{--pb1:#9D174D !important; --pb2:#C026D3 !important; background:linear-gradient(135deg,#9D174D,#C026D3) !important;}
+html .period-bar[data-term="2"][data-type=""]{--pb1:#5B21B6 !important; --pb2:#8B5CF6 !important; background:linear-gradient(135deg,#5B21B6,#8B5CF6) !important;}
+.period-bar[data-term="2"] .pb-seg button.on{color:#3B2A8C;}
+.period-bar[data-term="2"][data-type="กลางภาค"] .pb-seg button.on{color:#166534;}
+
+/* ===== กันมือถือซูมเองตอนแตะช่องพิมพ์ (iOS ซูมถ้าตัวอักษรในช่อง < 16px) ===== */
+.stu-search input,.hr-search input,.field input,.field select,.field textarea,.hr-f input,.hr-f textarea,.w-hours input,.mn-sub select,.ex-grid input,.w-grid input{font-size:16px !important;}
+.stu-search .ss-clear{width:30px; height:30px; touch-action:manipulation;}
