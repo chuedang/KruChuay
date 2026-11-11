@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="theme-color" content="#d7defc">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>KruChauy</title>
 <!-- เปลี่ยนเลข v= ทุกครั้งที่อัปเดตไฟล์ เพื่อให้เบราว์เซอร์โหลดของใหม่ ไม่ใช้ของเก่าที่แคชไว้ -->
 <script>
 /* โหมดหน้าจอ: pc / mobile (จำค่าที่เลือกไว้ ถ้ายังไม่เคยเลือกจะเดาจากความกว้างจอ) — ตั้งก่อนวาดหน้าเพื่อกันภาพกระพริบ */
 (function(){var m="mobile";try{var s=localStorage.getItem("kc_mode");m=(s==="pc"||s==="mobile")?s:(window.innerWidth>=900?"pc":"mobile");}catch(e){}document.documentElement.classList.add("mode-"+m);})();
 </script>
-<link rel="stylesheet" href="StyleKruChauy.css?v=49">
+<link rel="stylesheet" href="StyleKruChauy.css?v=54">
 <link rel="stylesheet" href="FixboyChat.css?v=2">
 <script>try{var T={light:"#d7defc",cream:"#efe3c4",dark:"#121624",black:"#000000",fantasy:"#2a74d6"};var t=localStorage.getItem("kc_theme");if(!T[t])t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t;var mt=document.querySelector('meta[name="theme-color"]');if(mt)mt.setAttribute("content",T[t]);}catch(e){}</script>
 </head>
@@ -32,6 +32,7 @@
         <button type="button" id="themeBtn" aria-haspopup="dialog">🎨 ธีม</button>
       </div>
     </div>
+    <div class="period-bar" data-mode="home"></div>
     <div class="menu">
       <button class="menu-item c-blue" data-go="attend" style="--i:0">
         <span class="ico">✅</span>
@@ -70,7 +71,7 @@
   <section id="view-attend-setup" class="view">
     <div class="topbar">
       <button class="back-btn" data-back="view-home">‹</button>
-      <div class="tb-txt"><h2>เช็คชื่อ</h2><div class="sub">เลือกภาคเรียน ห้อง วิชา และวันที่</div></div>
+      <div class="tb-txt"><h2>เช็คชื่อ</h2><div class="sub">เลือกห้อง วิชา และวันที่</div></div>
       <span class="tb-ico">✅</span>
     </div>
     <div class="period-bar" data-mode="full"></div>
@@ -149,7 +150,7 @@
   <section id="view-scores-setup" class="view">
     <div class="topbar">
       <button class="back-btn" data-back="view-home">‹</button>
-      <div class="tb-txt"><h2>ลงคะแนน</h2><div class="sub">เลือกภาคเรียน ห้อง และวิชา</div></div>
+      <div class="tb-txt"><h2>ลงคะแนน</h2><div class="sub">เลือกห้อง และวิชา</div></div>
       <span class="tb-ico">📊</span>
     </div>
     <div class="period-bar" data-mode="full"></div>
@@ -280,6 +281,7 @@
           <span class="t-ico">💰</span><b>เงินอุดหนุน</b><small>สั่งชุดนักเรียน · สรุปยอด</small>
         </button>
       </div>
+      <div class="hr-print-row"><button type="button" class="btn btn-outline" id="hrPrintBtn">🖨 ปริ้นใบรายชื่อนักเรียน (ขาว-ดำ)</button></div>
       <div class="hr-search"><input id="hrSearch" type="search" placeholder="ค้นหาชื่อ / ชื่อเล่น / เลขที่" autocomplete="off"></div>
       <div class="hr-legend"><span><i class="dot stu"></i>โทรนักเรียน</span><span class="hr-legend-tip">แตะชื่อเพื่อดูข้อมูล / โทรผู้ปกครอง</span></div>
       <div class="hr-list" id="hrList"></div>
@@ -661,8 +663,8 @@
     </div>
   </div>
 </div>
-<script src="ScriptKruChauy.js?v=63"></script>
-<script src="tool.js?v=28"></script>
+<script src="ScriptKruChauy.js?v=68"></script>
+<script src="tool.js?v=36"></script>
 <script src="Khosob.js?v=2"></script>
 <script src="FixboyChat.js?v=2"></script>
 </body>
