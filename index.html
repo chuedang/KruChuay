@@ -10,7 +10,7 @@
 /* โหมดหน้าจอ: pc / mobile (จำค่าที่เลือกไว้ ถ้ายังไม่เคยเลือกจะเดาจากความกว้างจอ) — ตั้งก่อนวาดหน้าเพื่อกันภาพกระพริบ */
 (function(){var m="mobile";try{var s=localStorage.getItem("kc_mode");m=(s==="pc"||s==="mobile")?s:(window.innerWidth>=900?"pc":"mobile");}catch(e){}document.documentElement.classList.add("mode-"+m);})();
 </script>
-<link rel="stylesheet" href="StyleKruChauy.css?v=54">
+<link rel="stylesheet" href="StyleKruChauy.css?v=59">
 <link rel="stylesheet" href="FixboyChat.css?v=2">
 <script>try{var T={light:"#d7defc",cream:"#efe3c4",dark:"#121624",black:"#000000",fantasy:"#2a74d6"};var t=localStorage.getItem("kc_theme");if(!T[t])t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t;var mt=document.querySelector('meta[name="theme-color"]');if(mt)mt.setAttribute("content",T[t]);}catch(e){}</script>
 </head>
@@ -280,6 +280,12 @@
         <button type="button" class="hr-tile sub" id="hrGoSubsidy">
           <span class="t-ico">💰</span><b>เงินอุดหนุน</b><small>สั่งชุดนักเรียน · สรุปยอด</small>
         </button>
+        <button type="button" class="hr-tile tbl" id="hrGoTable">
+          <span class="t-ico">🗓️</span><b>ตารางเรียน</b><small>ลากวางจัดตารางนักเรียน</small>
+        </button>
+        <button type="button" class="hr-tile abs" id="hrGoAbsent">
+          <span class="t-ico">📊</span><b>วิเคราะห์ขาด ลา สาย</b><small>เทียบวันที่ขาดกับตารางเรียน</small>
+        </button>
       </div>
       <div class="hr-print-row"><button type="button" class="btn btn-outline" id="hrPrintBtn">🖨 ปริ้นใบรายชื่อนักเรียน (ขาว-ดำ)</button></div>
       <div class="hr-search"><input id="hrSearch" type="search" placeholder="ค้นหาชื่อ / ชื่อเล่น / เลขที่" autocomplete="off"></div>
@@ -386,6 +392,50 @@
     </div>
     <div class="score-scroll" id="hrsPaneTable"><div id="hrsTableWrap"></div></div>
     <div class="hrs-total" id="hrsPaneTotal" style="display:none;"></div>
+  </section>
+
+  <!-- HOMEROOM: วิเคราะห์ขาด ลา สาย (จากชีท Attend) -->
+  <section id="view-hr-absent" class="view">
+    <div class="topbar">
+      <button class="back-btn" id="hraBack">‹</button>
+      <div class="tb-txt"><h2>วิเคราะห์ขาด ลา สาย</h2><div class="sub" id="hraSub"></div></div>
+      <span class="tb-ico">📊</span>
+    </div>
+    <div class="period-bar" data-mode="lock-term" data-compact="1"></div>
+    <div class="ab-ctl">
+      <div class="ab-seg" id="hraMode"><button type="button" data-m="al">ขาด+ลา</button><button type="button" data-m="ab">ขาด</button><button type="button" data-m="lv">ลา</button><button type="button" data-m="lt">สาย</button></div>
+      <div class="ab-seg" id="hraView"><button type="button" data-v="day">ตามวัน</button><button type="button" data-v="sub">ตามวิชา</button></div>
+    </div>
+    <div id="hraOverview"></div>
+    <div class="table-toolbar">
+      <button id="hraSort" class="btn btn-outline btn-sm">↕ เรียง: เลขที่</button>
+      <span class="score-info" id="hraInfo"></span>
+    </div>
+    <div class="score-scroll"><div id="hraWrap"></div></div>
+  </section>
+
+  <!-- HOMEROOM: ตารางเรียนของนักเรียน (ลากวางวิชาลงช่อง) -->
+  <section id="view-hr-table" class="view">
+    <div class="topbar">
+      <button class="back-btn" id="hrtBack">‹</button>
+      <div class="tb-txt"><h2>ตารางเรียน</h2><div class="sub" id="hrtSub"></div></div>
+      <span class="tb-ico">🗓️</span>
+    </div>
+    <div class="period-bar" data-mode="lock-term" data-compact="1"></div>
+    <div class="tt-palbox">
+      <div class="tt-pal-h"><b>วิชา</b><span>ลากไปวางในช่อง · หรือแตะวิชาแล้วแตะช่อง · ลากกลับมาตรงนี้เพื่อลบ</span></div>
+      <div class="tt-pal" id="hrtPal"></div>
+    </div>
+    <div class="table-toolbar">
+      <button id="hrtPrint" class="btn btn-outline btn-sm">🖨️ พิมพ์</button>
+      <button id="hrtClear" class="btn btn-outline btn-sm">ล้างตาราง</button>
+      <button id="hrtShuffle" class="btn btn-outline btn-sm" title="สุ่มสีวิชาใหม่">🎲 สุ่มสี</button>
+      <button id="hrtAddSub" class="btn btn-outline btn-sm">＋ เพิ่มวิชา</button>
+      <button id="hrtEditSub" class="btn btn-outline btn-sm">✏️ แก้ไขวิชา</button>
+      <span class="score-info" id="hrtInfo"></span>
+    </div>
+    <div class="tt-wrap" id="hrtWrap"></div>
+    <div class="hr-savebar"><button type="button" class="btn btn-primary" id="hrtSaveBtn" disabled>บันทึกตารางเรียน</button></div>
   </section>
 
   <!-- EXAM: หน้าแรก — รายการชุดข้อสอบ -->
@@ -651,6 +701,22 @@
     </div>
   </div>
 
+  <div class="modal-backdrop hr-modal" id="modalHrtSub">
+    <div class="modal-sheet">
+      <h3 id="hrtSubTitle">เพิ่มวิชาอื่นๆ</h3>
+      <div class="field"><label>ชื่อวิชา</label><input id="hrtSubName" maxlength="40" placeholder="เช่น ภาษาอังกฤษ"></div>
+      <div class="field"><label>ชื่อย่อ (แสดงในช่องตาราง · ไม่บังคับ)</label><input id="hrtSubShort" maxlength="12" placeholder="เช่น อังกฤษ"></div>
+      <div class="so-chips hr-suggest" id="hrtSubSuggest"></div>
+      <div id="hrtSubTools" style="display:none;">
+        <div class="hr-doc-tools"><button type="button" class="btn btn-danger btn-sm" id="hrtSubDel">🗑 ลบวิชานี้</button></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" data-close>ยกเลิก</button>
+        <button class="btn btn-primary" id="hrtSubOk">เพิ่มวิชา</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <!-- SAVING OVERLAY -->
@@ -663,7 +729,7 @@
     </div>
   </div>
 </div>
-<script src="ScriptKruChauy.js?v=68"></script>
+<script src="ScriptKruChauy.js?v=73"></script>
 <script src="tool.js?v=36"></script>
 <script src="Khosob.js?v=2"></script>
 <script src="FixboyChat.js?v=2"></script>
