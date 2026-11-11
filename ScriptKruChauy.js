@@ -6,7 +6,7 @@ const SLOT_MIN = 36; // จำนวนช่องว่างเริ่ม�
 const WEEKDAYS = ["อา","จ","อ","พ","พฤ","ศ","ส"];
 
 const state = {
-  students: [], scores: [], activities: [], attendance: [], teaching: [], config: [], examRows: [], examSetup: [], examKeyRows: [], blocked: [], hrDocs: [], hrOrders: [], hrSetup: [],
+  students: [], scores: [], activities: [], attendance: [], teaching: [], config: [], examRows: [], examSetup: [], examKeyRows: [], blocked: [], hrDocs: [], hrOrders: [], hrSetup: [], hrTable: [], hrSubjects: [],
   examUi: { mc:"", es:"", fb:"", wmc:"", wes:"", vals:new Map(), dirty:false },
   attend: { room:"", subject:"", date:"", rows:[] },
   score: { tab:"beh", room:"", subject:"", headers:[], editingDate:null, pickCell:null, pending:new Map(), warned:false, scrolled:false },
@@ -155,7 +155,7 @@ function setPeriod(patch){
   if(qs("#view-scores-table").classList.contains("active") && scoreUnsaved()>0){
     toast("มีคะแนนที่ยังไม่ได้บันทึก — กดบันทึกก่อนเปลี่ยนภาคเรียน/ประเภทครับ"); return;
   }
-  if((qs("#view-hr-docs").classList.contains("active") && hrdDirty()) || (qs("#view-hr-order").classList.contains("active") && hroDirty())){
+  if((qs("#view-hr-docs").classList.contains("active") && hrdDirty()) || (qs("#view-hr-order").classList.contains("active") && hroDirty()) || hrtDirty()){
     toast("มีข้อมูลที่ยังไม่ได้บันทึก — กดบันทึกก่อนเปลี่ยนภาคเรียนครับ"); return;
   }
   Object.assign(period, next);
@@ -388,7 +388,7 @@ window.addEventListener("unhandledrejection", e=>{ hideSaving(); toast("เก�
 const CORE_PARTS = ["config","students","activities","attendance","scores","exam","examSetup"];
 const HR_PARTS = ["hrDocs","hrOrders","hrSetup"];
 const STATE_KEY = { config:"config", students:"students", activities:"activities", attendance:"attendance", scores:"scores", exam:"examRows", examSetup:"examSetup",
-  examKey:"examKeyRows", blocked:"blocked", hrDocs:"hrDocs", hrOrders:"hrOrders", hrSetup:"hrSetup" };
+  examKey:"examKeyRows", blocked:"blocked", hrDocs:"hrDocs", hrOrders:"hrOrders", hrSetup:"hrSetup", hrTable:"hrTable", hrSubjects:"hrSubjects" };
 const loadedParts = new Set();
 async function loadAll(parts){
   const want = (Array.isArray(parts) && parts.length) ? parts : CORE_PARTS;
@@ -4542,11 +4542,737 @@ qs("#hrsCsv")?.addEventListener("click", ()=>{
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
 });
 
+/* ================= ตารางเรียนนักเรียน (ลากวางวิชาลงช่อง) =================
+   - วิชาคณิต (M..) มาจากชีท Config เหมือนเดิม · วิชาอื่นๆ (T..) เพิ่ม/ลด/แก้ไขได้ เก็บในชีท Config แถว ID = T1, T2, ...
+   - ตารางเก็บในชีท Setup ชนิด hrTable (1 แถว = ภาคเรียน + ห้อง)  ช่อง = { "วัน-คาบ": ID วิชา }  วัน 1-5 = จ-ศ · คาบ 1-6
+   - หน้าลงคะแนน/เช็คชื่อยังใช้เฉพาะวิชา M.. (วิชา T.. ถูกตัดออกจาก type=config ที่ฝั่ง Apps Script แล้ว) */
+const TT_PARTS = ["hrTable", "hrSubjects"];
+const TT_DAYS = [["1","จันทร์","จ"],["2","อังคาร","อ"],["3","พุธ","พ"],["4","พฤหัสบดี","พฤ"],["5","ศุกร์","ศ"]];
+const TT_PERIODS = [
+  { n:1, from:"8.25",  to:"9.25"  },
+  { n:2, from:"9.25",  to:"10.25" },
+  { n:3, from:"10.45", to:"11.45" },
+  { n:4, from:"11.45", to:"12.35" },
+  { n:5, from:"13.20", to:"14.20" },
+  { n:6, from:"14.40", to:"15.30" }
+];
+const TT_BREAKS = { 2:"☕ พัก 20 นาที", 4:"🍱 พักเที่ยง 45 นาที" };   // แถวพักที่แทรกหลังคาบนั้น
+const TT_SUGGEST = ["ภาษาไทย","ภาษาอังกฤษ","วิทยาศาสตร์","สังคมศึกษา","พลศึกษา","ศิลปะ","ดนตรี","การงานอาชีพ","คอมพิวเตอร์","ภาษาจีน","แนะแนว","ลูกเสือ","ชุมนุม","โฮมรูม"];
+const TT_KEY_RE = /^[1-5]-[1-6]$/;
+const hrt = { slots:{}, snap:"", sel:null, manage:false, curSub:null };
+
+const hrtSerialize = () => JSON.stringify(Object.keys(hrt.slots).sort().map(k=>[k, hrt.slots[k]]));
+const hrtDirty = () => qs("#view-hr-table").classList.contains("active") && hrtSerialize() !== hrt.snap;
+
+/* วิชาคณิตของห้องนี้ (จาก Config) — ใช้ ID (M1, M2, ...) เป็นตัวอ้างอิง ถ้าแถวไหนยังไม่มี ID ใช้ชื่อวิชาแทน */
+function hrtMathSubjects(){
+  const rows = state.config.filter(c=>{ const n = String(rget(c, "รายวิชา") ?? "").trim(); return n && !isHomeroomName(n); });
+  const lv = c => String(rget(c, "ระดับชั้น") ?? "").trim();
+  let use = rows.filter(c=> lv(c)==="" || sameLv(lv(c), hr.room));
+  if(!use.length) use = rows;
+  const map = new Map();
+  use.forEach(c=>{
+    const name = String(rget(c, "รายวิชา")).trim(), idRaw = String(rget(c, "ID") ?? "").trim();
+    const id = idRaw || name;
+    if(!map.has(id)) map.set(id, { id, name, short:"", code:String(rget(c, "รหัสวิชา") ?? "").trim(), kind:"M" });
+  });
+  return [...map.values()];
+}
+const hrtOtherSubjects = () => state.hrSubjects.map(s=>({ id:String(s.id), name:String(s.name||""), short:String(s.short||""), code:"", kind:"T" }));
+function hrtLookup(id){
+  const all = [...hrtMathSubjects(), ...hrtOtherSubjects()];
+  return all.find(s=>s.id===id) || { id, name:"(วิชาที่ถูกลบแล้ว)", short:"?", code:"", kind:"X" };
+}
+const hrtLabel = s => s.short || s.name;
+/* สีวิชา: สุ่มเฉดสีให้แต่ละวิชา โดยเลือกเฉดที่ห่างจากวิชาอื่นมากที่สุด (ไม่ซ้ำ/ไม่ใกล้กัน) แล้วจำไว้ในเครื่อง · กด 🎲 เพื่อสุ่มใหม่ */
+const TT_COLOR_KEY = "kc_tt_colors";
+let ttHue = {}; try{ ttHue = JSON.parse(localStorage.getItem(TT_COLOR_KEY)) || {}; }catch(e){ ttHue = {}; }
+const ttSaveHue = () => { try{ localStorage.setItem(TT_COLOR_KEY, JSON.stringify(ttHue)); }catch(e){} };
+const ttDist = (a, b) => { const x = Math.abs(a - b) % 360; return Math.min(x, 360 - x); };
+function hrtHue(id){
+  if(ttHue[id] == null){
+    const used = Object.values(ttHue);
+    let best = Math.random() * 360, bd = -1;
+    for(let i=0; i<60; i++){
+      const h = Math.random() * 360, d = used.length ? Math.min(...used.map(u=>ttDist(u, h))) : 360;
+      if(d > bd){ bd = d; best = h; }
+    }
+    ttHue[id] = Math.round(best); ttSaveHue();
+  }
+  return ttHue[id];
+}
+function hrtColor(s){
+  if(s.kind === "X") return { cls:"tt-x0", st:"" };
+  const h = hrtHue(s.id);
+  return { cls:"", st:`--tb:hsl(${h},80%,85%);--tf:hsl(${h},70%,20%)` };
+}
+function hrtShuffleColors(){
+  const ids = [...hrtMathSubjects(), ...hrtOtherSubjects()].map(x=>x.id).sort(()=>Math.random() - .5);
+  ttHue = {}; ids.forEach(id=>hrtHue(id)); ttSaveHue();
+}
+
+function hrtFromState(){
+  const r = state.hrTable.find(x=> sameStr(rget(x, "ภาคเรียนที่"), period.term) && sameLv(rget(x, "ระดับชั้น"), hr.room));
+  let src = r ? rget(r, "ช่อง") : null;
+  if(typeof src === "string"){ try{ src = JSON.parse(src); }catch(e){ src = null; } }
+  const out = {};
+  if(src && typeof src === "object") Object.keys(src).forEach(k=>{ const v = String(src[k] ?? "").trim(); if(TT_KEY_RE.test(k) && v) out[k] = v; });
+  return out;
+}
+
+async function openHrTable(){
+  exitFocusMode();
+  if(!hr.room){ toast("ยังไม่ได้เลือกห้องประจำชั้น"); return; }
+  if(TT_PARTS.some(k=>!loadedParts.has(k))){ showSaving("กำลังโหลดตารางเรียน..."); await ensureLoaded(TT_PARTS); hideSaving(); }
+  hrt.slots = hrtFromState(); hrt.snap = hrtSerialize(); hrt.sel = null; hrt.manage = false;
+  renderPeriodBars(); renderHrTable();
+  showView("view-hr-table");
+}
+
+/* ---------- วาด ---------- */
+function hrtChip(s){
+  const c = hrtColor(s), on = hrt.sel===s.id;
+  return `<div class="tt-chip ${c.cls}${on ? " sel" : ""}${hrt.manage && s.kind==="T" ? " edit" : ""}" data-id="${esc(s.id)}" style="${c.st}"><span>${esc(hrtLabel(s))}</span>${hrt.manage && s.kind==="T" ? `<i>✏️</i>` : ""}</div>`;
+}
+function renderHrtPalette(){
+  const math = hrtMathSubjects(), other = hrtOtherSubjects();
+  qs("#hrtPal").innerHTML =
+    `<div class="tt-grp">วิชาคณิต</div>` + (math.length ? math.map(hrtChip).join("") : `<span class="tt-none">ยังไม่มีวิชาใน Config</span>`) +
+    `<div class="tt-grp">วิชาอื่นๆ${hrt.manage ? " · แตะวิชาเพื่อแก้ไข/ลบ" : ""}</div>` + (other.length ? other.map(hrtChip).join("") : `<span class="tt-none">ยังไม่มี — กด “＋ เพิ่มวิชา” ด้านล่าง</span>`);
+  const eb = qs("#hrtEditSub"); if(eb){ eb.textContent = hrt.manage ? "✓ เสร็จ" : "✏️ แก้ไขวิชา"; eb.classList.toggle("on", hrt.manage); }
+}
+function renderHrtGrid(){
+  const brk = n => !!TT_BREAKS[n];
+  let h = `<table class="tt-table"><thead><tr><th class="tt-corner"></th>`;
+  TT_PERIODS.forEach(p=>{
+    h += `<th class="tt-ph"><b>คาบ ${p.n}</b><small>${p.from}<br>${p.to}</small></th>`;
+    if(brk(p.n)) h += `<th class="tt-bh"></th>`;
+  });
+  h += `</tr></thead><tbody>`;
+  TT_DAYS.forEach((d, di)=>{
+    h += `<tr><th class="tt-dh"><span class="tt-dfull">${d[1]}</span><span class="tt-dshort">${d[2]}</span></th>`;
+    TT_PERIODS.forEach(p=>{
+      const k = `${d[0]}-${p.n}`, id = hrt.slots[k];
+      if(!id) h += `<td class="tt-cell" data-k="${k}"></td>`;
+      else {
+        const s = hrtLookup(id), c = hrtColor(s);
+        h += `<td class="tt-cell has" data-k="${k}"><div class="tt-it ${c.cls}${hrt.sel===id ? " sel" : ""}" data-k="${k}" data-id="${esc(id)}" style="${c.st}" title="${esc(s.name)}"><span>${esc(hrtLabel(s))}</span><button type="button" class="tt-rm" data-x="${k}" aria-label="ลบออกจากช่อง">×</button></div></td>`;
+      }
+      if(brk(p.n) && di===0) h += `<td class="tt-break" rowspan="${TT_DAYS.length}"><span>${TT_BREAKS[p.n].replace(/^\S+\s/, "")}</span></td>`;
+    });
+    h += `</tr>`;
+  });
+  qs("#hrtWrap").innerHTML = h + `</tbody></table>`;
+}
+function hrtUpdateBar(){
+  const n = Object.keys(hrt.slots).length, dirty = hrtSerialize() !== hrt.snap;
+  qs("#hrtInfo").textContent = `จัดแล้ว ${n}/${TT_DAYS.length * TT_PERIODS.length} คาบ` + (hrt.sel ? ` · เลือก: ${hrtLabel(hrtLookup(hrt.sel))} (แตะช่องเพื่อวาง)` : "");
+  const b = qs("#hrtSaveBtn"); b.disabled = !dirty; b.textContent = dirty ? "บันทึกตารางเรียน" : "บันทึกแล้ว ✓";
+}
+function renderHrTable(){
+  qs("#hrtSub").textContent = `${hr.room} · ภาคเรียนที่ ${period.term}`;
+  renderHrtPalette(); renderHrtGrid(); hrtUpdateBar();
+}
+function hrtRefresh(){ renderHrtPalette(); renderHrtGrid(); hrtUpdateBar(); }
+
+/* ---------- วาง / ย้าย / ลบ ---------- */
+function hrtPlace(k, id){ if(TT_KEY_RE.test(k) && id){ hrt.slots[k] = id; } }
+function hrtMove(from, to){
+  if(from===to) return;
+  const a = hrt.slots[from], b = hrt.slots[to];
+  if(!a) return;
+  hrt.slots[to] = a;
+  if(b) hrt.slots[from] = b; else delete hrt.slots[from];   // ช่องปลายทางมีวิชาอยู่แล้ว = สลับกัน
+}
+
+/* ---------- ลากวาง (Pointer Events: ใช้ได้ทั้งเมาส์และนิ้วบนมือถือ) ---------- */
+let hrtDrag = null;
+function hrtTargetAt(x, y){
+  const el = document.elementFromPoint(x, y); if(!el) return null;
+  const cell = el.closest("#view-hr-table .tt-cell"); if(cell) return { type:"cell", el:cell, k:cell.dataset.k };
+  const pal = el.closest("#view-hr-table .tt-palbox"); if(pal) return { type:"pal", el:pal };
+  return null;
+}
+function hrtDragEnd(){
+  if(!hrtDrag) return;
+  if(hrtDrag.ghost) hrtDrag.ghost.remove();
+  if(hrtDrag.src) hrtDrag.src.classList.remove("tt-src");
+  qsa(".tt-over").forEach(e=>e.classList.remove("tt-over"));
+  document.body.classList.remove("tt-dragging");
+  hrtDrag = null;
+}
+document.addEventListener("pointerdown", e=>{
+  if(!qs("#view-hr-table").classList.contains("active")) return;
+  if(e.pointerType==="mouse" && e.button!==0) return;
+  if(e.target.closest("[data-x]")) return;
+  const src = e.target.closest("#view-hr-table .tt-chip, #view-hr-table .tt-it"); if(!src) return;
+  if(src.classList.contains("edit")) return;   // โหมดแก้ไขวิชา: แตะเพื่อแก้ (ไม่ลาก)
+  hrtDrag = { src, id:src.dataset.id, from:src.classList.contains("tt-it") ? src.dataset.k : null, sx:e.clientX, sy:e.clientY, started:false, ghost:null, pid:e.pointerId };
+});
+document.addEventListener("pointermove", e=>{
+  const d = hrtDrag; if(!d || e.pointerId!==d.pid) return;
+  if(!d.started){
+    if(Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 7) return;
+    d.started = true;
+    const s = hrtLookup(d.id), c = hrtColor(s);
+    const g = document.createElement("div");
+    g.className = `tt-ghost ${c.cls}`; g.style.cssText = c.st; g.textContent = hrtLabel(s);
+    document.body.appendChild(g); d.ghost = g;
+    d.src.classList.add("tt-src"); document.body.classList.add("tt-dragging");
+  }
+  e.preventDefault();
+  d.ghost.style.left = e.clientX + "px"; d.ghost.style.top = e.clientY + "px";
+  qsa(".tt-over").forEach(x=>x.classList.remove("tt-over"));
+  const t = hrtTargetAt(e.clientX, e.clientY);
+  if(t && (t.type==="cell" || d.from)) t.el.classList.add("tt-over");   // กล่องวิชาเป็นที่ทิ้งได้เฉพาะตอนลากออกจากช่อง (= ลบ)
+  const edge = 70;   // ลากใกล้ขอบจอ → เลื่อนหน้าตาม
+  if(e.clientY < edge) window.scrollBy(0, -14); else if(e.clientY > innerHeight - edge) window.scrollBy(0, 14);
+}, { passive:false });
+document.addEventListener("pointerup", e=>{
+  const d = hrtDrag; if(!d || e.pointerId!==d.pid) return;
+  if(!d.started){ hrtDrag = null; hrtTap(d); return; }
+  const t = hrtTargetAt(e.clientX, e.clientY);
+  hrtDragEnd();
+  if(!t) return;
+  if(t.type==="cell"){ if(d.from) hrtMove(d.from, t.k); else hrtPlace(t.k, d.id); hrtRefresh(); }
+  else if(t.type==="pal" && d.from){ delete hrt.slots[d.from]; hrtRefresh(); }   // ลากกลับกล่องวิชา = ลบออกจากช่อง
+});
+document.addEventListener("pointercancel", ()=> hrtDragEnd());
+/* กันเมนูค้างนิ้ว/ลากรูปของเบราว์เซอร์รบกวนตอนลาก */
+document.addEventListener("contextmenu", e=>{ if(hrtDrag && hrtDrag.started) e.preventDefault(); });
+document.addEventListener("dragstart", e=>{ if(e.target.closest && e.target.closest("#view-hr-table")) e.preventDefault(); });
+
+/* แตะ (ไม่ได้ลาก) : แตะวิชา → เลือก แล้วแตะช่องเพื่อวาง · โหมดแก้ไขวิชา → เปิดหน้าต่างแก้ */
+function hrtTap(d){
+  if(d.from){   // แตะวิชาที่อยู่ในช่อง
+    if(hrt.sel && hrt.sel!==d.id){ hrt.slots[d.from] = hrt.sel; }   // มีวิชาที่เลือกไว้ → แทนที่
+    else hrt.sel = (hrt.sel===d.id) ? null : d.id;                   // ไม่มี → เลือกวิชานี้ไว้ไปวางช่องอื่นต่อ
+  } else hrt.sel = (hrt.sel===d.id) ? null : d.id;
+  hrtRefresh();
+}
+qs("#view-hr-table")?.addEventListener("click", e=>{
+  const x = e.target.closest("[data-x]");
+  if(x){ delete hrt.slots[x.dataset.x]; hrtRefresh(); return; }
+  const chip = e.target.closest(".tt-chip.edit");
+  if(chip){ openHrtSub(chip.dataset.id); return; }
+  if(e.target.closest(".tt-it, .tt-chip")) return;   // จัดการใน pointerup แล้ว
+  const cell = e.target.closest(".tt-cell");
+  if(cell && hrt.sel){ hrtPlace(cell.dataset.k, hrt.sel); hrtRefresh(); }
+});
+
+/* ---------- วิชาอื่นๆ : เพิ่ม / แก้ไข / ลบ ---------- */
+function openHrtSub(id){
+  const cur = id ? state.hrSubjects.find(s=>String(s.id)===String(id)) : null;
+  hrt.curSub = cur ? String(cur.id) : null;
+  qs("#hrtSubTitle").textContent = cur ? "แก้ไขวิชา" : "เพิ่มวิชาอื่นๆ";
+  qs("#hrtSubName").value = cur ? cur.name : "";
+  qs("#hrtSubShort").value = cur ? (cur.short || "") : "";
+  const have = new Set(state.hrSubjects.map(s=>String(s.name).trim().toLowerCase()));
+  const sug = cur ? [] : TT_SUGGEST.filter(n=>!have.has(n.toLowerCase()));
+  qs("#hrtSubSuggest").style.display = sug.length ? "" : "none";
+  qs("#hrtSubSuggest").innerHTML = sug.map(n=>`<button type="button" class="so-chip">${esc(n)}</button>`).join("");
+  qs("#hrtSubTools").style.display = cur ? "" : "none";
+  qs("#hrtSubOk").textContent = cur ? "บันทึก" : "เพิ่มวิชา";
+  qs("#modalHrtSub").classList.add("active");
+  setTimeout(()=> qs("#hrtSubName").focus(), 300);
+}
+const closeHrtSub = () => qs("#modalHrtSub").classList.remove("active");
+qsa("#modalHrtSub [data-close]").forEach(b=> b.addEventListener("click", closeHrtSub));
+qs("#modalHrtSub")?.addEventListener("click", e=>{ if(e.target.id==="modalHrtSub") closeHrtSub(); });
+qs("#hrtSubSuggest")?.addEventListener("click", e=>{ const b = e.target.closest("button"); if(b) qs("#hrtSubName").value = b.textContent; });
+qs("#hrtAddSub")?.addEventListener("click", ()=> openHrtSub(null));
+qs("#hrtShuffle")?.addEventListener("click", ()=>{ hrtShuffleColors(); hrtRefresh(); toast("สุ่มสีวิชาใหม่แล้ว 🎲"); });
+qs("#hrtEditSub")?.addEventListener("click", ()=>{ hrt.manage = !hrt.manage; renderHrtPalette(); });
+qs("#hrtSubOk")?.addEventListener("click", async ()=>{
+  const name = qs("#hrtSubName").value.trim().replace(/\s+/g, " "), short = qs("#hrtSubShort").value.trim();
+  if(!name){ toast("ใส่ชื่อวิชาก่อนครับ"); return; }
+  if(state.hrSubjects.some(s=> String(s.id)!==hrt.curSub && String(s.name).trim().toLowerCase()===name.toLowerCase())){ toast("มีวิชาชื่อนี้อยู่แล้ว"); return; }
+  closeHrtSub(); showSaving("กำลังบันทึกวิชา...");
+  const res = await apiPost({ type:"saveTtSubject", id:hrt.curSub || "", name, short });
+  hideSaving();
+  if(!res.success){ toast(res.message || "บันทึกวิชาไม่สำเร็จ"); return; }
+  const row = state.hrSubjects.find(s=>String(s.id)===String(res.id));
+  if(row){ row.name = name; row.short = short; } else state.hrSubjects.push({ id:res.id, name, short });
+  state.hrSubjects.sort((a,b)=> (parseInt(String(a.id).slice(1),10)||0) - (parseInt(String(b.id).slice(1),10)||0));
+  hrtRefresh(); toast(res.message || "บันทึกวิชาแล้ว ✓");
+});
+qs("#hrtSubDel")?.addEventListener("click", async ()=>{
+  const s = state.hrSubjects.find(x=>String(x.id)===hrt.curSub); if(!s) return;
+  closeHrtSub();
+  const ok = await confirmDialog({ title:"ลบวิชา?", icon:"🗑️", danger:true, message:`ลบวิชา "${s.name}" ออกจากรายการวิชา\nช่องที่ใช้วิชานี้ในตารางห้องนี้จะถูกเอาออกด้วย\n(ตารางของห้อง/ภาคเรียนอื่นที่ใช้วิชานี้จะแสดงเป็น "วิชาที่ถูกลบแล้ว")`, okText:"ลบวิชา", cancelText:"ไม่ลบ" });
+  if(!ok) return;
+  showSaving("กำลังลบวิชา...");
+  const res = await apiPost({ type:"deleteTtSubject", id:s.id });
+  hideSaving();
+  if(!res.success){ toast(res.message || "ลบวิชาไม่สำเร็จ"); return; }
+  state.hrSubjects = state.hrSubjects.filter(x=>String(x.id)!==String(s.id));
+  Object.keys(hrt.slots).forEach(k=>{ if(hrt.slots[k]===String(s.id)) delete hrt.slots[k]; });
+  if(hrt.sel===String(s.id)) hrt.sel = null;
+  hrtRefresh(); toast("ลบวิชาแล้ว (ช่องที่ใช้วิชานี้ต้องกดบันทึกตารางด้วย)");
+});
+
+/* ---------- บันทึก / ล้าง / พิมพ์ / กลับ ---------- */
+qs("#hrtSaveBtn")?.addEventListener("click", async ()=>{
+  const slots = { ...hrt.slots };
+  qs("#hrtSaveBtn").disabled = true;
+  showSaving("กำลังบันทึกตารางเรียน...");
+  const res = await apiPost({ type:"saveHomeroomTable", term:period.term, level:hr.room, slots });
+  hideSaving();
+  if(res.success){
+    state.hrTable = state.hrTable.filter(r=> !(sameStr(rget(r, "ภาคเรียนที่"), period.term) && sameLv(rget(r, "ระดับชั้น"), hr.room)));
+    if(Object.keys(slots).length) state.hrTable.push({ "ภาคเรียนที่":String(period.term), "ระดับชั้น":hr.room, "ช่อง":slots });
+    hrt.snap = hrtSerialize(); hrtUpdateBar(); toast("บันทึกตารางเรียนแล้ว ✓");
+  } else { hrtUpdateBar(); toast(res.message || "บันทึกไม่สำเร็จ"); }
+});
+qs("#hrtClear")?.addEventListener("click", async ()=>{
+  if(!Object.keys(hrt.slots).length){ toast("ตารางยังว่างอยู่แล้ว"); return; }
+  const ok = await confirmDialog({ title:"ล้างตารางเรียน?", icon:"🧹", danger:true, message:"เอาวิชาออกจากทุกช่องในตารางนี้\n(ยังไม่ลบจริงในชีทจนกว่าจะกดบันทึก)", okText:"ล้างตาราง", cancelText:"ไม่ล้าง" });
+  if(!ok) return;
+  hrt.slots = {}; hrt.sel = null; hrtRefresh();
+});
+qs("#hrtBack")?.addEventListener("click", async ()=>{
+  if(hrtDirty() && !(await confirmDialog({ title:"ยังไม่ได้บันทึก", icon:"📝", danger:true, message:"มีการจัดตารางที่ยังไม่ได้กดบันทึก\nถ้าออกตอนนี้จะหายไป", okText:"ออกโดยไม่บันทึก", cancelText:"อยู่ต่อ" }))) return;
+  hrt.snap = hrtSerialize(); hrt.manage = false; showView("view-homeroom");
+});
+qs("#hrGoTable")?.addEventListener("click", openHrTable);
+qs("#hrtPrint")?.addEventListener("click", ()=>{
+  if(!Object.keys(hrt.slots).length){ toast("ตารางยังว่างอยู่ — จัดตารางก่อนพิมพ์ครับ"); return; }
+  const now = new Date(), yearBE = now.getFullYear() + 543 + (now.getMonth() < 4 ? -1 : 0);
+  let head = `<tr><th></th>`;
+  TT_PERIODS.forEach(p=>{
+    head += `<th>คาบ ${p.n}<br><small>${p.from}–${p.to}</small></th>`;
+    if(TT_BREAKS[p.n]) head += `<th class="brk"></th>`;
+  });
+  head += `</tr>`;
+  let rows = "";
+  TT_DAYS.forEach((d, di)=>{
+    rows += `<tr><th>${d[1]}</th>`;
+    TT_PERIODS.forEach(p=>{
+      const id = hrt.slots[`${d[0]}-${p.n}`];
+      rows += `<td>${id ? esc(hrtLabel(hrtLookup(id))) : ""}</td>`;
+      if(TT_BREAKS[p.n] && di===0) rows += `<td class="brk" rowspan="${TT_DAYS.length}"><span>${TT_BREAKS[p.n].replace(/^\S+\s/, "")}</span></td>`;
+    });
+    rows += `</tr>`;
+  });
+  const html = `<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>ตารางเรียน ${esc(hr.room)}</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  @page{ size:A4 landscape; margin:12mm; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:'TH Sarabun New','THSarabunNew','TH SarabunPSK','TH Sarabun PSK','Sarabun','Noto Sans Thai',Tahoma,sans-serif; color:#000; background:#fff; font-size:22px; }
+  h1{ text-align:center; font-size:28px; margin:0 0 4px; } .meta{ text-align:center; margin:0 0 12px; font-size:21px; }
+  table{ width:100%; border-collapse:collapse; table-layout:fixed; }
+  th,td{ border:1px solid #000; text-align:center; vertical-align:middle; padding:2px 4px; font-size:22px; }
+  thead th{ height:16mm; } tbody tr{ height:24mm; } th small{ font-size:16px; font-weight:400; }
+  th:first-child{ width:22mm; } .brk{ width:9mm; background:#eee; font-size:17px; padding:0; } .brk span{ writing-mode:vertical-rl; display:inline-block; }
+  .noprint{ text-align:center; padding:12px; font-family:sans-serif; } @media print{ .noprint{ display:none; } }
+</style></head><body>
+<div class="noprint"><button onclick="window.print()" style="font-size:16px;padding:8px 22px;cursor:pointer;">🖨 พิมพ์</button>
+<button onclick="window.close()" style="font-size:16px;padding:8px 22px;cursor:pointer;margin-left:8px;">‹ ปิดหน้านี้</button></div>
+<h1>ตารางเรียน ${esc(hr.room)}</h1><p class="meta">ภาคเรียนที่ ${esc(period.term)} ปีการศึกษา ${yearBE}</p>
+<table><thead>${head}</thead><tbody>${rows}</tbody></table>
+</body></html>`;
+  const win = window.open("", "_blank");
+  if(!win){ toast("เบราว์เซอร์บล็อกป๊อปอัป กรุณาอนุญาตแล้วลองใหม่"); return; }
+  win.document.open(); win.document.write(html); win.document.close();
+});
+
+/* ================= วิเคราะห์ขาด ลา สาย จากคาบ Homeroom เทียบตารางเรียน (ครูประจำชั้น) =================
+   ใช้การเช็คชื่อคาบ Homeroom (ชีท Attend วิชา Homeroom) ซึ่งเช็คทุกวันอยู่แล้ว
+   → แปลงวันที่เป็นวัน จ-ศ → เทียบกับตารางเรียนของห้อง
+   ตัวอย่าง: ขาดวันจันทร์ 2 ครั้ง · วันจันทร์เรียนคณิต 1 คาบ + อังกฤษ 2 คาบ
+            → คณิตขาด 2 คาบ · อังกฤษขาด 4 คาบ  (นับเป็น "คาบ" = จำนวนครั้งที่ขาดวันนั้น × จำนวนคาบของวิชานั้นในวันนั้น) */
+const AB_PARTS = ["hrTable", "hrSubjects"];
+const AB_DAYS = [[1, "จ", "จันทร์"], [2, "อ", "อังคาร"], [3, "พ", "พุธ"], [4, "พฤ", "พฤหัสบดี"], [5, "ศ", "ศุกร์"]];
+const AB_KIND = { absent:["ขาดเรียน", "เลขที่ขาดเรียน", "ขาด"], leave:["ลา", "เลขที่ลา", "ลา"], late:["สาย", "เลขที่สาย", "สาย"] };
+const AB_MODES = { al:["ขาด+ลา", ["absent", "leave"]], ab:["ขาด", ["absent"]], lv:["ลา", ["leave"]], lt:["สาย", ["late"]] };
+const AB_COL = { absent:"#EC4899", leave:"#F59E0B", late:"#38BDF8" };
+const hra = { mode:"al", view:"day", sort:"no", sortCol:null, dayDesc:false, data:null };
+const abList = v => String(v ?? "").split(",").map(x=>x.trim()).filter(Boolean);
+/* ชุดคีย์ของคนที่ขาด/ลา/สายในรายการเช็คชื่อหนึ่งรายการ (ถ้ามีเลขที่ใช้ "เลขที่|ชื่อ" แยกชื่อซ้ำ) */
+function abKeySet(rec, kind){
+  const n = abList(rget(rec, AB_KIND[kind][0])), o = abList(rget(rec, AB_KIND[kind][1]));
+  return new Set(n.map((nm, i)=> o.length === n.length ? `${o[i]}|${nm}` : nm));
+}
+const abHas = (set, st) => set.has(`${st.no}|${st.name}`) || set.has(st.name);
+const abSum = (o, kinds) => kinds.reduce((t, k)=> t + (o ? (o[k] || 0) : 0), 0);
+const abHeat = n => n >= 6 ? "h4" : n >= 4 ? "h3" : n >= 2 ? "h2" : n >= 1 ? "h1" : "";
+const abSeg = (o, kinds, max, dir) => kinds.map(k=> (o && o[k]) ? `<u style="${dir === "v" ? "height" : "width"}:${(o[k] / max * 100).toFixed(1)}%;background:${AB_COL[k]}" title="${AB_KIND[k][2]} ${o[k]}"></u>` : "").join("");
+
+/* ---------- รวมข้อมูล ---------- */
+function hraCompute(){
+  const roster = hrStudents().slice().sort((a, b)=> (Number(a.no) || 0) - (Number(b.no) || 0));
+  const byName = new Map();
+  roster.forEach(s=>{ if(!byName.has(s.name)) byName.set(s.name, []); byName.get(s.name).push(s); });
+  const stat = new Map(roster.map(s=>[s.key, { st:s, days:{}, subs:{}, list:[] }]));
+  /* ตารางเรียน: วัน -> { วิชา(id) -> จำนวนคาบในวันนั้น } */
+  const slots = hrtFromState(), dayMap = {}, subj = new Map();   // subj: id -> { id, name, perDay:{dow:n}, week }
+  Object.keys(slots).forEach(k=>{
+    const [d] = k.split("-").map(Number), s = hrtLookup(slots[k]); if(s.kind === "X") return;
+    (dayMap[d] = dayMap[d] || {})[s.id] = (dayMap[d][s.id] || 0) + 1;
+    const o = subj.get(s.id) || { id:s.id, name:s.name, perDay:{}, week:0 };
+    o.perDay[d] = (o.perDay[d] || 0) + 1; o.week++; subj.set(s.id, o);
+  });
+  const checksByDay = {}; let weekend = 0, records = 0;
+  state.attendance.forEach(a=>{
+    if(!sameLv(rget(a, "ระดับชั้น"), hr.room) || !inTerm(a) || !isHomeroomName(rget(a, "รายวิชา"))) return;
+    const date = dateKey(rget(a, "วันที่")); if(!date) return;
+    const dow = new Date(date + "T00:00:00").getDay();
+    if(dow === 0 || dow === 6){ weekend++; return; }
+    records++; checksByDay[dow] = (checksByDay[dow] || 0) + 1;
+    Object.keys(AB_KIND).forEach(kind=>{
+      const names = abList(rget(a, AB_KIND[kind][0])), nos = abList(rget(a, AB_KIND[kind][1]));
+      names.forEach((nm, i)=>{
+        const c = byName.get(nm); if(!c) return;
+        const st = c.length === 1 ? c[0] : (c.find(x=>sameStr(x.no, nos[i])) || c[0]);
+        const S = stat.get(st.key); if(!S) return;
+        const d = S.days[dow] = S.days[dow] || { absent:0, leave:0, late:0 }; d[kind]++;
+        S.list.push({ date, kind, dow });
+      });
+    });
+  });
+  /* วิชา: จำนวนคาบที่พลาด = Σ (ขาดวันนั้น × คาบของวิชานั้นในวันนั้น) */
+  stat.forEach(S=>{
+    subj.forEach(o=>{
+      const u = { absent:0, leave:0, late:0, parts:[] };
+      Object.keys(o.perDay).forEach(d=>{
+        const x = S.days[d]; if(!x) return;
+        Object.keys(AB_KIND).forEach(k=>{ u[k] += x[k] * o.perDay[d]; });
+        u.parts.push({ d:Number(d), per:o.perDay[d], x });
+      });
+      if(u.absent || u.leave || u.late) S.subs[o.id] = u;
+    });
+  });
+  const subjects = [...subj.values()].sort((a, b)=> b.week - a.week || a.name.localeCompare(b.name, "th"));
+  return { rows:[...stat.values()], subjects, dayMap, checksByDay, weekend, records, hasTable:subj.size > 0 };
+}
+
+async function openHrAbsent(){
+  exitFocusMode();
+  if(!hr.room){ toast("ยังไม่ได้เลือกห้องประจำชั้น"); return; }
+  showSaving("กำลังโหลดข้อมูลการเช็คชื่อ...");
+  await ensureLoaded(AB_PARTS);
+  try{ const a = await apiGet("attendance"); if(Array.isArray(a)) state.attendance = a; }catch(err){ /* ใช้ข้อมูลที่โหลดไว้ */ }
+  hideSaving();
+  renderPeriodBars(); renderHrAbsent();
+  showView("view-hr-absent");
+}
+const abDayName = d => AB_DAYS.find(x=>x[0] === Number(d))[2];
+const abSubNames = (D, d) => Object.keys(D.dayMap[d] || {}).map(id=>{ const s = D.subjects.find(x=>x.id === id); const n = D.dayMap[d][id]; return s ? esc(s.name) + (n > 1 ? ` ×${n}` : "") : ""; }).filter(Boolean).join(" · ");
+
+/* ---------- วาดหน้าวิเคราะห์ ---------- */
+function renderHrAbsent(){
+  const kinds = AB_MODES[hra.mode][1], D = hra.data = hraCompute();
+  qs("#hraSub").textContent = `${hr.room} · ภาคเรียนที่ ${period.term}`;
+  qsa("#hraMode [data-m]").forEach(b=> b.classList.toggle("on", b.dataset.m === hra.mode));
+  qsa("#hraView [data-v]").forEach(b=> b.classList.toggle("on", b.dataset.v === hra.view));
+  qs("#hraSort").textContent = hra.sort === "most" && !hra.sortCol ? "↕ เรียง: มาก→น้อย" : "↕ เรียง: เลขที่";
+  hra.last = null;
+  const wrap = qs("#hraWrap"), ov = qs("#hraOverview"), info = qs("#hraInfo");
+  if(!D.rows.length){ ov.innerHTML = ""; info.textContent = ""; wrap.innerHTML = `<div class="empty-note">ไม่พบรายชื่อนักเรียนในห้องนี้</div>`; return; }
+  if(!D.records){
+    ov.innerHTML = ""; info.textContent = "";
+    wrap.innerHTML = `<div class="empty-state"><div class="es-ico">📊</div><h4>ยังไม่มีข้อมูลการเช็คชื่อคาบ Homeroom</h4><p>ห้อง ${esc(hr.room)} ภาคเรียนที่ ${esc(period.term)}<br>เช็คชื่อวิชา Homeroom ในหน้าเช็คชื่อก่อน แล้วกลับมาดูสรุปที่นี่</p></div>`;
+    return;
+  }
+  const noTable = !D.hasTable ? `<div class="hint" style="margin:0 0 10px;">⚠️ ยังไม่ได้จัดตารางเรียน — ยังดูแบบ “ตามวัน” ได้ แต่แบบ “ตามวิชา” ต้องจัดตารางเรียนก่อน <button type="button" class="ab-mini" id="hraGoTable">🗓️ ไปจัดตาราง</button></div>` : "";
+  /* รวมทั้งห้อง */
+  const dayAgg = AB_DAYS.map(d=>{ const o = { absent:0, leave:0, late:0 }; D.rows.forEach(r=>{ const x = r.days[d[0]]; if(x) Object.keys(o).forEach(k=> o[k] += x[k]); }); return { d, o, n:abSum(o, kinds), checks:D.checksByDay[d[0]] || 0 }; });
+  const subAgg = D.subjects.map(s=>{ const o = { absent:0, leave:0, late:0 }; D.rows.forEach(r=>{ const x = r.subs[s.id]; if(x) Object.keys(o).forEach(k=> o[k] += x[k]); }); return { s, o, n:abSum(o, kinds) }; })
+    .sort((a, b)=> b.n - a.n || b.s.week - a.s.week || a.s.name.localeCompare(b.s.name, "th"));
+  const stuAgg = D.rows.map(r=>{ const o = { absent:0, leave:0, late:0 }; Object.values(r.days).forEach(x=> Object.keys(o).forEach(k=> o[k] += x[k])); return { r, o, n:abSum(o, kinds) }; })
+    .filter(x=>x.n > 0).sort((a, b)=> b.n - a.n || (Number(a.r.st.no) || 0) - (Number(b.r.st.no) || 0)).slice(0, 5);
+  const dayShow = hra.dayDesc ? dayAgg.slice().sort((a, b)=> b.n - a.n || a.d[0] - b.d[0]) : dayAgg;
+  const maxD = Math.max(1, ...dayAgg.map(x=>x.n)), maxS = Math.max(1, ...subAgg.map(x=>x.n)), maxU = Math.max(1, ...stuAgg.map(x=>x.n));
+  const topDay = Math.max(...dayAgg.map(x=>x.n)) > 0 ? dayAgg.slice().sort((a, b)=> b.n - a.n)[0].d[2] : "";
+  const legend = `<div class="ab-lg">${kinds.map(k=>`<span><i style="background:${AB_COL[k]}"></i>${AB_KIND[k][2]}</span>`).join("")}</div>`;
+  ov.innerHTML = noTable + `<div class="ab-ov">
+    <div class="ab-ov-h"><b>ภาพรวมทั้งห้อง · ${esc(AB_MODES[hra.mode][0])}</b>${topDay ? `<span>วัน${esc(topDay)}มากที่สุด</span>` : `<span>ยังไม่มีรายการ 🎉</span>`}</div>${legend}
+    <div class="ab-h2">ตามวัน → วิชาที่เรียนวันนั้น <button type="button" class="ab-mini" id="hraDayDesc">${hra.dayDesc ? "เรียง จ-ศ" : "เรียงมาก→น้อย"}</button></div>
+    <div class="ab-subs">${dayShow.map(x=>`<div class="ab-dayrow"><div class="ab-sub"><span class="n">${x.d[2]}<small>เช็ค Homeroom ${x.checks} ครั้ง</small></span><i>${abSeg(x.o, kinds, maxD, "h")}</i><b>${x.n}</b></div><div class="ab-dsub">${abSubNames(D, x.d[0]) || "<em>ไม่มีในตาราง</em>"}</div></div>`).join("")}</div>
+    ${D.hasTable ? `<div class="ab-h2">ตามวิชา · คาบที่ขาด (มาก→น้อย)</div>
+    <div class="ab-subs">${subAgg.map(x=>`<div class="ab-sub"><span class="n">${esc(x.s.name)}<small>เรียน ${Object.keys(x.s.perDay).sort().map(d=>AB_DAYS.find(a=>a[0] === Number(d))[1] + (x.s.perDay[d] > 1 ? "×" + x.s.perDay[d] : "")).join(" ")} · ${x.s.week} คาบ/สัปดาห์</small></span><i>${abSeg(x.o, kinds, maxS, "h")}</i><b>${x.n}</b></div>`).join("")}</div>` : ""}
+    ${stuAgg.length ? `<div class="ab-h2">นักเรียนที่มากสุด 5 อันดับ <small>(จำนวนวัน) แตะเพื่อดูรายคน</small></div>
+    <div class="ab-subs">${stuAgg.map((x, i)=>`<div class="ab-sub ab-top ab-row" data-k="${esc(x.r.st.key)}"><span class="n"><em>${i + 1}</em>${esc(x.r.st.nick || x.r.st.name)}<small>เลขที่ ${esc(x.r.st.no)}</small></span><i>${abSeg(x.o, kinds, maxU, "h")}</i><b>${x.n}</b></div>`).join("")}</div>` : ""}
+  </div>`;
+  info.textContent = `ข้อมูลจากเช็คชื่อ Homeroom ${D.records} ครั้ง` + (D.weekend ? ` · ข้ามวันเสาร์-อาทิตย์ ${D.weekend}` : "") + (hra.view === "sub" ? " · ตัวเลข = คาบ" : " · ตัวเลข = วัน");
+  /* ตารางรายคน */
+  const cols = hra.view === "day" ? AB_DAYS.map(d=>({ key:d[0], label:d[1], title:d[2] })) : subAgg.map(x=>({ key:x.s.id, label:x.s.name, title:x.s.name + " (คาบ)" }));
+  const cell = (r, c) => abSum(hra.view === "day" ? r.days[c.key] : r.subs[c.key], kinds);
+  let rows = D.rows.map(r=>({ r, total:cols.reduce((t, c)=> t + cell(r, c), 0) }));
+  const col = hra.sortCol != null ? cols.find(c=>String(c.key) === String(hra.sortCol)) : null;
+  if(col) rows.sort((a, b)=> cell(b.r, col) - cell(a.r, col) || b.total - a.total || (Number(a.r.st.no) || 0) - (Number(b.r.st.no) || 0));
+  else if(hra.sort === "most") rows.sort((a, b)=> b.total - a.total || (Number(a.r.st.no) || 0) - (Number(b.r.st.no) || 0));
+  const thead = `<tr><th class="name-head">ชื่อ</th>${cols.map(c=>`<th class="ab-col${hra.view === "sub" ? " sub" : ""}${col && col.key === c.key ? " on" : ""}" data-c="${esc(c.key)}" title="แตะเพื่อเรียงมาก→น้อย: ${esc(c.title)}">${esc(c.label)}${col && col.key === c.key ? " ▼" : ""}</th>`).join("")}<th class="sum">รวม</th></tr>`;
+  const tbody = rows.map(({ r, total })=>{
+    const st = r.st;
+    return `<tr class="ab-row" data-k="${esc(st.key)}"><td class="name-cell">${snum(st.no)}${esc(st.nick || st.name)}${st.nick ? `<small class="nm-sub">${esc(st.name)}</small>` : ""}</td>` +
+      cols.map(c=>{ const v = cell(r, c); return `<td class="ab-c ${abHeat(v)}">${v || "·"}</td>`; }).join("") +
+      `<td class="ab-c tot ${abHeat(total)}">${total || "·"}</td></tr>`;
+  }).join("");
+  hra.last = { rows, cols, cell, D };
+  wrap.innerHTML = `<table class="score-table ab-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table>
+    <div class="hint" style="padding:10px 12px 0;">แตะหัวคอลัมน์เพื่อเรียงมาก→น้อย · แตะชื่อนักเรียนเพื่อดูรายคน · สีเข้มขึ้น = ครั้งมากขึ้น<br>“ตามวิชา” คำนวณจาก: ขาดวันนั้นกี่ครั้ง × วิชานั้นเรียนกี่คาบในวันนั้นตามตารางเรียน</div>`;
+}
+
+/* ---------- รายละเอียดรายคน (มีกราฟ) ---------- */
+function openHrAbsentDetail(key){
+  const D = hra.data; if(!D) return;
+  const r = D.rows.find(x=>x.st.key === key); if(!r) return;
+  const ALL = ["absent", "leave", "late"];
+  const tot = { absent:0, leave:0, late:0 };
+  Object.values(r.days).forEach(x=> ALL.forEach(k=> tot[k] += x[k]));
+  const dayRows = AB_DAYS.map(d=>({ d, o:r.days[d[0]] || {}, n:abSum(r.days[d[0]], ALL) }));
+  const dayShow = hra.dayDesc ? dayRows.slice().sort((a, b)=> b.n - a.n || a.d[0] - b.d[0]) : dayRows;
+  const maxD = Math.max(1, ...dayRows.map(x=>x.n));
+  const subRows = D.subjects.map(s=>({ s, u:r.subs[s.id] })).filter(x=>x.u).map(x=>({ ...x, n:abSum(x.u, ALL) })).sort((a, b)=> b.n - a.n || a.s.name.localeCompare(b.s.name, "th"));
+  const maxS = Math.max(1, ...subRows.map(x=>x.n));
+  const txt = o => ALL.map(k=> o && o[k] ? `${AB_KIND[k][2]} ${o[k]}` : "").filter(Boolean).join(" · ") || "·";
+  const why = u => u.parts.map(p=>`${AB_DAYS.find(a=>a[0] === p.d)[1]} ${abSum(p.x, ALL)} ครั้ง${p.per > 1 ? ` × ${p.per} คาบ` : ""}`).join(" + ");
+  const recent = r.list.slice().sort((a, b)=> a.date < b.date ? 1 : -1).slice(0, 15).map(x=>
+    `<div class="ab-ev ${x.kind}"><b>${fmtThShort(x.date)} (${AB_DAYS.find(d=>d[0] === x.dow)[1]})</b><span>วัน${abDayName(x.dow)}${abSubNames(D, x.dow) ? " · " + abSubNames(D, x.dow) : ""}</span><i>${AB_KIND[x.kind][2]}</i></div>`).join("");
+  const none = !r.list.length;
+  const body = `<div class="ab-chips"><span class="a">ขาด <b>${tot.absent}</b></span><span class="l">ลา <b>${tot.leave}</b></span><span class="s">สาย <b>${tot.late}</b></span></div>` +
+    (none ? `<div class="hrm-done">🎉 ยังไม่เคยขาด ลา หรือสาย</div>` :
+    `<div class="ab-h2">ตามวัน (จำนวนวัน) ${hra.dayDesc ? "· มาก→น้อย" : ""}</div>
+     <div class="ab-subs">${dayShow.map(x=>`<div class="ab-sub"><span class="n">${x.d[2]}</span><i>${abSeg(x.o, ALL, maxD, "h")}</i><b class="t">${x.n || "·"}</b></div>`).join("")}</div>
+     ${D.hasTable ? `<div class="ab-h2">ตามวิชา · คาบที่พลาด (มาก→น้อย)</div>
+     <div class="ab-subs">${subRows.map(x=>`<div class="ab-sub two"><span class="n">${esc(x.s.name)}<small>${esc(txt(x.u))} · ${esc(why(x.u))}</small></span><i>${abSeg(x.u, ALL, maxS, "h")}</i><b class="t">${x.n}</b></div>`).join("")}</div>` : ""}
+     <div class="ab-lg" style="margin-top:6px;">${ALL.map(k=>`<span><i style="background:${AB_COL[k]}"></i>${AB_KIND[k][2]}</span>`).join("")}</div>
+     <div class="ab-h2">ล่าสุด</div><div class="ab-evs">${recent}</div>`);
+  const actions = [{ text:"📋 คัดลอกสรุป", cls:"btn-primary", keep:true, fn: async ()=>{
+    const lines = [`📊 ${hrLabel(r.st)} · ${hr.room} · ภาคเรียนที่ ${period.term}`, `ขาด ${tot.absent} · ลา ${tot.leave} · สาย ${tot.late} (วัน)`, "", "ตามวัน:"];
+    dayRows.forEach(x=>{ if(x.n) lines.push(`  ${x.d[2]}: ${txt(x.o)}`); });
+    if(D.hasTable){ lines.push("", "ตามวิชา (คาบที่พลาด):"); subRows.forEach(x=> lines.push(`  ${x.s.name}: ${txt(x.u)}  [${why(x.u)}]`)); }
+    toast((await copyToClipboard(lines.join("\n"))) ? "คัดลอกสรุปแล้ว ✓" : "คัดลอกไม่สำเร็จ");
+  } }, { text:"ปิด", cls:"btn-outline" }];
+  if(none) actions.shift();
+  openSheet({ title:"ขาด ลา สาย รายคน", who:`${snum(r.st.no)}${esc(hrLabel(r.st))}`, body, actions });
+}
+
+/* ================= รูปสรุปขาด ลา สาย (แสดงตัวอย่าง → คัดลอกรูป / บันทึกรูป / แชร์) =================
+   วาดตามที่เลือกอยู่บนจอ: โหมด (ขาด+ลา / ขาด / ลา / สาย) · มุมมอง (ตามวัน / ตามวิชา) · การเรียงลำดับ */
+const AB_IMG_PAL = {
+  al:{ acc:"#E11D74", cells:[["#FFE4EF","#9D174D"],["#FFC2DA","#831843"],["#FF8FBC","#FFFFFF"],["#E11D74","#FFFFFF"]] },
+  lv:{ acc:"#D97706", cells:[["#FEF3D0","#7A4F00"],["#FDE29A","#6B4200"],["#F8BE4B","#FFFFFF"],["#D97706","#FFFFFF"]] },
+  lt:{ acc:"#0284C7", cells:[["#E0F2FE","#075985"],["#BAE3FB","#06476B"],["#6CC3F2","#FFFFFF"],["#0284C7","#FFFFFF"]] }
+};
+AB_IMG_PAL.ab = AB_IMG_PAL.al;
+const abLevel = n => n >= 6 ? 3 : n >= 4 ? 2 : n >= 2 ? 1 : n >= 1 ? 0 : -1;
+
+async function buildHrAbsentImage(){
+  const L = hra.last; if(!L) throw new Error("ไม่มีข้อมูล");
+  const { rows, cols, cell, D } = L, isSub = hra.view === "sub";
+  const pal = AB_IMG_PAL[hra.mode];
+  const FF = "'Noto Sans Thai','Sarabun',Tahoma,sans-serif";
+  try{ await Promise.all(["500","700"].map(w=> document.fonts.load(`${w} 16px 'Noto Sans Thai'`, "กขคง"))); }catch(e){}
+  const SC = 2, F = (w,s)=> `${w} ${s}px ${FF}`;
+  const mctx = document.createElement("canvas").getContext("2d");
+  const mw = (t, f)=>{ mctx.font = f; return mctx.measureText(t).width; };
+  const ell = (t, maxW, f)=>{ t = String(t); if(mw(t,f) <= maxW) return t; while(t.length>1 && mw(t+"…",f) > maxW) t = t.slice(0,-1); return t+"…"; };
+
+  // ---- ขนาด ----
+  const PAD = 22, BAN_H = 84, CHIP_H = 60, ROW_H = 32, NOW = 46, CELL = isSub ? 46 : 58, TOTW = 70, FOOT_H = isSub ? 60 : 44;
+  const names = rows.map(x=> String(hrLabel(x.r.st) ?? ""));
+  const NAMEW = Math.min(300, Math.max(160, Math.ceil(Math.max(0, ...names.map(n=> mw(n, F(500,15))))) + 28));
+  const vFont = F(600,12.5);
+  const HEAD_H = isSub ? Math.min(190, Math.max(80, Math.ceil(Math.max(0, ...cols.map(c=> mw(c.label, vFont)))) + 34)) : 46;
+  const tblW = NOW + NAMEW + cols.length*CELL + TOTW;
+  const title = `สรุปขาด ลา สาย · ${hr.room}`;
+  const sub = `ภาคเรียนที่ ${period.term} · ${AB_MODES[hra.mode][0]} · ${isSub ? "ตามวิชา (จำนวนคาบ)" : "ตามวัน (จำนวนวัน)"} · เช็คชื่อ Homeroom ${D.records} ครั้ง`;
+  const W = Math.max(Math.ceil(tblW + PAD*2), Math.ceil(Math.max(mw(title, F(700,24)), mw(sub, F(500,13))) + PAD*2 + 80), 520);
+  const nRows = rows.length + 1;   // + แถวรวมทั้งห้อง
+  const ty = PAD + BAN_H + 12 + CHIP_H + 12, th = HEAD_H + nRows*ROW_H;
+  const H = ty + th + 14 + FOOT_H;
+
+  const cv = document.createElement("canvas"); cv.width = W*SC; cv.height = H*SC;
+  const c = cv.getContext("2d"); c.scale(SC, SC); c.textBaseline = "middle";
+  const rr = (x,y,w,h,r)=>{ c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); };
+
+  // พื้นหลังรวม
+  const bg = c.createLinearGradient(0,0,W,H); bg.addColorStop(0,"#F3F7FF"); bg.addColorStop(1,"#FFF3F9");
+  c.fillStyle = bg; c.fillRect(0,0,W,H);
+
+  // แบนเนอร์หัวเรื่อง
+  const bx = PAD, by = PAD, bw = W - PAD*2;
+  c.save(); rr(bx,by,bw,BAN_H,20); c.clip();
+  const bgr = c.createLinearGradient(bx,by,bx+bw,by+BAN_H); bgr.addColorStop(0,"#7B61F0"); bgr.addColorStop(.55,"#D6489B"); bgr.addColorStop(1,"#FF8A5B");
+  c.fillStyle = bgr; c.fillRect(bx,by,bw,BAN_H);
+  c.fillStyle = "rgba(255,255,255,.14)"; c.beginPath(); c.arc(bx+bw-40,by+10,60,0,7); c.fill();
+  c.fillStyle = "rgba(255,255,255,.10)"; c.beginPath(); c.arc(bx+bw-120,by+BAN_H+8,42,0,7); c.fill();
+  c.fillStyle = "rgba(255,255,255,.10)"; c.beginPath(); c.arc(bx+30,by+BAN_H-2,32,0,7); c.fill();
+  c.restore();
+  c.fillStyle = "#fff"; c.textAlign = "left";
+  c.font = F(700,24); c.fillText(ell("📊 " + title, bw-40, F(700,24)), bx+22, by+31);
+  c.font = F(500,13); c.globalAlpha = .93; c.fillText(ell(sub, bw-40, F(500,13)), bx+22, by+61); c.globalAlpha = 1;
+
+  // การ์ดสรุปทั้งห้อง (วัน)
+  const tot = { absent:0, leave:0, late:0 };
+  D.rows.forEach(r=> Object.values(r.days).forEach(x=> Object.keys(tot).forEach(k=> tot[k] += x[k])));
+  const nHit = rows.filter(x=> x.total > 0).length;
+  const chips = [
+    ["ขาด (วัน)", tot.absent, "#FFE4EF", "#9D174D"],
+    ["ลา (วัน)", tot.leave, "#FEF3D0", "#7A4F00"],
+    ["สาย (วัน)", tot.late, "#E0F2FE", "#075985"],
+    ["นักเรียนที่มีรายการ", `${nHit}/${rows.length}`, "#EDE9FE", "#5B21B6"]
+  ];
+  const gap = 10, cw = (W - PAD*2 - gap*3) / 4, cy0 = by + BAN_H + 12;
+  chips.forEach((ch, i)=>{
+    const x = PAD + i*(cw+gap);
+    c.save(); c.shadowColor = "rgba(60,80,140,.10)"; c.shadowBlur = 8; c.shadowOffsetY = 2; c.fillStyle = ch[2]; rr(x,cy0,cw,CHIP_H,16); c.fill(); c.restore();
+    c.textAlign = "center"; c.fillStyle = ch[3];
+    c.font = F(600,12); c.globalAlpha = .85; c.fillText(ell(ch[0], cw-12, F(600,12)), x+cw/2, cy0+17); c.globalAlpha = 1;
+    c.font = F(700,24); c.fillText(String(ch[1]), x+cw/2, cy0+40);
+  });
+
+  // ตัวตาราง (การ์ดขาวมีเงา)
+  const tx = Math.round((W - tblW)/2);
+  c.save(); c.shadowColor = "rgba(60,80,140,.18)"; c.shadowBlur = 16; c.shadowOffsetY = 4; c.fillStyle = "#fff"; rr(tx,ty,tblW,th,16); c.fill(); c.restore();
+  c.save(); rr(tx,ty,tblW,th,16); c.clip();
+
+  // หัวตาราง
+  const hf = c.createLinearGradient(tx,ty,tx,ty+HEAD_H); hf.addColorStop(0,"#EEF1FC"); hf.addColorStop(1,"#DFE6FA");
+  c.fillStyle = hf; c.fillRect(tx,ty,tblW,HEAD_H);
+  c.fillStyle = pal.acc; c.fillRect(tx,ty,tblW,4);
+  c.fillStyle = "#2B3A67"; c.font = F(700,14); c.textAlign = "center";
+  const hy = isSub ? ty+HEAD_H-20 : ty+HEAD_H/2+2;
+  c.fillText("เลขที่", tx+NOW/2, hy); c.fillText("ชื่อ-สกุล", tx+NOW+NAMEW/2, hy);
+  cols.forEach((col, i)=>{
+    const x = tx + NOW + NAMEW + i*CELL;
+    if(isSub){
+      c.save(); c.translate(x+CELL/2, ty+HEAD_H-10); c.rotate(-Math.PI/2); c.textAlign = "left";
+      c.font = vFont; c.fillStyle = "#2B3445"; c.fillText(ell(col.label, HEAD_H-30, vFont), 0, 0); c.restore();
+    }else{
+      c.fillStyle = "#2B3A67"; c.font = F(700,14); c.textAlign = "center"; c.fillText(col.title, x+CELL/2, hy);
+    }
+  });
+  c.fillStyle = "#2B3A67"; c.font = F(700,14); c.textAlign = "center"; c.fillText("รวม", tx+tblW-TOTW/2, hy);
+
+  // แถวนักเรียน
+  const maxTot = Math.max(0, ...rows.map(x=> x.total));
+  rows.forEach(({ r, total }, i)=>{
+    const y = ty + HEAD_H + i*ROW_H, cy = y + ROW_H/2, st = r.st;
+    c.fillStyle = i%2 ? "#F4F6FC" : "#FFFFFF"; c.fillRect(tx,y,tblW,ROW_H);
+    c.fillStyle = "#4A5778"; c.font = F(700,13); c.textAlign = "center"; c.fillText(String(st.no ?? ""), tx+NOW/2, cy);
+    c.fillStyle = total ? "#1F2A44" : "#7C879F"; c.font = F(total ? 600 : 500, 15); c.textAlign = "left";
+    c.fillText(ell(names[i], NAMEW-22, F(total ? 600 : 500, 15)), tx+NOW+12, cy);
+    cols.forEach((col, j)=>{
+      const v = cell(r, col), x = tx + NOW + NAMEW + j*CELL, lv = abLevel(v);
+      c.textAlign = "center";
+      if(lv >= 0){
+        c.fillStyle = pal.cells[lv][0]; rr(x+4, y+4, CELL-8, ROW_H-8, 8); c.fill();
+        c.fillStyle = pal.cells[lv][1]; c.font = F(700,14); c.fillText(String(v), x+CELL/2, cy+.5);
+      }else{ c.fillStyle = "#C5CCDD"; c.font = F(500,14); c.fillText("·", x+CELL/2, cy); }
+    });
+    const xt = tx + tblW - TOTW;
+    c.textAlign = "center";
+    if(total > 0){
+      const top = total === maxTot, lbl = String(total), pw = Math.max(36, mw(lbl, F(700,14)) + 20);
+      c.fillStyle = top ? pal.acc : "#E6EBF8"; rr(xt+(TOTW-pw)/2, cy-11, pw, 22, 11); c.fill();
+      c.fillStyle = top ? "#FFFFFF" : "#2B3A67"; c.font = F(700,14); c.fillText(lbl, xt+TOTW/2, cy+.5);
+    }else{ c.fillStyle = "#C5CCDD"; c.font = F(500,14); c.fillText("·", xt+TOTW/2, cy); }
+  });
+
+  // แถวรวมทั้งห้อง
+  const sy = ty + HEAD_H + rows.length*ROW_H, scy = sy + ROW_H/2;
+  c.fillStyle = "#E8ECFA"; c.fillRect(tx,sy,tblW,ROW_H);
+  c.fillStyle = "#2B3A67"; c.font = F(700,14); c.textAlign = "center";
+  c.fillText("รวมทั้งห้อง", tx+(NOW+NAMEW)/2, scy);
+  cols.forEach((col, j)=>{
+    const n = rows.reduce((t, x)=> t + cell(x.r, col), 0), x = tx + NOW + NAMEW + j*CELL;
+    c.fillStyle = n ? "#2B3A67" : "#A5AEC6"; c.fillText(n ? String(n) : "·", x+CELL/2, scy);
+  });
+  c.fillStyle = pal.acc; c.fillText(String(rows.reduce((t, x)=> t + x.total, 0)), tx+tblW-TOTW/2, scy);
+
+  // เส้นแบ่งคอลัมน์บางๆ
+  c.strokeStyle = "rgba(120,140,190,.20)"; c.lineWidth = 1;
+  for(let j=0;j<=cols.length;j++){ const x = Math.round(tx+NOW+NAMEW+j*CELL)+.5; c.beginPath(); c.moveTo(x,ty+HEAD_H); c.lineTo(x,ty+th); c.stroke(); }
+  c.beginPath(); c.moveTo(tx+NOW+.5,ty+HEAD_H); c.lineTo(tx+NOW+.5,ty+th); c.stroke();
+  c.restore();
+
+  // ท้ายภาพ: คำอธิบายสี + วันที่สร้าง
+  const fy = ty + th + 14 + 16;
+  c.textAlign = "left"; c.fillStyle = "#4A5778"; c.font = F(600,12); c.fillText("ระดับสี", tx, fy);
+  let lx = tx + mw("ระดับสี", F(600,12)) + 12;
+  [["1",0],["2–3",1],["4–5",2],["6+",3]].forEach(([t, lv])=>{
+    c.fillStyle = pal.cells[lv][0]; rr(lx, fy-9, 18, 18, 6); c.fill();
+    c.fillStyle = "#4A5778"; c.font = F(500,12); c.fillText(t, lx+24, fy); lx += 24 + mw(t, F(500,12)) + 14;
+  });
+  const dt = new Date().toLocaleDateString("th-TH", { day:"numeric", month:"long", year:"numeric" });
+  c.textAlign = "right"; c.fillStyle = "#7C879F"; c.font = F(500,12); c.fillText(`สร้างเมื่อ ${dt}`, tx+tblW, fy);
+  if(isSub){
+    c.textAlign = "left"; c.fillStyle = "#7C879F"; c.font = F(500,11.5);
+    c.fillText(ell("คาบที่ขาด = จำนวนครั้งที่ขาดวันนั้น × จำนวนคาบของวิชานั้นในวันนั้นตามตารางเรียน", tblW, F(500,11.5)), tx, fy+24);
+  }
+  return await new Promise((ok, no)=> cv.toBlob(b=> b ? ok(b) : no(new Error("สร้างรูปไม่สำเร็จ")), "image/png"));
+}
+
+/* หน้าตัวอย่างรูป: คัดลอกรูป / บันทึกรูป / แชร์ (ถ้าเครื่องรองรับ) */
+function showImgPreview(blob, o){
+  const old = qs("#modalImgPrev"); if(old){ const im = qs("img", old); if(im && im.dataset.url) URL.revokeObjectURL(im.dataset.url); old.remove(); }
+  const url = URL.createObjectURL(blob);
+  const file = (window.File ? new File([blob], o.filename, { type:"image/png" }) : null);
+  const canShare = !!(file && navigator.canShare && navigator.canShare({ files:[file] }));
+  const m = document.createElement("div"); m.className = "modal-backdrop"; m.id = "modalImgPrev";
+  m.innerHTML = `<div class="modal-sheet"><h3>📸 ${esc(o.title)}</h3>
+    <p class="hint" id="ipHint" style="margin:-8px 0 10px;">ดูรูปให้เรียบร้อยก่อน แล้วกด “คัดลอกรูป” ไปวางในกลุ่มได้เลย (ถ้าคัดลอกไม่ได้ ให้กดค้างที่รูป หรือกดบันทึกรูป)</p>
+    <div style="max-height:52vh; overflow:auto; border-radius:12px; border:1px solid #E1E7F3; margin-bottom:12px; background:#fff;"><img alt="${esc(o.title)}" style="display:block; width:100%; height:auto;"></div>
+    <div class="modal-actions" style="flex-wrap:wrap;"><button class="btn btn-outline" data-close>ปิด</button><a class="btn btn-outline" id="ipSave" download="${esc(o.filename)}" style="text-align:center; text-decoration:none;">💾 บันทึกรูป</a>${canShare ? `<button class="btn btn-outline" id="ipShare">📤 แชร์</button>` : ""}<button class="btn btn-primary" id="ipCopy" style="flex-basis:100%;">📋 คัดลอกรูป</button></div></div>`;
+  const img = qs("img", m); img.src = url; img.dataset.url = url; qs("#ipSave", m).href = url;
+  document.body.appendChild(m);
+  const close = ()=>{ m.classList.remove("active"); setTimeout(()=>{ URL.revokeObjectURL(url); m.remove(); }, 450); };
+  qs("[data-close]", m).addEventListener("click", close);
+  m.addEventListener("click", e=>{ if(e.target===m) close(); });
+  qs("#ipCopy", m).addEventListener("click", async ()=>{
+    try{
+      if(!(navigator.clipboard && window.ClipboardItem)) throw new Error("no clipboard image");
+      await navigator.clipboard.write([ new ClipboardItem({ "image/png": blob }) ]);
+      toast("คัดลอกรูปแล้ว — ไปกดวางในกลุ่มได้เลย");
+    }catch(e){
+      console.warn("clipboard image failed", e);
+      const h = qs("#ipHint", m); h.style.color = "#B3261E"; h.textContent = "เบราว์เซอร์นี้คัดลอกรูปอัตโนมัติไม่ได้ — กดค้างที่รูปแล้วเลือก “คัดลอก/บันทึกรูป” หรือกดบันทึกรูปแทน";
+    }
+  });
+  if(canShare) qs("#ipShare", m).addEventListener("click", async ()=>{ try{ await navigator.share({ files:[file], title:o.title }); }catch(e){ /* ผู้ใช้ยกเลิก */ } });
+  requestAnimationFrame(()=> m.classList.add("active"));
+}
+
+async function hraShowImage(){
+  if(!hra.last){ toast("ยังไม่มีข้อมูลให้สร้างรูป"); return; }
+  showSaving("กำลังสร้างรูป...");
+  try{
+    const blob = await buildHrAbsentImage(); hideSaving();
+    showImgPreview(blob, { title:"ตัวอย่างรูปสรุปขาด ลา สาย", filename:`ขาดลาสาย-${hr.room}-ภาค${period.term}-${AB_MODES[hra.mode][0]}.png` });
+  }catch(e){ hideSaving(); console.error(e); toast("สร้างรูปไม่สำเร็จ ลองใหม่อีกครั้ง"); }
+}
+/* ปุ่มรูป: สร้างด้วย JS ต่อท้ายปุ่มเรียงลำดับ (ไม่ต้องแก้ HTML) */
+(function addHraImgBtn(){
+  const sortBtn = qs("#hraSort"); if(!sortBtn || qs("#hraImg")) return;
+  const b = document.createElement("button"); b.id = "hraImg"; b.type = "button"; b.className = "btn btn-primary btn-sm"; b.textContent = "📸 รูป / คัดลอก";
+  sortBtn.after(b); b.addEventListener("click", hraShowImage);
+})();
+
+qs("#hrGoAbsent")?.addEventListener("click", openHrAbsent);
+qs("#hraBack")?.addEventListener("click", ()=> showView("view-homeroom"));
+qs("#hraMode")?.addEventListener("click", e=>{ const b = e.target.closest("[data-m]"); if(b){ hra.mode = b.dataset.m; renderHrAbsent(); } });
+qs("#hraView")?.addEventListener("click", e=>{ const b = e.target.closest("[data-v]"); if(b){ hra.view = b.dataset.v; hra.sortCol = null; renderHrAbsent(); } });
+qs("#hraSort")?.addEventListener("click", ()=>{ hra.sort = (hra.sort === "no" || hra.sortCol != null) ? "most" : "no"; hra.sortCol = null; renderHrAbsent(); });
+qs("#view-hr-absent")?.addEventListener("click", e=>{
+  if(e.target.closest("#hraGoTable")){ openHrTable(); return; }
+  if(e.target.closest("#hraDayDesc")){ hra.dayDesc = !hra.dayDesc; renderHrAbsent(); return; }
+  const th = e.target.closest("th.ab-col");
+  if(th){ hra.sortCol = (String(hra.sortCol) === th.dataset.c) ? null : th.dataset.c; renderHrAbsent(); return; }
+  const tr = e.target.closest(".ab-row");
+  if(tr) openHrAbsentDetail(tr.dataset.k);
+});
+
 /* เปลี่ยนภาคเรียนจากแถบด้านบนขณะอยู่หน้าเหล่านี้ → วาดข้อมูลของภาคเรียนใหม่ */
 function hrOnPeriodChanged(){
   const act = id => qs("#"+id).classList.contains("active");
   if(act("view-hr-docs")){ hrd.docs = hrDocsFromState(); hrd.snap = hrdSerialize(); renderHrDocs(); }
   if(act("view-hr-orders")) renderHrOrders();
+  if(act("view-hr-absent")) renderHrAbsent();
+  if(act("view-hr-table")){ hrt.slots = hrtFromState(); hrt.snap = hrtSerialize(); hrt.sel = null; renderHrTable(); }
   if(act("view-hr-summary")) renderHrSummary();
 }
 
