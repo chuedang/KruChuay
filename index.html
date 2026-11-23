@@ -10,7 +10,7 @@
 /* โหมดหน้าจอ: pc / mobile (จำค่าที่เลือกไว้ ถ้ายังไม่เคยเลือกจะเดาจากความกว้างจอ) — ตั้งก่อนวาดหน้าเพื่อกันภาพกระพริบ */
 (function(){var m="mobile";try{var s=localStorage.getItem("kc_mode");m=(s==="pc"||s==="mobile")?s:(window.innerWidth>=900?"pc":"mobile");}catch(e){}document.documentElement.classList.add("mode-"+m);})();
 </script>
-<link rel="stylesheet" href="StyleKruChauy.css?v=59">
+<link rel="stylesheet" href="StyleKruChauy.css?v=63">
 <link rel="stylesheet" href="FixboyChat.css?v=2">
 <script>try{var T={light:"#d7defc",cream:"#efe3c4",dark:"#121624",black:"#000000",fantasy:"#2a74d6"};var t=localStorage.getItem("kc_theme");if(!T[t])t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t;var mt=document.querySelector('meta[name="theme-color"]');if(mt)mt.setAttribute("content",T[t]);}catch(e){}</script>
 </head>
@@ -174,7 +174,7 @@
     </div>
     <div class="period-bar" data-mode="full" data-compact="1"></div>
     <div class="score-tabs" id="scoreTabs">
-      <button type="button" data-tab="beh" class="on">📝 งาน/จิตพิสัย 1-5</button>
+      <button type="button" data-tab="beh" class="on">📝 งาน 1-5</button>
       <button type="button" data-tab="exam">🧾 คะแนนสอบ</button>
       <button type="button" id="openSummaryBtn" class="tab-sum">📈 สรุป</button>
     </div>
@@ -285,6 +285,9 @@
         </button>
         <button type="button" class="hr-tile abs" id="hrGoAbsent">
           <span class="t-ico">📊</span><b>วิเคราะห์ขาด ลา สาย</b><small>เทียบวันที่ขาดกับตารางเรียน</small>
+        </button>
+        <button type="button" class="hr-tile seat" id="hrGoSeat">
+          <span class="t-ico">🪑</span><b>จัดที่นั่ง</b><small>ผังห้อง · ลากโต๊ะ ลากนักเรียน</small>
         </button>
       </div>
       <div class="hr-print-row"><button type="button" class="btn btn-outline" id="hrPrintBtn">🖨 ปริ้นใบรายชื่อนักเรียน (ขาว-ดำ)</button></div>
@@ -436,6 +439,37 @@
     </div>
     <div class="tt-wrap" id="hrtWrap"></div>
     <div class="hr-savebar"><button type="button" class="btn btn-primary" id="hrtSaveBtn" disabled>บันทึกตารางเรียน</button></div>
+  </section>
+
+  <!-- HOMEROOM: จัดที่นั่งนักเรียน (ผังห้องมุมมองจากด้านบน ลากโต๊ะ / ลากนักเรียน) -->
+  <section id="view-hr-seat" class="view">
+    <div class="topbar">
+      <button class="back-btn" id="hseBack">‹</button>
+      <div class="tb-txt"><h2>จัดที่นั่งนักเรียน</h2><div class="sub" id="hseSub"></div></div>
+      <span class="tb-ico">🪑</span>
+    </div>
+    <div class="period-bar" data-mode="lock-term" data-compact="1"></div>
+    <div class="hse-bar" id="hseBar">
+      <button type="button" class="btn btn-outline btn-sm hse-fullbtn" data-a="full">⤢ เต็มจอ</button>
+      <button type="button" class="btn btn-outline btn-sm" data-a="add1">＋ โต๊ะเดี่ยว</button>
+      <button type="button" class="btn btn-outline btn-sm" data-a="add2">＋ โต๊ะคู่</button>
+      <button type="button" class="btn btn-outline btn-sm" data-a="auto">⚡ สร้างแถวอัตโนมัติ</button>
+      <button type="button" class="btn btn-outline btn-sm" data-a="rand">🎲 สุ่มที่นั่ง</button>
+      <button type="button" class="btn btn-outline btn-sm" data-a="unseat">↩ เก็บนักเรียนออกทั้งหมด</button>
+      <button type="button" class="btn btn-outline btn-sm" data-a="clear">🧹 ล้างผัง</button>
+      <button type="button" class="btn btn-outline btn-sm" data-a="img">📸 รูปผัง</button>
+      <span class="hse-sep"></span>
+      <button type="button" class="btn btn-outline btn-sm" data-a="zout" aria-label="ย่อ">－</button>
+      <button type="button" class="btn btn-outline btn-sm" data-a="zfit">พอดีจอ</button>
+      <button type="button" class="btn btn-outline btn-sm" data-a="zin" aria-label="ขยาย">＋</button>
+    </div>
+    <div class="hse-selbar" id="hseSelBar"></div>
+    <div class="hse-info" id="hseInfo"></div>
+    <div class="hse-scroll" id="hseScroll"><div class="hse-zwrap" id="hseZwrap"><div class="hse-stage" id="hseStage"></div></div></div>
+    <div class="hse-trayw" id="hseTrayW">
+      <div class="hse-tray-h"><b>นักเรียนที่ยังไม่มีที่นั่ง</b><span id="hseTrayN"></span></div>
+      <div class="hse-tray" id="hseTray"></div>
+    </div>
   </section>
 
   <!-- EXAM: หน้าแรก — รายการชุดข้อสอบ -->
@@ -729,8 +763,8 @@
     </div>
   </div>
 </div>
-<script src="ScriptKruChauy.js?v=73"></script>
-<script src="tool.js?v=36"></script>
+<script src="ScriptKruChauy.js?v=79"></script>
+<script src="tool.js?v=42"></script>
 <script src="Khosob.js?v=2"></script>
 <script src="FixboyChat.js?v=2"></script>
 </body>
