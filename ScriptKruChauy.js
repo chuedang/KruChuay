@@ -6,6 +6,7 @@ const SLOT_MIN = 36; // จำนวนช่องว่างเริ่ม�
 const WEEKDAYS = ["อา","จ","อ","พ","พฤ","ศ","ส"];
 
 const state = {
+  weights: { default:{ work:40, beh:10, mid:20, fin:30 }, bySubject:{} },   // สัดส่วนคะแนน — มาจาก Apps Script (SCORE_WEIGHTS) ไม่เก็บในเครื่อง
   students: [], scores: [], activities: [], attendance: [], teaching: [], config: [], examRows: [], examSetup: [], examKeyRows: [], blocked: [], hrDocs: [], hrOrders: [], hrSetup: [], hrTable: [], hrSubjects: [],
   examUi: { mc:"", es:"", fb:"", wmc:"", wes:"", vals:new Map(), dirty:false },
   attend: { room:"", subject:"", date:"", rows:[] },
@@ -300,6 +301,7 @@ function _clearOut(v){
   ["left","top","width","height"].forEach(p=>v.style.removeProperty(p));
 }
 function showView(id){
+  if(id !== "view-hr-seat" && document.body.classList.contains("hse-full")) hseSetFull(false);   // ออกจากหน้าจัดที่นั่งทางไหนก็ตาม → เลิกโหมดเต็มจอของผัง
   const prevActive = qs(".view.active");
   const next = qs("#"+id);
   if(prevActive && prevActive.id==="view-exam-scan" && id!=="view-exam-scan") stopExamScan();
@@ -355,7 +357,7 @@ async function apiGet(type, tries=4){
   }
   throw lastErr;
 }
-const GS_REQUIRED = "v18";
+const GS_REQUIRED = "v19";
 const sleep = ms => new Promise(r=>setTimeout(r, ms));
 async function apiPost(payload, tries=3){
   if(state.gsOld) return { success:false, message:"Apps Script ที่เชื่อมอยู่ยังเป็นเวอร์ชันเก่า (ไม่รองรับภาคเรียน/ประเภท) — Deploy โค้ด GS.txt ล่าสุด แล้วใส่ลิงก์ใน CONFIG.API_URL ของ script.js จากนั้นรีเฟรชแบบล้างแคช" };
@@ -403,6 +405,7 @@ async function loadAll(parts){
       state[STATE_KEY[k]] = Array.isArray(v) ? v : [];
       if(Array.isArray(v)) loadedParts.add(k);
     });
+    if(data && data.weights && data.weights.default) state.weights = { default:data.weights.default, bySubject:data.weights.bySubject || {} };
     if(want.includes("examKey")) syncExamKeysFromSheet();
   }catch(err){
     state.loadErr = String((err && err.message) || err || "ไม่ทราบสาเหตุ");
@@ -1197,22 +1200,183 @@ qs("#repStartBtn").addEventListener("click", async ()=>{
   showView("view-attend-report");
 });
 
+/* ---------- เทียบ Homeroom กับวิชาคณิต (พื้นฐาน/เพิ่มเติม) ของวันเดียวกัน ----------
+   ใช้เฉพาะสรุปการมาเรียนวิชา Homeroom: ถ้าสถานะของนักเรียนในวันนั้นไม่ตรงกันระหว่าง Homeroom / คณิตพื้นฐาน / คณิตเพิ่มเติม
+   (เฉพาะวิชาที่เช็คในวันนั้นจริง; Homeroom สาย + คณิตมา ถือว่าปกติ) ช่องนั้นจะขึ้นเครื่องหมาย ⚠ แตะดูว่าแต่ละวิชาเช็คอะไรไว้ และแก้ไขได้ทันที */
+const MM_LBL = { present:"มา", absent:"ขาด", leave:"ลา", late:"สาย" };
+const repSetOf = v => new Set(String(v||"").split(",").map(s=>s.trim()).filter(Boolean));
+/* วันที่ -> { absent, leave, late, row } ของห้อง+วิชานี้ในภาคเรียนที่เลือก (เช็คซ้ำวันเดียวกัน ใช้อันล่าสุด) */
+function repRecsOf(room, subject){
+  const m = new Map();
+  state.attendance.forEach(a=>{
+    if(!sameStr(a["ระดับชั้น"],room) || !sameStr(a["รายวิชา"],subject) || !inTerm(a)) return;
+    const k = dateKey(a["วันที่"]); if(!k) return;
+    m.set(k, { absent:repSetOf(a["ขาดเรียน"]), leave:repSetOf(a["ลา"]), late:repSetOf(a["สาย"]), row:a });
+  });
+  return m;
+}
+function repStatusIn(recs, name, d){
+  const r = recs.get(d); if(!r) return "none";
+  return r.absent.has(name) ? "absent" : r.leave.has(name) ? "leave" : r.late.has(name) ? "late" : "present";
+}
+/* วิชาคณิตของห้องนี้ที่เคยเช็คชื่อไว้ในภาคเรียนนี้ (ชื่อวิชามีคำว่า "คณิต") */
+function repMathSubjects(room){
+  const set = new Set();
+  state.attendance.forEach(a=>{
+    if(!sameStr(a["ระดับชั้น"],room) || !inTerm(a)) return;
+    const n = String(a["รายวิชา"]||"").trim();
+    if(n && /คณิต/.test(n) && !isHomeroomName(n)) set.add(n);
+  });
+  return [...set].sort((x,y)=> x.localeCompare(y,"th"));
+}
+const repMathLabel = n => /พื้นฐาน/.test(n) ? "คณิตพื้นฐาน" : /เพิ่มเติม/.test(n) ? "คณิตเพิ่มเติม" : n;
+/* ตัดสินว่าไม่ตรงกันหรือไม่ — hr = สถานะ Homeroom (หรือ null ถ้าวันนั้นไม่ได้เช็ค), maths = สถานะวิชาคณิตที่เช็คจริงวันนั้น
+   ข้อยกเว้น: Homeroom "สาย" แต่คณิต "มา" ถือว่าปกติ (สายตอนเช้าแต่เข้าทันคาบแรก) ไม่แจ้งเตือน */
+function repStatusMismatch(hr, maths){
+  if(!maths.length) return false;
+  if(new Set(maths).size > 1) return true;          // คณิตพื้นฐาน/เพิ่มเติมเช็คไม่ตรงกันเอง
+  if(hr === null) return false;
+  const m = maths[0];
+  return hr !== m && !(hr === "late" && m === "present");
+}
+function repIsMismatch(name, d, subjRecs){
+  const hr = subjRecs[0].has(d) ? repStatusIn(subjRecs[0], name, d) : null;
+  const maths = subjRecs.slice(1).filter(r=>r.has(d)).map(r=>repStatusIn(r, name, d));
+  return repStatusMismatch(hr, maths);
+}
+
+function ensureRepMmStyle(){
+  if(qs("#repMmStyle")) return;
+  const st = document.createElement("style"); st.id = "repMmStyle";
+  st.textContent = `
+  table.score-table td.mm-cell{position:relative; cursor:pointer;}
+  table.score-table td.mm-cell .ar{box-shadow:0 0 0 2px #F59E0B;}
+  .mm-dot{position:absolute; top:1px; right:2px; font-size:10px; line-height:1; font-style:normal; color:#D97706; pointer-events:none;}
+  .mm-warn{background:#FEF3D0; color:#92400E; border-radius:12px; padding:9px 12px; font-size:12.5px; font-weight:500; line-height:1.55; margin-bottom:10px;}
+  html[data-theme="cream"] .mm-warn{background:#F6EBCB;}
+  html[data-theme="dark"] .mm-warn,html[data-theme="black"] .mm-warn{background:#3A2E12; color:#F5C96B;}
+  #modalRepMm .mm-who{font-size:15px; font-weight:700; margin:-6px 0 2px;}
+  #modalRepMm .mm-when{font-size:12.5px; color:var(--ink-soft,#6B7488); margin-bottom:12px;}
+  #modalRepMm .mm-item{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 0; border-top:1px solid var(--line,#EEF1F7);}
+  #modalRepMm .mm-item .mm-sub{font-size:13.5px; font-weight:600; flex:1; min-width:0;}
+  #modalRepMm .mm-item em{font-size:12px; color:#9AA3B8; font-style:normal;}
+  #modalRepMm .mm-state{margin:10px 0 14px; padding:9px 12px; border-radius:12px; font-size:12.5px; font-weight:600; background:#FEF3D0; color:#92400E;}
+  #modalRepMm .mm-state.ok{background:#E7F6EE; color:#137333;}
+  html[data-theme="dark"] #modalRepMm .mm-state,html[data-theme="black"] #modalRepMm .mm-state{background:#3A2E12; color:#F5C96B;}
+  html[data-theme="dark"] #modalRepMm .mm-state.ok,html[data-theme="black"] #modalRepMm .mm-state.ok{background:#16301F; color:#8EDDA8;}`;
+  document.head.appendChild(st);
+}
+
+let repMm = null;
+function ensureRepMmModal(){
+  if(qs("#modalRepMm")) return;
+  const m = document.createElement("div");
+  m.className = "modal-backdrop"; m.id = "modalRepMm";
+  m.innerHTML = `<div class="modal-sheet">
+    <h3>⚠ เช็คไม่ตรงกับวิชาคณิต</h3>
+    <div class="mm-who" id="mmWho"></div>
+    <div class="mm-when" id="mmWhen"></div>
+    <div id="mmItems"></div>
+    <div class="mm-state" id="mmState"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="mmCancel">ปิด</button>
+      <button class="btn btn-primary" id="mmSave" disabled>บันทึกการแก้ไข</button>
+    </div>
+  </div>`;
+  document.body.appendChild(m);
+  const close = ()=> m.classList.remove("active");
+  qs("#mmCancel", m).addEventListener("click", close);
+  m.addEventListener("click", e=>{ if(e.target===m) close(); });
+  qs("#mmItems", m).addEventListener("click", e=>{
+    const chip = e.target.closest(".chip"), row = e.target.closest(".mm-item");
+    if(!chip || !row || !repMm) return;
+    const it = repMm.items[+row.dataset.i]; if(!it || !it.rec) return;
+    it.s = chip.dataset.status;
+    qsa(".chip", row).forEach(c=> c.classList.toggle("active", c===chip));
+    repMmRefresh();
+  });
+  qs("#mmSave", m).addEventListener("click", saveRepMismatch);
+}
+function repMmRefresh(){
+  const u = repMm; if(!u) return;
+  const hrIt = u.items[0], hr = hrIt.rec ? hrIt.s : null;
+  const same = !repStatusMismatch(hr, u.items.slice(1).filter(it=>it.rec).map(it=>it.s));
+  const box = qs("#mmState");
+  box.className = "mm-state" + (same ? " ok" : "");
+  box.textContent = same ? "✓ ตอนนี้ทุกวิชาตรงกันแล้ว" : "⚠ ยังไม่ตรงกัน — เลือกสถานะที่ถูกต้องแล้วกดบันทึก";
+  qs("#mmSave").disabled = !u.items.some(it=> it.rec && it.s!==it.s0);
+}
+function openRepMismatch(name, d){
+  ensureRepMmStyle(); ensureRepMmModal();
+  const st = scoreRoster(rep.room).find(s=>s.label===name);
+  const subs = [rep.subject, ...repMathSubjects(rep.room)];
+  const items = subs.map((sub,i)=>{
+    const recs = repRecsOf(rep.room, sub), has = recs.has(d), s = has ? repStatusIn(recs, name, d) : null;
+    return { sub, label: i===0 ? "Homeroom" : repMathLabel(sub), rec:has, s0:s, s };
+  });
+  repMm = { name, date:d, items };
+  qs("#mmWho").innerHTML = `${snum(st?.no)}${esc(name)}`;
+  qs("#mmWhen").textContent = `${rep.room} · ${fmtWd(d)} ${fmtLong(d)}`;
+  qs("#mmItems").innerHTML = items.map((it,i)=> `<div class="mm-item" data-i="${i}">
+    <span class="mm-sub">${esc(it.label)}</span>
+    ${it.rec
+      ? `<div class="chip-group">${Object.keys(MM_LBL).map(k=>`<button type="button" class="chip${it.s===k?" active":""}" data-status="${k}">${MM_LBL[k]}</button>`).join("")}</div>`
+      : `<em>ยังไม่ได้เช็ควันนี้</em>`}
+  </div>`).join("");
+  repMmRefresh();
+  qs("#modalRepMm").classList.add("active");
+}
+/* สร้างข้อมูลบันทึกจากแถวเดิม โดยเปลี่ยนสถานะของนักเรียนคนเดียว (ใช้ addAttendance ซึ่งเป็น upsert ตามวัน — แก้แถวเดิม ไม่เพิ่มแถวใหม่) */
+function repMmPayload(rec, name, status, date){
+  const row = rec.row;
+  const roster = studentsOfRoom(rep.room).map(s=>({ name:String(s["ชื่อ-สกุล"]||"").trim(), no:s["เลขที่"] }));
+  const sets = { absent:new Set(rec.absent), leave:new Set(rec.leave), late:new Set(rec.late) };
+  Object.values(sets).forEach(x=> x.delete(name));
+  if(sets[status]) sets[status].add(name);
+  const idx = n => { const i = roster.findIndex(r=>r.name===n); return i<0 ? 1e9 : i; };
+  const names = k => [...sets[k]].sort((a,b)=> idx(a)-idx(b));
+  const nos = list => list.map(n=> roster.find(r=>r.name===n)?.no).filter(v=> v!==undefined && v!==null && v!=="").join(", ");
+  const A = names("absent"), L = names("leave"), T = names("late");
+  return { type:"addAttendance", term:String(row["ภาคเรียนที่"] ?? period.term), ptype:String(row["ประเภท"] ?? ""),
+    level:String(row["ระดับชั้น"] ?? rep.room), subject:String(row["รายวิชา"] ?? ""),
+    absent:A.join(", "), leave:L.join(", "), late:T.join(", "), date,
+    absentNo:nos(A), leaveNo:nos(L), lateNo:nos(T) };
+}
+async function saveRepMismatch(){
+  const u = repMm; if(!u) return;
+  const changed = u.items.filter(it=> it.rec && it.s!==it.s0);
+  if(!changed.length){ qs("#modalRepMm").classList.remove("active"); return; }
+  qs("#modalRepMm").classList.remove("active");
+  showSaving("กำลังบันทึกการแก้ไข...");
+  try{ const fresh = await apiGet("attendance"); if(Array.isArray(fresh)) state.attendance = fresh; }catch(err){ /* ใช้ข้อมูลที่โหลดไว้ */ }
+  let fail = "";
+  for(const it of changed){
+    const rec = repRecsOf(rep.room, it.sub).get(u.date);
+    if(!rec){ fail = `ไม่พบการเช็คชื่อ ${it.label} ของวันนี้แล้ว`; break; }
+    const res = await apiPost(repMmPayload(rec, u.name, it.s, u.date));
+    if(!res.success){ fail = res.message || "บันทึกไม่สำเร็จ"; break; }
+  }
+  await loadAll(["attendance"]);
+  hideSaving();
+  renderRepTable();
+  toast(fail || "แก้ไขการเช็คชื่อแล้ว");
+}
+
 function renderRepTable(){
   const wrap = qs("#repTableWrap"), msBox = qs("#repMsWarn");
+  let mmBox = qs("#repMmWarn");
+  if(!mmBox){ mmBox = document.createElement("div"); mmBox.id = "repMmWarn"; mmBox.className = "mm-warn"; mmBox.style.display = "none"; msBox.insertAdjacentElement("afterend", mmBox); }
+  mmBox.style.display = "none";
   const roster = scoreRoster(rep.room);
   if(roster.length===0){ wrap.innerHTML = `<div class="empty-note">ไม่พบรายชื่อนักเรียนในห้องนี้</div>`; qs("#repInfo").textContent = ""; msBox.style.display = "none"; return; }
 
-  const toSet = v => new Set(String(v||"").split(",").map(s=>s.trim()).filter(Boolean));
-  const recs = new Map();   // วันที่ -> { absent, leave, late } (ถ้าเช็คซ้ำวันเดียวกัน ใช้อันล่าสุด)
-  state.attendance.forEach(a=>{
-    if(!sameStr(a["ระดับชั้น"],rep.room) || !sameStr(a["รายวิชา"],rep.subject) || !inTerm(a)) return;
-    const k = dateKey(a["วันที่"]); if(!k) return;
-    recs.set(k, { absent:toSet(a["ขาดเรียน"]), leave:toSet(a["ลา"]), late:toSet(a["สาย"]) });
-  });
-  const statusOf = (name, d) => {
-    const r = recs.get(d); if(!r) return "none";
-    return r.absent.has(name) ? "absent" : r.leave.has(name) ? "leave" : r.late.has(name) ? "late" : "present";
-  };
+  const recs = repRecsOf(rep.room, rep.subject);   // วันที่ -> { absent, leave, late }
+  const statusOf = (name, d) => repStatusIn(recs, name, d);
+  // Homeroom: เทียบกับวิชาคณิตของวันเดียวกัน
+  const mathSubs = rep.mode === "hr" ? repMathSubjects(rep.room) : [];
+  const subjRecs = mathSubs.length ? [recs, ...mathSubs.map(s=> repRecsOf(rep.room, s))] : [];
+  if(subjRecs.length) ensureRepMmStyle();
+  let mmCells = 0; const mmStudents = new Set();
   const LBL = { present:"✓", absent:"ขาด", leave:"ลา", late:"สาย", none:"·" };
   const today = todayISO();
   const threshold = msThreshold(rep.hoursWeek);
@@ -1226,7 +1390,12 @@ function renderRepTable(){
     const cells = rep.dates.map(d=>{
       const s = statusOf(st.label, d);
       if(cnt[s]!==undefined) cnt[s]++;
-      return `<td class="${rep.mode==="hr"&&wdOf(d)===1?"wk-start":""}"><span class="ar ar-${s}">${LBL[s]}</span></td>`;
+      const wk = rep.mode==="hr"&&wdOf(d)===1 ? "wk-start" : "";
+      if(subjRecs.length && repIsMismatch(st.label, d, subjRecs)){
+        mmCells++; mmStudents.add(st.label);
+        return `<td class="${wk} mm-cell" data-n="${esc(st.label)}" data-d="${d}" title="ไม่ตรงกับวิชาคณิต — แตะเพื่อดู/แก้ไข"><span class="ar ar-${s}">${LBL[s]}</span><i class="mm-dot">⚠</i></td>`;
+      }
+      return `<td class="${wk}"><span class="ar ar-${s}">${LBL[s]}</span></td>`;
     }).join("");
     const sum = k => `<td class="sum"><b class="s-${k} ${cnt[k]?"on":""}">${cnt[k]}</b></td>`;
     const overMs = threshold!=null && (cnt.absent + cnt.leave) > threshold;
@@ -1234,10 +1403,19 @@ function renderRepTable(){
     rows += `<tr class="${overMs?"ms-row":""}"><td class="name-cell">${snum(st.no)}${esc(st.label)}${overMs?'<span class="ms-badge">มส.</span>':""}</td>${sum("absent")}${sum("leave")}${sum("late")}${cells}</tr>`;
   });
   wrap.innerHTML = `<table class="score-table"><thead>${thead}</thead><tbody>${rows}</tbody></table>`;
+  wrap.onclick = e=>{
+    const td = e.target.closest && e.target.closest("td.mm-cell");
+    if(td) openRepMismatch(td.dataset.n, td.dataset.d);
+  };
 
   const checked = rep.dates.filter(d=>recs.has(d)).length;
   qs("#repInfo").textContent = `${roster.length} คน · เช็คแล้ว ${checked}/${rep.dates.length} วัน` +
     (threshold!=null ? ` · เกณฑ์ มส. > ${threshold} ครั้ง (ขาด+ลา)` : "");
+
+  if(mmCells){
+    mmBox.style.display = "";
+    mmBox.innerHTML = `⚠ เช็คไม่ตรงกับวิชาคณิต <b>${mmCells} ช่อง</b> (${mmStudents.size} คน) · เทียบกับ ${mathSubs.map(s=>esc(repMathLabel(s))).join(", ")} · แตะช่องที่มี ⚠ เพื่อดูว่าแต่ละวิชาเช็คอะไรไว้และแก้ไขได้ทันที`;
+  }
 
   if(msNames.length){
     msBox.style.display = "";
@@ -1247,7 +1425,7 @@ function renderRepTable(){
   }
 }
 
-/* ================= TABS ในหน้าลงคะแนน: งาน/จิตพิสัย 1-5  |  คะแนนสอบ ================= */
+/* ================= TABS ในหน้าลงคะแนน: งาน 1-5  |  คะแนนสอบ ================= */
 function setScoreTab(tab){
   state.score.tab = tab;
   qsa("#scoreTabs [data-tab]").forEach(b=> b.classList.toggle("on", b.dataset.tab===tab));
@@ -1460,12 +1638,11 @@ const PASS_MIN = GRADES[GRADES.length-1][0];   // คะแนนรวมต่
 const gradeOf = n => { for(const [min,g] of GRADES) if(n>=min) return g; return "0"; };
 const WDEFAULT = { work:40, beh:10, mid:20, fin:30 };
 const WLABEL = { work:"งาน / คะแนนเก็บ", beh:"จิตพิสัย", mid:"สอบกลางภาค", fin:"สอบปลายภาค" };
-const wKey = () => `kc_weights|${period.term}|${state.score.room}|${state.score.subject}`;
+/* สัดส่วนคะแนนอยู่ใน Apps Script (SCORE_WEIGHTS) — หน้าเว็บอ่านอย่างเดียว */
 function loadWeights(){
-  try{ const w = JSON.parse(localStorage.getItem(wKey())); if(w) return { ...WDEFAULT, ...w }; }catch(e){}
-  return { ...WDEFAULT };
+  const W = state.weights || {}, by = (W.bySubject||{})[state.score.subject] || {};
+  return { ...WDEFAULT, ...(W.default||{}), ...by };
 }
-function saveWeights(w){ try{ localStorage.setItem(wKey(), JSON.stringify(w)); }catch(e){} }
 const fmt1 = n => String(Math.round(n*10)/10);
 
 function computeSummary(w, ov){
@@ -1504,6 +1681,9 @@ function computeSummary(w, ov){
     if(ov && ov.t===t && ov.fb!==undefined && ov.fb!==null) fb[t] = ov.fb;      // พรีวิวตอนยังไม่เคยตั้งคะแนนเต็มจิตพิสัย
   });
   // จิตพิสัย: สัดส่วน = คะแนนที่ได้ ÷ ผลรวมคะแนนเต็มจิตพิสัย (กลางภาค+ปลายภาค) × น้ำหนักจิตพิสัย — เหมือนวิธีของงาน
+  // ถ้าตั้งคะแนนเต็มจิตพิสัยไว้แค่ครึ่งภาคเดียว ให้ครึ่งที่ยังไม่ตั้งใช้ค่าเดียวกัน — กรอกจิตพิสัยแล้วนับได้เลย ไม่ต้องรอคะแนนสอบ/ตั้งครบ
+  const fbAny = TYPES.map(t=>fb[t]).find(v=>v>0);
+  if(fbAny) TYPES.forEach(t=>{ if(!(fb[t]>0)) fb[t] = fbAny; });
   const fbSum = TYPES.reduce((a,t)=> a + (fb[t]>0 ? fb[t] : 0), 0);
   // คะแนนเต็มที่ "ได้จริง" ของแต่ละครึ่งภาค (ใช้หาเปอร์เซ็นต์ข้างช่องรวม): งาน + จิตพิสัย + สอบ เฉพาะส่วนที่ตั้งค่าไว้แล้ว
   const maxOf = t => {
@@ -1579,22 +1759,17 @@ function renderWeights(){
   box.innerHTML = `<details class="w-fold" id="wFold" ${wFoldOpen() ? "open" : ""}>
     <summary><span class="w-title">⚖️ สัดส่วนคะแนน (%) · ภาคเรียนที่ ${period.term}</span><span class="w-mini" id="wMini"></span></summary>
     <div class="w-body">
-    <div class="w-grid">${Object.keys(WLABEL).map(k=>`<label><span>${WLABEL[k]}</span><input type="number" inputmode="decimal" min="0" step="any" data-w="${k}" value="${w[k]}"></label>`).join("")}</div>
+    <div class="w-grid">${Object.keys(WLABEL).map(k=>`<label><span>${WLABEL[k]}</span><b class="w-val">${fmt1(w[k])}</b></label>`).join("")}</div>
     <div class="w-total" id="wTotal"></div>
+    <div class="hint" style="margin:6px 0 0;">✏️ อยากแก้สัดส่วน → เปิด Apps Script แล้วแก้ <b>SCORE_WEIGHTS</b> (บนสุดของไฟล์) จากนั้น Deploy › เวอร์ชันใหม่ แล้วรีเฟรชหน้านี้</div>
     <div class="w-hours"><label><span>คาบ/สัปดาห์ <small>(ใช้หาเกณฑ์ มส. = ×18 สัปดาห์ ×20%)</small></span><input type="number" inputmode="numeric" min="0" step="1" data-hw="1" placeholder="เช่น 2" value="${hw===""?"":hw}"></label></div>
     <div class="hint" style="margin:8px 0 0;">งาน = หัวคะแนนที่ตั้งชื่องานไว้ · จิตพิสัย = คะแนนที่กรอกเองในแท็บคะแนนสอบ (เทียบกับคะแนนเต็มจิตพิสัย กลางภาค+ปลายภาค) · สอบ = (ปรนัย+อัตนัย ปัดเป็นจำนวนเต็ม) ÷ คะแนนเต็ม · แตะ ✎ ข้างช่องจิตเพื่อแก้คะแนนได้เลย</div>
     </div></details>`;
   qs("#wFold").addEventListener("toggle", e=>{ try{ localStorage.setItem("kc_wFold", e.target.open ? "1" : "0"); }catch(err){} });
 }
-function readWeights(){
-  const w = {};
-  qsa("#sumWeights [data-w]").forEach(i=>{ w[i.dataset.w] = Math.max(0, numOrNull(i.value) ?? 0); });
-  return w;
-}
+const readWeights = loadWeights;
 qs("#sumWeights").addEventListener("input", e=>{
   if(e.target.dataset.hw!==undefined){ saveHoursWeek(state.score.room, state.score.subject, Math.max(0, numOrNull(e.target.value) ?? 0)); renderSumTable(); return; }
-  if(!e.target.dataset.w) return;
-  saveWeights(readWeights()); renderSumTable();
 });
 
 let sumCur = null;     // ผลสรุปล่าสุดที่วาดอยู่ (ให้ปุ่มดินสอ/ปุ่มเกรดอ้างถึง)
@@ -1628,6 +1803,22 @@ function gradeCellHTML(o, i){
   return `<td class="gcell">${main}${sub}</td>`;
 }
 
+/* ส่งคะแนนสรุปรายคน (เก็บ/จิตพิสัย/กลางภาค/ปลายภาค/รวม) ไปเก็บในคอลัมน์ "คะแนนสรุป" ของ NameList — ทำเงียบๆ ไม่บล็อกหน้าจอ */
+const _sumSent = new Map(); let _sumTimer = null;
+function syncScoreSummary(S){
+  if(state.gsOld || !S || !S.rows.length) return;
+  const { room, subject } = state.score, term = period.term;
+  const items = S.rows.map(o=>({ name:o.st.key, no:o.st.no, w:o.workm+o.workf, b:o.behm+o.behf, m:o.exm, f:o.exf, t:o.total }));
+  const sig = JSON.stringify(items), k = term+"|"+room+"|"+subject;
+  if(_sumSent.get(k)===sig) return;
+  clearTimeout(_sumTimer);
+  _sumTimer = setTimeout(async ()=>{
+    try{
+      const r = await apiPost({ type:"saveScoreSummary", term, subject, level:room, items });
+      if(r && r.success) _sumSent.set(k, sig);
+    }catch(e){}
+  }, 1500);
+}
 function renderSumTable(){
   const w = readWeights(), wrap = qs("#sumTableWrap");
   const wsum = Object.values(w).reduce((a,b)=>a+b, 0);
@@ -1640,6 +1831,7 @@ function renderSumTable(){
   if(roster.length===0){ wrap.innerHTML = `<div class="empty-note">ไม่พบรายชื่อนักเรียนในห้องนี้</div>`; qs("#sumStats").innerHTML = ""; return; }
   const S = computeSummary(w);
   sumCur = S;
+  syncScoreSummary(S);
 
   let head = `<tr class="r1"><th class="name-head" rowspan="2">ชื่อ</th><th colspan="5" class="g-mid">กลางภาค</th><th colspan="5" class="g-fin">ปลายภาค</th><th colspan="2" class="g-all">ทั้งภาค</th></tr>
     <tr class="r2"><th>งาน</th><th>จิต</th><th>สอบ</th><th class="tot">รวม</th><th class="pct">%</th><th>งาน</th><th>จิต</th><th>สอบ</th><th class="tot">รวม</th><th class="pct">%</th><th class="tot">รวม</th><th>เกรด</th></tr>`;
@@ -5046,6 +5238,7 @@ function openHrAbsentDetail(key){
     if(D.hasTable){ lines.push("", "ตามวิชา (คาบที่พลาด):"); subRows.forEach(x=> lines.push(`  ${x.s.name}: ${txt(x.u)}  [${why(x.u)}]`)); }
     toast((await copyToClipboard(lines.join("\n"))) ? "คัดลอกสรุปแล้ว ✓" : "คัดลอกไม่สำเร็จ");
   } }, { text:"ปิด", cls:"btn-outline" }];
+  actions.splice(1, 0, { text:"📸 รูปคนนี้", cls:"btn-outline", fn: ()=> hraShowStudentImage(key) });
   if(none) actions.shift();
   openSheet({ title:"ขาด ลา สาย รายคน", who:`${snum(r.st.no)}${esc(hrLabel(r.st))}`, body, actions });
 }
@@ -5060,10 +5253,11 @@ const AB_IMG_PAL = {
 AB_IMG_PAL.ab = AB_IMG_PAL.al;
 const abLevel = n => n >= 6 ? 3 : n >= 4 ? 2 : n >= 2 ? 1 : n >= 1 ? 0 : -1;
 
-async function buildHrAbsentImage(){
-  const L = hra.last; if(!L) throw new Error("ไม่มีข้อมูล");
-  const { rows, cols, cell, D } = L, isSub = hra.view === "sub";
-  const pal = AB_IMG_PAL[hra.mode];
+async function drawHrAbsentCanvas(ov){
+  const L = (ov && ov.L) || hra.last; if(!L) throw new Error("ไม่มีข้อมูล");
+  const mode = (ov && ov.mode) || hra.mode, view = (ov && ov.view) || hra.view;
+  const { rows, cols, cell, D } = L, isSub = view === "sub";
+  const pal = AB_IMG_PAL[mode];
   const FF = "'Noto Sans Thai','Sarabun',Tahoma,sans-serif";
   try{ await Promise.all(["500","700"].map(w=> document.fonts.load(`${w} 16px 'Noto Sans Thai'`, "กขคง"))); }catch(e){}
   const SC = 2, F = (w,s)=> `${w} ${s}px ${FF}`;
@@ -5078,8 +5272,10 @@ async function buildHrAbsentImage(){
   const vFont = F(600,12.5);
   const HEAD_H = isSub ? Math.min(190, Math.max(80, Math.ceil(Math.max(0, ...cols.map(c=> mw(c.label, vFont)))) + 34)) : 46;
   const tblW = NOW + NAMEW + cols.length*CELL + TOTW;
-  const title = `สรุปขาด ลา สาย · ${hr.room}`;
-  const sub = `ภาคเรียนที่ ${period.term} · ${AB_MODES[hra.mode][0]} · ${isSub ? "ตามวิชา (จำนวนคาบ)" : "ตามวัน (จำนวนวัน)"} · เช็คชื่อ Homeroom ${D.records} ครั้ง`;
+  const MT = { al:["📊","สรุปการขาด + ลา"], ab:["🚫","สรุปการขาดเรียน"], lv:["📝","สรุปการลา"] }[mode] || ["📊","สรุปขาด ลา"];
+  const title = `${MT[1]} · ${hr.room}`;
+  const BANNER = { al:["#7B61F0","#D6489B","#FF8A5B"], ab:["#BE185D","#E11D74","#FF6B9A"], lv:["#C2570C","#E08A0B","#FBBF24"] }[mode] || ["#7B61F0","#D6489B","#FF8A5B"];
+  const sub = `ภาคเรียนที่ ${period.term} · ${AB_MODES[mode][0]} · ${isSub ? "ตามวิชา (จำนวนคาบ)" : "ตามวัน (จำนวนวัน)"} · เช็คชื่อ Homeroom ${D.records} ครั้ง`;
   const W = Math.max(Math.ceil(tblW + PAD*2), Math.ceil(Math.max(mw(title, F(700,24)), mw(sub, F(500,13))) + PAD*2 + 80), 520);
   const nRows = rows.length + 1;   // + แถวรวมทั้งห้อง
   const ty = PAD + BAN_H + 12 + CHIP_H + 12, th = HEAD_H + nRows*ROW_H;
@@ -5096,14 +5292,14 @@ async function buildHrAbsentImage(){
   // แบนเนอร์หัวเรื่อง
   const bx = PAD, by = PAD, bw = W - PAD*2;
   c.save(); rr(bx,by,bw,BAN_H,20); c.clip();
-  const bgr = c.createLinearGradient(bx,by,bx+bw,by+BAN_H); bgr.addColorStop(0,"#7B61F0"); bgr.addColorStop(.55,"#D6489B"); bgr.addColorStop(1,"#FF8A5B");
+  const bgr = c.createLinearGradient(bx,by,bx+bw,by+BAN_H); bgr.addColorStop(0,BANNER[0]); bgr.addColorStop(.55,BANNER[1]); bgr.addColorStop(1,BANNER[2]);
   c.fillStyle = bgr; c.fillRect(bx,by,bw,BAN_H);
   c.fillStyle = "rgba(255,255,255,.14)"; c.beginPath(); c.arc(bx+bw-40,by+10,60,0,7); c.fill();
   c.fillStyle = "rgba(255,255,255,.10)"; c.beginPath(); c.arc(bx+bw-120,by+BAN_H+8,42,0,7); c.fill();
   c.fillStyle = "rgba(255,255,255,.10)"; c.beginPath(); c.arc(bx+30,by+BAN_H-2,32,0,7); c.fill();
   c.restore();
   c.fillStyle = "#fff"; c.textAlign = "left";
-  c.font = F(700,24); c.fillText(ell("📊 " + title, bw-40, F(700,24)), bx+22, by+31);
+  c.font = F(700,24); c.fillText(ell(MT[0] + " " + title, bw-40, F(700,24)), bx+22, by+31);
   c.font = F(500,13); c.globalAlpha = .93; c.fillText(ell(sub, bw-40, F(500,13)), bx+22, by+61); c.globalAlpha = 1;
 
   // การ์ดสรุปทั้งห้อง (วัน)
@@ -5113,10 +5309,9 @@ async function buildHrAbsentImage(){
   const chips = [
     ["ขาด (วัน)", tot.absent, "#FFE4EF", "#9D174D"],
     ["ลา (วัน)", tot.leave, "#FEF3D0", "#7A4F00"],
-    ["สาย (วัน)", tot.late, "#E0F2FE", "#075985"],
     ["นักเรียนที่มีรายการ", `${nHit}/${rows.length}`, "#EDE9FE", "#5B21B6"]
   ];
-  const gap = 10, cw = (W - PAD*2 - gap*3) / 4, cy0 = by + BAN_H + 12;
+  const gap = 10, cw = (W - PAD*2 - gap*(chips.length-1)) / chips.length, cy0 = by + BAN_H + 12;
   chips.forEach((ch, i)=>{
     const x = PAD + i*(cw+gap);
     c.save(); c.shadowColor = "rgba(60,80,140,.10)"; c.shadowBlur = 8; c.shadowOffsetY = 2; c.fillStyle = ch[2]; rr(x,cy0,cw,CHIP_H,16); c.fill(); c.restore();
@@ -5204,8 +5399,10 @@ async function buildHrAbsentImage(){
     c.textAlign = "left"; c.fillStyle = "#7C879F"; c.font = F(500,11.5);
     c.fillText(ell("คาบที่ขาด = จำนวนครั้งที่ขาดวันนั้น × จำนวนคาบของวิชานั้นในวันนั้นตามตารางเรียน", tblW, F(500,11.5)), tx, fy+24);
   }
-  return await new Promise((ok, no)=> cv.toBlob(b=> b ? ok(b) : no(new Error("สร้างรูปไม่สำเร็จ")), "image/png"));
+  return cv;
 }
+const abPng = cv => new Promise((ok, no)=> cv.toBlob(b=> b ? ok(b) : no(new Error("สร้างรูปไม่สำเร็จ")), "image/png"));
+async function buildHrAbsentImage(ov){ return abPng(await drawHrAbsentCanvas(ov)); }
 
 /* หน้าตัวอย่างรูป: คัดลอกรูป / บันทึกรูป / แชร์ (ถ้าเครื่องรองรับ) */
 function showImgPreview(blob, o){
@@ -5238,18 +5435,458 @@ function showImgPreview(blob, o){
 }
 
 async function hraShowImage(){
+  if(hra.mode === "lt"){ toast("รูปสรุปไม่รวมข้อมูล “สาย” — เลือกโหมด ขาด / ลา / ขาด+ลา ก่อนครับ"); return; }
   if(!hra.last){ toast("ยังไม่มีข้อมูลให้สร้างรูป"); return; }
   showSaving("กำลังสร้างรูป...");
   try{
     const blob = await buildHrAbsentImage(); hideSaving();
-    showImgPreview(blob, { title:"ตัวอย่างรูปสรุปขาด ลา สาย", filename:`ขาดลาสาย-${hr.room}-ภาค${period.term}-${AB_MODES[hra.mode][0]}.png` });
+    showImgPreview(blob, { title:"ตัวอย่างรูปสรุปขาด ลา", filename:`ขาดลา-${abSafe(hr.room)}-ภาค${period.term}-${abSafe(AB_MODES[hra.mode][0])}.png` });
   }catch(e){ hideSaving(); console.error(e); toast("สร้างรูปไม่สำเร็จ ลองใหม่อีกครั้ง"); }
 }
+/* ================= ภาพรวมทั้งห้อง · รูปรายคน · ZIP แยกไฟล์ · สรุป PDF =================
+   ทุกภาพวาดด้วย canvas (สไตล์เดียวกับรูปตาราง) · PDF/ZIP สร้างเองในเบราว์เซอร์ ไม่ต้องใช้ไลบรารี/เน็ต */
+const AB_FF = "'Noto Sans Thai','Sarabun',Tahoma,sans-serif";
+const AB_TXT = { absent:"#9D174D", leave:"#7A4F00", late:"#075985" };
+const AB_PALK = { absent:"al", leave:"lv", late:"lt" };
+const AB_ALL = ["absent", "leave"];   // รูป/PDF สรุป: ไม่นับ "สาย" เลย
+/* สำเนาข้อมูลสรุปที่ตัด "สาย" ออกทั้งหมด (ใช้เฉพาะตอนสร้างรูป / ZIP / PDF — หน้าจอวิเคราะห์ยังเหมือนเดิม) */
+function hraNoLate(D){
+  const rows = D.rows.map(r=>{
+    const days = {}, subs = {};
+    Object.keys(r.days).forEach(d=>{ const x = r.days[d]; if(x.absent || x.leave) days[d] = { absent:x.absent, leave:x.leave, late:0 }; });
+    Object.keys(r.subs).forEach(id=>{
+      const u = r.subs[id]; if(!(u.absent || u.leave)) return;
+      subs[id] = { absent:u.absent, leave:u.leave, late:0, parts:u.parts.map(p=> ({ d:p.d, per:p.per, x:{ absent:p.x.absent, leave:p.x.leave, late:0 } })).filter(p=> p.x.absent || p.x.leave) };
+    });
+    return { ...r, days, subs, list:r.list.filter(e=> e.kind !== "late") };
+  });
+  return { ...D, rows };
+}
+const AB_PAD = 22, AB_BAN = 84, AB_CHIP = 60;
+const abSafe = t => String(t ?? "").replace(/[\\\/:*?"<>|]+/g, "-").trim();
+const abDate = () => new Date().toLocaleDateString("th-TH", { day:"numeric", month:"long", year:"numeric" });
+let _abFonts = false;
+async function abKit(){
+  if(!_abFonts){ try{ await Promise.all(["500","600","700"].map(w=> document.fonts.load(`${w} 16px 'Noto Sans Thai'`, "กขคง"))); }catch(e){} _abFonts = true; }
+  const SC = 2, F = (w,s)=> `${w} ${s}px ${AB_FF}`;
+  const mctx = document.createElement("canvas").getContext("2d");
+  const mw = (t, f)=>{ mctx.font = f; return mctx.measureText(String(t)).width; };
+  const ell = (t, maxW, f)=>{ t = String(t); if(mw(t,f) <= maxW) return t; while(t.length>1 && mw(t+"…",f) > maxW) t = t.slice(0,-1); return t+"…"; };
+  const make = (W, H)=>{
+    H = Math.ceil(H);
+    const cv = document.createElement("canvas"); cv.width = W*SC; cv.height = H*SC;
+    const c = cv.getContext("2d"); c.scale(SC, SC); c.textBaseline = "middle";
+    const rr = (x,y,w,h,r)=>{ r = Math.min(r, w/2, h/2); c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); };
+    const bg = c.createLinearGradient(0,0,W,H); bg.addColorStop(0,"#F3F7FF"); bg.addColorStop(1,"#FFF3F9"); c.fillStyle = bg; c.fillRect(0,0,W,H);
+    return { cv, c, rr, W, H };
+  };
+  return { F, mw, ell, make };
+}
+function abBanner(K, g, title, sub){
+  const { c, rr, W } = g, { F, ell } = K, bx = AB_PAD, by = AB_PAD, bw = W - AB_PAD*2, bh = AB_BAN;
+  c.save(); rr(bx,by,bw,bh,20); c.clip();
+  const gr = c.createLinearGradient(bx,by,bx+bw,by+bh); gr.addColorStop(0,"#7B61F0"); gr.addColorStop(.55,"#D6489B"); gr.addColorStop(1,"#FF8A5B");
+  c.fillStyle = gr; c.fillRect(bx,by,bw,bh);
+  c.fillStyle = "rgba(255,255,255,.14)"; c.beginPath(); c.arc(bx+bw-40,by+10,60,0,7); c.fill();
+  c.fillStyle = "rgba(255,255,255,.10)"; c.beginPath(); c.arc(bx+bw-120,by+bh+8,42,0,7); c.fill();
+  c.fillStyle = "rgba(255,255,255,.10)"; c.beginPath(); c.arc(bx+30,by+bh-2,32,0,7); c.fill();
+  c.restore();
+  c.fillStyle = "#fff"; c.textAlign = "left";
+  c.font = F(700,24); c.fillText(ell(title, bw-44, F(700,24)), bx+22, by+31);
+  c.font = F(500,13); c.globalAlpha = .93; c.fillText(ell(sub, bw-44, F(500,13)), bx+22, by+61); c.globalAlpha = 1;
+}
+function abChips(K, g, y, items){
+  const { c, rr, W } = g, { F, ell } = K, gap = 10, cw = (W - AB_PAD*2 - gap*(items.length-1)) / items.length;
+  items.forEach((ch, i)=>{
+    const x = AB_PAD + i*(cw+gap);
+    c.save(); c.shadowColor = "rgba(60,80,140,.10)"; c.shadowBlur = 8; c.shadowOffsetY = 2; c.fillStyle = ch[2]; rr(x,y,cw,AB_CHIP,16); c.fill(); c.restore();
+    c.textAlign = "center"; c.fillStyle = ch[3];
+    c.font = F(600,12); c.globalAlpha = .85; c.fillText(ell(ch[0], cw-12, F(600,12)), x+cw/2, y+17); c.globalAlpha = 1;
+    c.font = F(700,24); c.fillText(String(ch[1]), x+cw/2, y+40);
+  });
+}
+function abCard(g, x, y, w, h){ const { c, rr } = g; c.save(); c.shadowColor = "rgba(60,80,140,.16)"; c.shadowBlur = 14; c.shadowOffsetY = 3; c.fillStyle = "#fff"; rr(x,y,w,h,16); c.fill(); c.restore(); }
+function abSecTitle(K, g, x, y, text, note){
+  const { c } = g, { F, mw } = K; c.textAlign = "left"; c.fillStyle = "#2B3A67"; c.font = F(700,16); c.fillText(text, x, y);
+  if(note){ c.fillStyle = "#7C879F"; c.font = F(500,12); c.fillText(note, x + mw(text, F(700,16)) + 10, y+1); }
+}
+function abStack(g, x, y, w, h, o, kinds, max){
+  const { c, rr } = g; c.save(); rr(x,y,w,h,h/2); c.fillStyle = "#EDF0F8"; c.fill(); c.clip();
+  let cx = x; kinds.forEach(k=>{ const v = (o && o[k]) || 0; if(!v) return; const sw = v / max * w; c.fillStyle = AB_COL[k]; c.fillRect(cx,y,sw,h); cx += sw; });
+  c.restore();
+}
+function abNum(K, g, cx, cy, v, kind){
+  const { c, rr } = g, { F } = K, lv = abLevel(v); c.textAlign = "center";
+  if(lv >= 0){ const p = AB_IMG_PAL[AB_PALK[kind]].cells[lv]; c.fillStyle = p[0]; rr(cx-19,cy-12,38,24,9); c.fill(); c.fillStyle = p[1]; c.font = F(700,14); c.fillText(String(v), cx, cy+.5); }
+  else{ c.fillStyle = "#C5CCDD"; c.font = F(500,14); c.fillText("·", cx, cy); }
+}
+function abTot(K, g, cx, cy, v, hot){
+  const { c, rr } = g, { F, mw } = K; c.textAlign = "center";
+  if(v > 0){ const t = String(v), pw = Math.max(38, mw(t, F(700,14)) + 20); c.fillStyle = hot ? "#E11D74" : "#E6EBF8"; rr(cx-pw/2,cy-12,pw,24,12); c.fill(); c.fillStyle = hot ? "#fff" : "#2B3A67"; c.font = F(700,14); c.fillText(t, cx, cy+.5); }
+  else{ c.fillStyle = "#C5CCDD"; c.font = F(500,14); c.fillText("·", cx, cy); }
+}
+function abCounts(K, g, x, cy, o){
+  const { c } = g, { F, mw } = K; c.textAlign = "left"; let px = x, any = false;
+  AB_ALL.forEach(k=>{ const v = (o && o[k]) || 0; if(!v) return; any = true; const t = `${AB_KIND[k][2]} ${v}`; c.fillStyle = AB_TXT[k]; c.font = F(700,13); c.fillText(t, px, cy); px += mw(t, F(700,13)) + 12; });
+  if(!any){ c.fillStyle = "#B4BCD0"; c.font = F(500,13); c.fillText("—", x, cy); }
+}
+function abFooter(K, g, y, note){
+  const { c, W } = g, { F, ell } = K;
+  c.textAlign = "right"; c.fillStyle = "#7C879F"; c.font = F(500,12); c.fillText(`สร้างเมื่อ ${abDate()}`, W-AB_PAD-4, y);
+  if(note){ c.textAlign = "left"; c.fillText(ell(note, W - AB_PAD*2 - 150, F(500,12)), AB_PAD+4, y); }
+}
+const abSubPlain = (D, d) => Object.keys(D.dayMap[d] || {}).map(id=>{ const s = D.subjects.find(x=>x.id === id), n = D.dayMap[d][id]; return s ? s.name + (n > 1 ? ` ×${n}` : "") : ""; }).filter(Boolean).join(" · ");
+const abSumAll = o => AB_ALL.reduce((t, k)=> t + ((o && o[k]) || 0), 0);
+
+/* ---------- ภาพรวมทั้งห้อง: ตามวัน + ตามวิชา (ขาด/ลา/สาย แยกคอลัมน์) + นักเรียนมากสุด 5 อันดับ ---------- */
+async function drawHrOverviewCanvas(){
+  const K = await abKit(), { F, mw, ell } = K, D = hraNoLate(hra.data || hraCompute());
+  const W = 820, CW = W - AB_PAD*2, X0 = AB_PAD + 16, IW = CW - 32;
+  const agg = f => { const o = { absent:0, leave:0, late:0 }; D.rows.forEach(r=>{ const x = f(r); if(x) AB_ALL.forEach(k=> o[k] += x[k]); }); return o; };
+  const dayAgg = AB_DAYS.map(d=>{ const o = agg(r=> r.days[d[0]]); return { d, o, n:abSumAll(o) }; });
+  const subAgg = D.subjects.map(s=>{ const o = agg(r=> r.subs[s.id]); return { s, o, n:abSumAll(o) }; })
+    .sort((a, b)=> (b.o.absent + b.o.leave) - (a.o.absent + a.o.leave) || b.n - a.n || b.s.week - a.s.week || a.s.name.localeCompare(b.s.name, "th"));
+  const stuAgg = D.rows.map(r=>{ const o = { absent:0, leave:0, late:0 }; Object.values(r.days).forEach(x=> AB_ALL.forEach(k=> o[k] += x[k])); return { r, o, n:abSumAll(o) }; })
+    .filter(x=> x.n > 0).sort((a, b)=> (b.o.absent + b.o.leave) - (a.o.absent + a.o.leave) || b.n - a.n || (Number(a.r.st.no) || 0) - (Number(b.r.st.no) || 0)).slice(0, 5);
+  const tot = agg(r=> { const o = { absent:0, leave:0, late:0 }; Object.values(r.days).forEach(x=> AB_ALL.forEach(k=> o[k] += x[k])); return o; });
+  const nHit = D.rows.filter(r=> r.list.length).length;
+  const maxD = Math.max(1, ...dayAgg.map(x=> x.n)), maxS = Math.max(1, ...subAgg.map(x=> x.n)), maxU = Math.max(1, ...stuAgg.map(x=> x.n));
+
+  const HEAD = 46, ROW_D = 50, ROW_S = 44, ROW_U = 38, GAP = 14;
+  const hDay = HEAD + AB_DAYS.length*ROW_D + 10;
+  const hSub = D.hasTable ? HEAD + 26 + subAgg.length*ROW_S + 10 : HEAD + 46;
+  const hStu = stuAgg.length ? HEAD + 26 + stuAgg.length*ROW_U + 10 : 0;
+  const top = AB_PAD + AB_BAN + 12 + AB_CHIP + 16;
+  const H = top + hDay + GAP + hSub + (hStu ? GAP + hStu : 0) + 22 + 26;
+  const g = K.make(W, H), { c, rr } = g;
+
+  abBanner(K, g, `ภาพรวมขาด ลา ทั้งห้อง · ${hr.room}`, `ภาคเรียนที่ ${period.term} · เช็คชื่อ Homeroom ${D.records} ครั้ง · นักเรียน ${D.rows.length} คน`);
+  abChips(K, g, AB_PAD + AB_BAN + 12, [
+    ["ขาด (วัน)", tot.absent, "#FFE4EF", "#9D174D"], ["ลา (วัน)", tot.leave, "#FEF3D0", "#7A4F00"],
+    ["นักเรียนที่มีรายการ", `${nHit}/${D.rows.length}`, "#EDE9FE", "#5B21B6"]
+  ]);
+
+  // การ์ด 1: ตามวัน
+  let y = top; abCard(g, AB_PAD, y, CW, hDay);
+  abSecTitle(K, g, X0, y+23, "ตามวัน → วิชาที่เรียนวันนั้น", "(จำนวนวัน)");
+  dayAgg.forEach((x, i)=>{
+    const y0 = y + HEAD + i*ROW_D;
+    if(i){ c.strokeStyle = "#EEF1F8"; c.lineWidth = 1; c.beginPath(); c.moveTo(X0, y0-.5); c.lineTo(X0+IW, y0-.5); c.stroke(); }
+    c.textAlign = "left"; c.fillStyle = "#1F2A44"; c.font = F(700,15); c.fillText(x.d[2], X0, y0+17);
+    abStack(g, X0+96, y0+11, 250, 12, x.o, AB_ALL, maxD);
+    abCounts(K, g, X0+96+250+14, y0+17, x.o);
+    abTot(K, g, X0+IW-22, y0+17, x.n, x.n === maxD && x.n > 0);
+    c.textAlign = "left"; c.fillStyle = "#6B7690"; c.font = F(500,12.5);
+    c.fillText(ell(abSubPlain(D, x.d[0]) || "ไม่มีในตาราง", IW-10, F(500,12.5)), X0, y0+37);
+  });
+
+  // การ์ด 2: ตามวิชา
+  y += hDay + GAP; abCard(g, AB_PAD, y, CW, hSub);
+  abSecTitle(K, g, X0, y+23, "ตามวิชา · คาบที่ขาด / ลา", "(จำนวนคาบ · มาก→น้อย)");
+  const C1 = X0+480, C2 = X0+560, CT = X0+650;
+  const colHead = (yy)=>{ c.textAlign = "center"; c.fillStyle = "#7C879F"; c.font = F(700,12); c.fillText("ขาด", C1, yy); c.fillText("ลา", C2, yy); c.fillText("รวม", CT, yy); };
+  if(!D.hasTable){
+    c.textAlign = "left"; c.fillStyle = "#B3261E"; c.font = F(500,13.5); c.fillText("ยังไม่ได้จัดตารางเรียน — จัดตารางเรียนก่อน ระบบจึงจะคำนวณเป็นรายวิชาได้", X0, y+HEAD+10);
+  }else{
+    colHead(y + HEAD + 8);
+    subAgg.forEach((x, i)=>{
+      const y0 = y + HEAD + 26 + i*ROW_S, cy = y0 + ROW_S/2;
+      if(i){ c.strokeStyle = "#EEF1F8"; c.lineWidth = 1; c.beginPath(); c.moveTo(X0, y0-.5); c.lineTo(X0+IW, y0-.5); c.stroke(); }
+      c.textAlign = "left"; c.fillStyle = "#1F2A44"; c.font = F(700,14); c.fillText(ell(x.s.name, 246, F(700,14)), X0, y0+15);
+      const sch = Object.keys(x.s.perDay).sort().map(d=> AB_DAYS.find(a=> a[0] === Number(d))[1] + (x.s.perDay[d] > 1 ? "×" + x.s.perDay[d] : "")).join(" ");
+      c.fillStyle = "#7C879F"; c.font = F(500,11.5); c.fillText(ell(`เรียน ${sch} · ${x.s.week} คาบ/สัปดาห์`, 246, F(500,11.5)), X0, y0+32);
+      abStack(g, X0+256, cy-6, 170, 12, x.o, AB_ALL, maxS);
+      abNum(K, g, C1, cy, x.o.absent, "absent"); abNum(K, g, C2, cy, x.o.leave, "leave");
+      abTot(K, g, CT, cy, x.n, false);
+    });
+  }
+
+  // การ์ด 3: นักเรียนมากสุด
+  if(stuAgg.length){
+    y += hSub + GAP; abCard(g, AB_PAD, y, CW, hStu);
+    abSecTitle(K, g, X0, y+23, "นักเรียนที่ขาด+ลา มากสุด 5 อันดับ", "(จำนวนวัน)");
+    colHead(y + HEAD + 8);
+    stuAgg.forEach((x, i)=>{
+      const y0 = y + HEAD + 26 + i*ROW_U, cy = y0 + ROW_U/2;
+      if(i){ c.strokeStyle = "#EEF1F8"; c.lineWidth = 1; c.beginPath(); c.moveTo(X0, y0-.5); c.lineTo(X0+IW, y0-.5); c.stroke(); }
+      c.fillStyle = i === 0 ? "#E11D74" : "#E6EBF8"; c.beginPath(); c.arc(X0+11, cy, 11, 0, 7); c.fill();
+      c.textAlign = "center"; c.fillStyle = i === 0 ? "#fff" : "#2B3A67"; c.font = F(700,12); c.fillText(String(i+1), X0+11, cy+.5);
+      c.textAlign = "left"; c.fillStyle = "#1F2A44"; c.font = F(600,14); c.fillText(ell(`${hrLabel(x.r.st)} · เลขที่ ${x.r.st.no}`, 226, F(600,14)), X0+30, cy);
+      abStack(g, X0+256, cy-6, 170, 12, x.o, AB_ALL, maxU);
+      abNum(K, g, C1, cy, x.o.absent, "absent"); abNum(K, g, C2, cy, x.o.leave, "leave");
+      abTot(K, g, CT, cy, x.n, false);
+    });
+  }
+  abFooter(K, g, H - 22, D.hasTable ? "คาบที่ขาด = จำนวนครั้งที่ขาดวันนั้น × จำนวนคาบของวิชานั้นในวันนั้นตามตารางเรียน" : "");
+  return g.cv;
+}
+
+/* ---------- รูปรายคน: ตามวัน · ตามวิชา · รายการล่าสุด ---------- */
+async function drawHrStudentCanvas(key){
+  const D = hraNoLate(hra.data || hraCompute()), r = D.rows.find(x=> x.st.key === key); if(!r) throw new Error("ไม่พบนักเรียน");
+  const K = await abKit(), { F, mw, ell } = K, st = r.st;
+  const W = 760, CW = W - AB_PAD*2, X0 = AB_PAD + 16, IW = CW - 32;
+  const tot = { absent:0, leave:0, late:0 }; Object.values(r.days).forEach(x=> AB_ALL.forEach(k=> tot[k] += x[k]));
+  const all = abSumAll(tot), none = !r.list.length;
+  const dayRows = AB_DAYS.map(d=>({ d, o:r.days[d[0]] || {}, n:abSumAll(r.days[d[0]]) }));
+  const subRows = D.subjects.map(s=>({ s, u:r.subs[s.id] })).filter(x=> x.u).map(x=> ({ ...x, n:abSumAll(x.u) }))
+    .sort((a, b)=> b.n - a.n || a.s.name.localeCompare(b.s.name, "th"));
+  const evs = r.list.slice().sort((a, b)=> a.date < b.date ? 1 : -1);
+  const evShow = evs.slice(0, 12);
+  const maxD = Math.max(1, ...dayRows.map(x=> x.n)), maxS = Math.max(1, ...subRows.map(x=> x.n));
+  const why = u => u.parts.map(p=> `${AB_DAYS.find(a=> a[0] === p.d)[1]} ${abSumAll(p.x)} ครั้ง${p.per > 1 ? ` × ${p.per} คาบ` : ""}`).join(" + ");
+
+  const HEAD = 46, ROW_D = 50, ROW_S = 44, ROW_E = 30, GAP = 14;
+  const hDay = HEAD + dayRows.length*ROW_D + 10;
+  const hSub = D.hasTable ? (subRows.length ? HEAD + 26 + subRows.length*ROW_S + 10 : 0) : HEAD + 34;
+  const hEv = evShow.length ? HEAD + Math.ceil(evShow.length/2)*ROW_E + 10 : 0;
+  const hNone = 120;
+  const top = AB_PAD + AB_BAN + 12 + AB_CHIP + 16;
+  const H = top + (none ? hNone : hDay + (hSub ? GAP + hSub : 0) + (hEv ? GAP + hEv : 0)) + 22 + 26;
+  const g = K.make(W, H), { c, rr } = g;
+
+  abBanner(K, g, hrLabel(st), `เลขที่ ${st.no} · ห้อง ${hr.room} · ภาคเรียนที่ ${period.term} · สรุปขาด ลา`);
+  abChips(K, g, AB_PAD + AB_BAN + 12, [
+    ["ขาด (วัน)", tot.absent, "#FFE4EF", "#9D174D"], ["ลา (วัน)", tot.leave, "#FEF3D0", "#7A4F00"],
+    ["รวมทั้งหมด (ครั้ง)", all, "#EDE9FE", "#5B21B6"]
+  ]);
+  let y = top;
+  if(none){
+    abCard(g, AB_PAD, y, CW, hNone);
+    c.textAlign = "center"; c.fillStyle = "#1B8A43"; c.font = F(700,22); c.fillText("🎉 ยังไม่เคยขาดหรือลา", W/2, y+48);
+    c.fillStyle = "#7C879F"; c.font = F(500,13); c.fillText(`จากการเช็คชื่อ Homeroom ${D.records} ครั้ง ภาคเรียนที่ ${period.term}`, W/2, y+82);
+    abFooter(K, g, H - 22, "");
+    return g.cv;
+  }
+  // ตามวัน
+  abCard(g, AB_PAD, y, CW, hDay);
+  abSecTitle(K, g, X0, y+23, "ตามวัน", "(จำนวนวัน)");
+  dayRows.forEach((x, i)=>{
+    const y0 = y + HEAD + i*ROW_D;
+    if(i){ c.strokeStyle = "#EEF1F8"; c.lineWidth = 1; c.beginPath(); c.moveTo(X0, y0-.5); c.lineTo(X0+IW, y0-.5); c.stroke(); }
+    c.textAlign = "left"; c.fillStyle = x.n ? "#1F2A44" : "#7C879F"; c.font = F(700,15); c.fillText(x.d[2], X0, y0+17);
+    abStack(g, X0+96, y0+11, 230, 12, x.o, AB_ALL, maxD);
+    abCounts(K, g, X0+96+230+14, y0+17, x.o);
+    abTot(K, g, X0+IW-22, y0+17, x.n, x.n === maxD && x.n > 0);
+    c.textAlign = "left"; c.fillStyle = "#6B7690"; c.font = F(500,12.5);
+    c.fillText(ell(abSubPlain(D, x.d[0]) || "ไม่มีในตาราง", IW-10, F(500,12.5)), X0, y0+37);
+  });
+  // ตามวิชา
+  if(hSub){
+    y += hDay + GAP; abCard(g, AB_PAD, y, CW, hSub);
+    abSecTitle(K, g, X0, y+23, "ตามวิชา · คาบที่พลาด", "(มาก→น้อย)");
+    if(!D.hasTable){
+      c.textAlign = "left"; c.fillStyle = "#B3261E"; c.font = F(500,13.5); c.fillText("ยังไม่ได้จัดตารางเรียน จึงยังแยกเป็นรายวิชาไม่ได้", X0, y+HEAD+8);
+    }else{
+      const C1 = X0+440, C2 = X0+510, CT = X0+600;
+      c.textAlign = "center"; c.fillStyle = "#7C879F"; c.font = F(700,12); const hy = y + HEAD + 8;
+      c.fillText("ขาด", C1, hy); c.fillText("ลา", C2, hy); c.fillText("รวม", CT, hy);
+      subRows.forEach((x, i)=>{
+        const y0 = y + HEAD + 26 + i*ROW_S, cy = y0 + ROW_S/2;
+        if(i){ c.strokeStyle = "#EEF1F8"; c.lineWidth = 1; c.beginPath(); c.moveTo(X0, y0-.5); c.lineTo(X0+IW, y0-.5); c.stroke(); }
+        c.textAlign = "left"; c.fillStyle = "#1F2A44"; c.font = F(700,14); c.fillText(ell(x.s.name, 226, F(700,14)), X0, y0+15);
+        c.fillStyle = "#7C879F"; c.font = F(500,11.5); c.fillText(ell(why(x.u), 226, F(500,11.5)), X0, y0+32);
+        abStack(g, X0+236, cy-6, 140, 12, x.u, AB_ALL, maxS);
+        abNum(K, g, C1, cy, x.u.absent, "absent"); abNum(K, g, C2, cy, x.u.leave, "leave");
+        abTot(K, g, CT, cy, x.n, false);
+      });
+    }
+  }
+  // รายการล่าสุด
+  if(hEv){
+    y += (hSub ? hSub : hDay) + GAP;
+    abCard(g, AB_PAD, y, CW, hEv);
+    abSecTitle(K, g, X0, y+23, "รายการล่าสุด", evs.length > evShow.length ? `(แสดง ${evShow.length} จาก ${evs.length} รายการ)` : `(${evs.length} รายการ)`);
+    evShow.forEach((ev, i)=>{
+      const col = i % 2, row = Math.floor(i/2), x = X0 + col*(IW/2 + 4), cy = y + HEAD + row*ROW_E + ROW_E/2;
+      c.fillStyle = AB_COL[ev.kind]; c.beginPath(); c.arc(x+5, cy, 5, 0, 7); c.fill();
+      c.textAlign = "left"; c.fillStyle = "#2B3445"; c.font = F(600,13);
+      c.fillText(ell(`${fmtThShort(ev.date)} (${AB_DAYS.find(d=> d[0] === ev.dow)[1]})`, IW/2 - 96, F(600,13)), x+18, cy);
+      const lbl = AB_KIND[ev.kind][2], pw = 46, px = x + IW/2 - 30 - pw;
+      c.fillStyle = AB_IMG_PAL[AB_PALK[ev.kind]].cells[0][0]; rr(px, cy-11, pw, 22, 11); c.fill();
+      c.textAlign = "center"; c.fillStyle = AB_TXT[ev.kind]; c.font = F(700,12); c.fillText(lbl, px+pw/2, cy+.5);
+    });
+  }
+  abFooter(K, g, H - 22, D.hasTable ? "คาบที่พลาด = จำนวนครั้งที่ขาดวันนั้น × จำนวนคาบของวิชานั้นในวันนั้นตามตารางเรียน" : "");
+  return g.cv;
+}
+
+/* ---------- ตารางทั้งห้องแบบกำหนดโหมด/มุมมองเอง (ใช้ในรายงาน PDF) ---------- */
+function hraMatrix(D, mode, view){
+  const kinds = AB_MODES[mode][1];
+  const subAgg = D.subjects.map(s=>{ const o = { absent:0, leave:0, late:0 }; D.rows.forEach(r=>{ const x = r.subs[s.id]; if(x) Object.keys(o).forEach(k=> o[k] += x[k]); }); return { s, n:abSum(o, kinds) }; })
+    .sort((a, b)=> b.n - a.n || b.s.week - a.s.week || a.s.name.localeCompare(b.s.name, "th"));
+  const cols = view === "day" ? AB_DAYS.map(d=>({ key:d[0], label:d[1], title:d[2] })) : subAgg.map(x=>({ key:x.s.id, label:x.s.name, title:x.s.name + " (คาบ)" }));
+  const cell = (r, c) => abSum(view === "day" ? r.days[c.key] : r.subs[c.key], kinds);
+  const rows = D.rows.map(r=>({ r, total:cols.reduce((t, c)=> t + cell(r, c), 0) })).sort((a, b)=> (Number(a.r.st.no) || 0) - (Number(b.r.st.no) || 0));
+  return { rows, cols, cell, D };
+}
+
+/* ---------- เขียนไฟล์ ZIP (เก็บแบบไม่บีบอัด) และ PDF (ฝังภาพ JPEG หน้าละภาพ) เอง ---------- */
+const _crcT = (()=>{ const t = new Uint32Array(256); for(let n=0;n<256;n++){ let c = n; for(let k=0;k<8;k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const abCrc = u8 => { let c = 0xFFFFFFFF; for(let i=0;i<u8.length;i++) c = _crcT[(c ^ u8[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+function abZip(files){
+  const enc = new TextEncoder(), parts = [], cen = []; let off = 0;
+  const d = new Date(), dt = ((d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1)) & 0xFFFF, dd = (((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()) & 0xFFFF;
+  files.forEach(f=>{
+    const nm = enc.encode(f.name), crc = abCrc(f.data), sz = f.data.length;
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0,0x04034b50,true); lh.setUint16(4,20,true); lh.setUint16(6,0x0800,true); lh.setUint16(8,0,true); lh.setUint16(10,dt,true); lh.setUint16(12,dd,true);
+    lh.setUint32(14,crc,true); lh.setUint32(18,sz,true); lh.setUint32(22,sz,true); lh.setUint16(26,nm.length,true); lh.setUint16(28,0,true);
+    parts.push(new Uint8Array(lh.buffer), nm, f.data);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0,0x02014b50,true); ch.setUint16(4,20,true); ch.setUint16(6,20,true); ch.setUint16(8,0x0800,true); ch.setUint16(10,0,true); ch.setUint16(12,dt,true); ch.setUint16(14,dd,true);
+    ch.setUint32(16,crc,true); ch.setUint32(20,sz,true); ch.setUint32(24,sz,true); ch.setUint16(28,nm.length,true); ch.setUint16(30,0,true); ch.setUint16(32,0,true); ch.setUint16(34,0,true); ch.setUint16(36,0,true); ch.setUint32(38,0,true); ch.setUint32(42,off,true);
+    cen.push(new Uint8Array(ch.buffer), nm);
+    off += 30 + nm.length + sz;
+  });
+  const cdSize = cen.reduce((t, u)=> t + u.length, 0), end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0,0x06054b50,true); end.setUint16(4,0,true); end.setUint16(6,0,true); end.setUint16(8,files.length,true); end.setUint16(10,files.length,true); end.setUint32(12,cdSize,true); end.setUint32(16,off,true); end.setUint16(20,0,true);
+  return new Blob([...parts, ...cen, new Uint8Array(end.buffer)], { type:"application/zip" });
+}
+const AB_PW = 1654, AB_PH = 2339;   // A4 ที่ 200 dpi
+function abPdf(pages){
+  const PW = 595.28, PH = 841.89, enc = new TextEncoder(), parts = [], offs = []; let len = 0;
+  const push = u8 => { parts.push(u8); len += u8.length; }, str = t => push(enc.encode(t));
+  const obj = (id, fn)=>{ offs[id] = len; str(`${id} 0 obj\n`); fn(); str("\nendobj\n"); };
+  const n = pages.length;
+  str("%PDF-1.4\n%\u00e2\u00e3\u00cf\u00d3\n");
+  obj(1, ()=> str("<< /Type /Catalog /Pages 2 0 R >>"));
+  obj(2, ()=> str(`<< /Type /Pages /Count ${n} /Kids [${pages.map((_, i)=> `${3 + 3*i} 0 R`).join(" ")}] >>`));
+  pages.forEach((p, i)=>{
+    const pid = 3 + 3*i, cid = 4 + 3*i, iid = 5 + 3*i, content = `q ${PW} 0 0 ${PH} 0 0 cm /Im0 Do Q`;
+    obj(pid, ()=> str(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PW} ${PH}] /Resources << /XObject << /Im0 ${iid} 0 R >> >> /Contents ${cid} 0 R >>`));
+    obj(cid, ()=> str(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`));
+    obj(iid, ()=>{ str(`<< /Type /XObject /Subtype /Image /Width ${p.w} /Height ${p.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.jpeg.length} >>\nstream\n`); push(p.jpeg); str("\nendstream"); });
+  });
+  const xref = len, total = 3*n + 3;
+  str(`xref\n0 ${total}\n0000000000 65535 f \n`);
+  for(let id = 1; id < total; id++) str(String(offs[id]).padStart(10, "0") + " 00000 n \n");
+  str(`trailer\n<< /Size ${total} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
+  return new Blob(parts, { type:"application/pdf" });
+}
+/* วางภาพลงหน้า A4 (พื้นหลังไล่สีเดียวกัน + เลขหน้า) แล้วแปลงเป็น JPEG */
+async function abPageJpeg(src, i, n){
+  const cv = document.createElement("canvas"); cv.width = AB_PW; cv.height = AB_PH;
+  const c = cv.getContext("2d"), M = 48;
+  const bg = c.createLinearGradient(0,0,AB_PW,AB_PH); bg.addColorStop(0,"#F3F7FF"); bg.addColorStop(1,"#FFF3F9"); c.fillStyle = bg; c.fillRect(0,0,AB_PW,AB_PH);
+  const sw = src.width / 2, sh = src.height / 2, sc = Math.min((AB_PW - M*2) / sw, (AB_PH - M*2 - 36) / sh, 2.1), w = sw*sc, h = sh*sc;
+  c.imageSmoothingEnabled = true; c.imageSmoothingQuality = "high"; c.drawImage(src, (AB_PW - w)/2, M, w, h);
+  c.fillStyle = "#8A94AD"; c.font = `500 22px ${AB_FF}`; c.textAlign = "center"; c.textBaseline = "middle";
+  c.fillText(`${hr.room} · ภาคเรียนที่ ${period.term} · หน้า ${i}/${n}`, AB_PW/2, AB_PH - 38);
+  const blob = await new Promise(ok=> cv.toBlob(ok, "image/jpeg", 0.9));
+  return { jpeg:new Uint8Array(await blob.arrayBuffer()), w:AB_PW, h:AB_PH };
+}
+
+/* ---------- หน้าต่างผลลัพธ์ไฟล์ (บันทึก / แชร์) ---------- */
+function showFileResult(blob, o){
+  const old = qs("#modalFileRes"); if(old){ const a = qs("#frSave", old); if(a && a.dataset.url) URL.revokeObjectURL(a.dataset.url); old.remove(); }
+  const url = URL.createObjectURL(blob);
+  const file = (window.File ? new File([blob], o.filename, { type:o.mime }) : null);
+  const canShare = !!(file && navigator.canShare && navigator.canShare({ files:[file] }));
+  const m = document.createElement("div"); m.className = "modal-backdrop"; m.id = "modalFileRes";
+  m.innerHTML = `<div class="modal-sheet"><h3>${o.icon} ${esc(o.title)}</h3>
+    <p class="hint" style="margin:-8px 0 14px;">${esc(o.note)} · ขนาด ${(blob.size/1048576).toFixed(1)} MB</p>
+    <div class="modal-actions" style="flex-wrap:wrap;"><button class="btn btn-outline" data-close>ปิด</button>${canShare ? `<button class="btn btn-outline" id="frShare">📤 แชร์</button>` : ""}<a class="btn btn-primary" id="frSave" download="${esc(o.filename)}" style="text-align:center; text-decoration:none;">💾 บันทึกไฟล์</a></div></div>`;
+  const a = qs("#frSave", m); a.href = url; a.dataset.url = url;
+  document.body.appendChild(m);
+  const close = ()=>{ m.classList.remove("active"); setTimeout(()=>{ URL.revokeObjectURL(url); m.remove(); }, 450); };
+  qs("[data-close]", m).addEventListener("click", close);
+  m.addEventListener("click", e=>{ if(e.target===m) close(); });
+  if(canShare) qs("#frShare", m).addEventListener("click", async ()=>{ try{ await navigator.share({ files:[file], title:o.title }); }catch(e){ /* ผู้ใช้ยกเลิก */ } });
+  requestAnimationFrame(()=> m.classList.add("active"));
+}
+const abTick = () => new Promise(r=> setTimeout(r, 0));
+const abProgress = t => { const el = qs("#savingMsg"); if(el) el.textContent = t; };
+
+/* ---------- คำสั่งที่ปุ่มเรียก ---------- */
+async function hraShowOverviewImage(){
+  showSaving("กำลังสร้างรูป...");
+  try{
+    const blob = await abPng(await drawHrOverviewCanvas()); hideSaving();
+    showImgPreview(blob, { title:"ตัวอย่างรูปภาพรวมทั้งห้อง", filename:`ภาพรวมขาดลา-${abSafe(hr.room)}-ภาค${period.term}.png` });
+  }catch(e){ hideSaving(); console.error(e); toast("สร้างรูปไม่สำเร็จ ลองใหม่อีกครั้ง"); }
+}
+async function hraShowStudentImage(key){
+  showSaving("กำลังสร้างรูป...");
+  try{
+    const D = hra.data || hraCompute(), r = D.rows.find(x=> x.st.key === key);
+    const blob = await abPng(await drawHrStudentCanvas(key)); hideSaving();
+    showImgPreview(blob, { title:"ตัวอย่างรูปรายคน", filename:`${String(r.st.no).padStart(2, "0")}-${abSafe(r.st.name)}-ขาดลา.png` });
+  }catch(e){ hideSaving(); console.error(e); toast("สร้างรูปไม่สำเร็จ ลองใหม่อีกครั้ง"); }
+}
+async function hraStudentsZip(){
+  const D = hra.data || hraCompute(), rows = D.rows.slice().sort((a, b)=> (Number(a.st?.no ?? a.no) || 0) - (Number(b.st?.no ?? b.no) || 0));
+  if(!rows.length){ toast("ไม่พบรายชื่อนักเรียน"); return; }
+  showSaving("กำลังสร้างรูปรายคน...");
+  try{
+    const files = [];
+    for(let i = 0; i < rows.length; i++){
+      abProgress(`กำลังสร้างรูปรายคน ${i+1}/${rows.length}`); await abTick();
+      const st = rows[i].st, blob = await abPng(await drawHrStudentCanvas(st.key));
+      files.push({ name:`${String(st.no).padStart(2, "0")}-${abSafe(st.name)}.png`, data:new Uint8Array(await blob.arrayBuffer()) });
+    }
+    const zip = abZip(files); hideSaving();
+    showFileResult(zip, { icon:"🗂️", title:"รูปรายคนทั้งห้อง (ZIP)", note:`${files.length} รูป แยกไฟล์ตามเลขที่ — แตกไฟล์แล้วส่งให้นักเรียน/ผู้ปกครองรายคนได้`, filename:`รูปรายคน-ขาดลา-${abSafe(hr.room)}-ภาค${period.term}.zip`, mime:"application/zip" });
+  }catch(e){ hideSaving(); console.error(e); toast("สร้างไฟล์ ZIP ไม่สำเร็จ ลองใหม่อีกครั้ง"); }
+}
+function hraPdfOptions(){
+  openSheet({ title:"สรุป PDF ขาด ลา", who:`${esc(hr.room)} · ภาคเรียนที่ ${esc(period.term)}`,
+    body:`<div style="display:flex; flex-direction:column; gap:10px; margin-bottom:14px; font-size:14.5px;">
+      <label style="display:flex; gap:10px; align-items:flex-start;"><input type="checkbox" id="pdfOv" checked style="margin-top:4px;"><span><b>ภาพรวมทั้งห้อง</b><br><small style="color:var(--ink-soft);">ตามวัน · ตามวิชา (ขาด/ลา) · นักเรียนมากสุด 5 อันดับ</small></span></label>
+      <label style="display:flex; gap:10px; align-items:flex-start;"><input type="checkbox" id="pdfSub" checked style="margin-top:4px;"><span><b>ตารางทั้งห้องแยกตามวิชา</b><br><small style="color:var(--ink-soft);">หน้า “ขาด” และหน้า “ลา” — นักเรียนทุกคน × ทุกวิชา</small></span></label>
+      <label style="display:flex; gap:10px; align-items:flex-start;"><input type="checkbox" id="pdfStu" checked style="margin-top:4px;"><span><b>รายคน (หน้าละ 1 คน)</b><br><small style="color:var(--ink-soft);">ขาด ลา แต่ละวัน แต่ละวิชา และรายการล่าสุด</small></span></label>
+      <label style="display:flex; gap:10px; align-items:flex-start; margin-left:28px;"><input type="checkbox" id="pdfAll" checked style="margin-top:4px;"><span>รวมคนที่ไม่เคยขาด ลา ด้วย <small style="color:var(--ink-soft);">(ปิดเพื่อให้ไฟล์สั้นลง)</small></span></label>
+    </div>`,
+    actions:[{ text:"ยกเลิก", cls:"btn-outline" }, { text:"📄 สร้าง PDF", cls:"btn-primary", fn: ()=>{
+      hraMakePdf({ overview:qs("#pdfOv").checked, subjects:qs("#pdfSub").checked, students:qs("#pdfStu").checked, all:qs("#pdfAll").checked });
+    } }] });
+}
+async function hraMakePdf(opt){
+  const D = hraNoLate(hra.data || hraCompute()), jobs = [];
+  if(opt.overview) jobs.push(()=> drawHrOverviewCanvas());
+  if(opt.subjects){
+    if(D.hasTable){ ["ab", "lv"].forEach(m=>{ const L = hraMatrix(D, m, "sub"); if(L.rows.some(x=> x.total > 0)) jobs.push(()=> drawHrAbsentCanvas({ mode:m, view:"sub", L })); }); }
+    else{ const L = hraMatrix(D, "al", "day"); if(L.rows.some(x=> x.total > 0)) jobs.push(()=> drawHrAbsentCanvas({ mode:"al", view:"day", L })); }
+  }
+  if(opt.students){
+    D.rows.slice().sort((a, b)=> (Number(a.st.no) || 0) - (Number(b.st.no) || 0)).filter(r=> opt.all || r.list.length).forEach(r=> jobs.push(()=> drawHrStudentCanvas(r.st.key)));
+  }
+  if(!jobs.length){ toast("ไม่มีหน้าให้สร้าง — เลือกอย่างน้อยหนึ่งส่วน"); return; }
+  showSaving("กำลังสร้าง PDF...");
+  try{
+    const pages = [];
+    for(let i = 0; i < jobs.length; i++){
+      abProgress(`กำลังสร้าง PDF หน้า ${i+1}/${jobs.length}`); await abTick();
+      pages.push(await abPageJpeg(await jobs[i](), i+1, jobs.length));
+    }
+    const blob = abPdf(pages); hideSaving();
+    showFileResult(blob, { icon:"📄", title:"สรุปขาด ลา (PDF)", note:`${pages.length} หน้า · ขนาด A4`, filename:`สรุปขาดลา-${abSafe(hr.room)}-ภาค${period.term}.pdf`, mime:"application/pdf" });
+  }catch(e){ hideSaving(); console.error(e); toast("สร้าง PDF ไม่สำเร็จ ลองใหม่อีกครั้ง"); }
+}
+function hraMenu(){
+  if(!hra.last){ toast("ยังไม่มีข้อมูลให้สร้างรูป"); return; }
+  const items = [
+    ["table", "🖼️", "รูปตารางที่เห็นอยู่", "ตามโหมด/มุมมองที่เลือกบนจอ · คัดลอกหรือบันทึกรูป"],
+    ["overview", "🏫", "รูปภาพรวมทั้งห้อง", "ตามวัน · ตามวิชา (ขาด/ลา) · มากสุด 5 อันดับ"],
+    ["zip", "🗂️", "รูปรายคนทั้งห้อง (แยกไฟล์ ZIP)", "1 คน = 1 รูป ตั้งชื่อไฟล์ตามเลขที่และชื่อ"],
+    ["pdf", "📄", "สรุปรวมเป็น PDF", "ภาพรวม + ตารางรายวิชา + รายคน ในไฟล์เดียว"]
+  ];
+  openSheet({ title:"รูป / PDF สรุปขาด ลา", who:`${esc(hr.room)} · ภาคเรียนที่ ${esc(period.term)}`,
+    body:`<div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">${items.map(x=> `<button type="button" class="btn btn-outline" data-hm="${x[0]}" style="text-align:left; height:auto; padding:11px 14px; line-height:1.35;"><b>${x[1]} ${x[2]}</b><small style="display:block; font-weight:400; color:var(--ink-soft);">${x[3]}</small></button>`).join("")}</div>`,
+    actions:[{ text:"ปิด", cls:"btn-outline" }] });
+  qs("#sgBody").onclick = e=>{
+    const b = e.target.closest("[data-hm]"); if(!b) return;
+    closeSheet();
+    ({ table:hraShowImage, overview:hraShowOverviewImage, zip:hraStudentsZip, pdf:hraPdfOptions })[b.dataset.hm]();
+  };
+}
+
 /* ปุ่มรูป: สร้างด้วย JS ต่อท้ายปุ่มเรียงลำดับ (ไม่ต้องแก้ HTML) */
 (function addHraImgBtn(){
   const sortBtn = qs("#hraSort"); if(!sortBtn || qs("#hraImg")) return;
-  const b = document.createElement("button"); b.id = "hraImg"; b.type = "button"; b.className = "btn btn-primary btn-sm"; b.textContent = "📸 รูป / คัดลอก";
-  sortBtn.after(b); b.addEventListener("click", hraShowImage);
+  const b = document.createElement("button"); b.id = "hraImg"; b.type = "button"; b.className = "btn btn-primary btn-sm"; b.textContent = "📸 รูป / PDF";
+  sortBtn.after(b); b.addEventListener("click", hraMenu);
 })();
 
 qs("#hrGoAbsent")?.addEventListener("click", openHrAbsent);
@@ -5266,6 +5903,482 @@ qs("#view-hr-absent")?.addEventListener("click", e=>{
   if(tr) openHrAbsentDetail(tr.dataset.k);
 });
 
+/* ================= จัดที่นั่งนักเรียน (ผังห้องมุมมองจากด้านบน) =================
+   ลากโต๊ะมาวางในผัง · ลากนักเรียนไปวางที่โต๊ะ (มีรูป = ใช้รูปเป็นไอคอน · ไม่มีรูป = ใช้ชื่อ) · มีโต๊ะครูหน้าห้อง
+   ผังเก็บไว้ในเครื่อง (localStorage) แยกตามห้อง + ภาคเรียน และบันทึกอัตโนมัติทุกครั้งที่แก้ */
+const HSE_W = 920, HSE_GRID = 10, HSE_MIN_H = 560;
+const HSE_DESK = { 1:{ w:96, h:88 }, 2:{ w:192, h:88 } };
+const HSE_TEACHER = { w:176, h:56 };
+const HSE_TITLE_RE = /^(เด็กชาย|เด็กหญิง|ด\.ช\.|ด\.ญ\.|นางสาว|น\.ส\.|นาย|นาง)\s*/;
+const hse = { desks:[], teacher:{ x:372, y:50 }, sel:null, pick:null, z:1, drag:null, roster:[], byKey:new Map(), full:false, fs:false };
+const hseStoreKey = () => `kc_seat_v1|${period.term}|${hr.room}`;
+const hseActive = () => qs("#view-hr-seat").classList.contains("active");
+const hseSnap = v => Math.round(v / HSE_GRID) * HSE_GRID;
+const hseUid = () => "d" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const hseDesk = id => hse.desks.find(d=> d.id === id);
+const hseDim = d => HSE_DESK[d.t];
+const hseShort = st => st.nick || st.name.replace(HSE_TITLE_RE, "");
+const hseClampX = (x, w) => Math.max(0, Math.min(HSE_W - w, x));
+const hseClampY = y => Math.max(44, Math.min(2400, y));
+
+function hseRoster(){
+  hse.roster = hrStudents().slice().sort((a, b)=> (Number(a.no) || 0) - (Number(b.no) || 0));
+  hse.byKey = new Map(hse.roster.map(s=> [s.key, s]));
+}
+function hseLoad(){
+  hse.desks = []; hse.sel = hse.pick = null;
+  hse.teacher = { x:Math.round((HSE_W - HSE_TEACHER.w) / 2 / HSE_GRID) * HSE_GRID, y:50 };
+  let raw = null; try{ raw = JSON.parse(localStorage.getItem(hseStoreKey())); }catch(e){ raw = null; }
+  if(!raw || !Array.isArray(raw.desks)) return;
+  const seen = new Set();
+  raw.desks.forEach(d=>{
+    const t = d && d.t === 2 ? 2 : 1, x = Number(d && d.x), y = Number(d && d.y);
+    if(!isFinite(x) || !isFinite(y)) return;
+    const seats = [];
+    for(let i = 0; i < t; i++){
+      const k = d.s && d.s[i];
+      if(k && hse.byKey.has(k) && !seen.has(k)){ seen.add(k); seats.push(k); } else seats.push(null);   // นักเรียนที่ไม่อยู่ในห้องแล้ว/ซ้ำ → ปล่อยที่นั่งว่าง
+    }
+    hse.desks.push({ id:String(d.id || hseUid()), t, x:hseClampX(x, HSE_DESK[t].w), y:hseClampY(y), seats });
+  });
+  const T = raw.teacher;
+  if(T && isFinite(T.x) && isFinite(T.y)) hse.teacher = { x:hseClampX(Number(T.x), HSE_TEACHER.w), y:hseClampY(Number(T.y)) };
+}
+let _hseWarned = false;
+function hseSave(){
+  try{
+    localStorage.setItem(hseStoreKey(), JSON.stringify({ v:1, teacher:hse.teacher, desks:hse.desks.map(d=> ({ id:d.id, t:d.t, x:d.x, y:d.y, s:d.seats })) }));
+  }catch(e){ if(!_hseWarned){ _hseWarned = true; toast("เก็บผังในเครื่องไม่ได้ (พื้นที่เต็ม/ปิดการเก็บข้อมูล)"); } }
+}
+
+/* ---------- ตำแหน่งนักเรียน / ที่นั่ง ---------- */
+function hseWhere(key){
+  for(const d of hse.desks){ const i = d.seats.indexOf(key); if(i >= 0) return { type:"slot", d:d.id, i }; }
+  return { type:"tray" };
+}
+function hseSeatList(){   // ที่นั่งเรียงตามลำดับการอ่าน (แถวหน้า→หลัง ซ้าย→ขวา)
+  const ds = hse.desks.slice().sort((a, b)=> Math.round(a.y / 40) - Math.round(b.y / 40) || a.x - b.x);
+  const out = []; ds.forEach(d=> d.seats.forEach((_, i)=> out.push({ d:d.id, i }))); return out;
+}
+function hsePlace(key, to){
+  const from = hseWhere(key);
+  if(to.type === "tray"){ if(from.type === "slot") hseDesk(from.d).seats[from.i] = null; }
+  else{
+    const dd = hseDesk(to.d); if(!dd) return;
+    const occ = dd.seats[to.i];
+    if(occ === key) return;
+    dd.seats[to.i] = key;
+    if(from.type === "slot") hseDesk(from.d).seats[from.i] = occ || null;   // ที่นั่งปลายทางมีคนอยู่ = สลับที่กัน
+  }
+  hseSave(); hseRender();
+}
+
+/* ---------- วาด ---------- */
+function hseStageH(){
+  let b = hse.teacher.y + HSE_TEACHER.h;
+  hse.desks.forEach(d=>{ b = Math.max(b, d.y + hseDim(d).h); });
+  return Math.max(HSE_MIN_H, b + 110);
+}
+function hseStuHTML(st, from){
+  const photo = !!photoSrc(st.photo), nm = hseShort(st);
+  return `<div class="hse-stu${hse.pick === st.key ? " pick" : ""}" data-k="${esc(st.key)}" data-from="${esc(from)}" title="${esc(hrLabel(st))}">` +
+    (photo ? hrAvatar(st, "hse-av", true) + `<span class="hse-nm">${esc(nm)}</span>`
+           : `<span class="hse-chip">${st.no !== "" && st.no != null ? `<b>${esc(st.no)}</b>` : ""}<span>${esc(nm)}</span></span>`) + `</div>`;
+}
+function hseDeskHTML(d){
+  const dim = hseDim(d);
+  let h = `<div class="hse-desk ${d.t === 2 ? "double" : "single"}${hse.sel === d.id ? " sel" : ""}" data-id="${esc(d.id)}" style="left:${d.x}px;top:${d.y}px;width:${dim.w}px;height:${dim.h}px;">`;
+  d.seats.forEach((k, i)=>{
+    const st = k && hse.byKey.get(k);
+    h += st ? `<div class="hse-slot" data-d="${esc(d.id)}" data-i="${i}">${hseStuHTML(st, d.id + ":" + i)}</div>`
+            : `<div class="hse-slot empty" data-d="${esc(d.id)}" data-i="${i}">＋</div>`;
+  });
+  return h + `</div>`;
+}
+function hseApplyZoom(){
+  const H = hseStageH(), z = hse.z, st = qs("#hseStage"), zw = qs("#hseZwrap");
+  st.style.height = H + "px"; st.style.transform = `scale(${z})`;
+  zw.style.width = Math.round(HSE_W * z) + "px"; zw.style.height = Math.round(H * z) + "px";
+}
+function renderHseStage(){
+  const T = HSE_TEACHER;
+  let h = `<div class="hse-board">กระดาน · หน้าห้อง</div>` +
+    `<div class="hse-desk teacher${hse.sel === "T" ? " sel" : ""}" data-id="T" style="left:${hse.teacher.x}px;top:${hse.teacher.y}px;width:${T.w}px;height:${T.h}px;">🧑‍🏫 โต๊ะครู</div>`;
+  hse.desks.forEach(d=>{ h += hseDeskHTML(d); });
+  if(!hse.desks.length) h += `<div class="hse-hint">ยังไม่มีโต๊ะในผัง<br>กด “＋ โต๊ะเดี่ยว / ＋ โต๊ะคู่” แล้วลากไปวางตามต้องการ<br>หรือกด “⚡ สร้างแถวอัตโนมัติ” ให้ครบทั้งห้องในครั้งเดียว</div>`;
+  qs("#hseStage").innerHTML = h + `<div class="hse-back">ท้ายห้อง</div>`;
+}
+function renderHseTray(){
+  const seated = new Set(); hse.desks.forEach(d=> d.seats.forEach(k=>{ if(k) seated.add(k); }));
+  const left = hse.roster.filter(s=> !seated.has(s.key));
+  qs("#hseTrayN").textContent = left.length ? `${left.length} คน · ลากไปวางที่โต๊ะ หรือแตะชื่อแล้วแตะที่นั่ง` : "";
+  qs("#hseTray").innerHTML = !hse.roster.length ? `<div class="hse-tray-done" style="color:var(--ink-soft);">ไม่พบรายชื่อนักเรียนในห้องนี้</div>`
+    : left.length ? left.map(s=> hseStuHTML(s, "tray")).join("") : `<div class="hse-tray-done">✓ จัดที่นั่งครบทุกคนแล้ว</div>`;
+}
+function renderHseInfo(){
+  const seats = hse.desks.reduce((t, d)=> t + d.t, 0);
+  const seated = hse.desks.reduce((t, d)=> t + d.seats.filter(k=> k && hse.byKey.has(k)).length, 0);
+  qs("#hseInfo").innerHTML = `<span>โต๊ะ <b>${hse.desks.length}</b> ตัว</span><span>ที่นั่ง <b>${seats}</b></span><span>นั่งแล้ว <b>${seated}/${hse.roster.length}</b> คน</span>` +
+    (seats < hse.roster.length ? `<span style="color:#B3261E;">ที่นั่งยังไม่พอ ขาดอีก ${hse.roster.length - seats} ที่</span>` : "");
+}
+function renderHseSelBar(){
+  const bar = qs("#hseSelBar");
+  if(hse.pick && hse.byKey.has(hse.pick)){
+    const st = hse.byKey.get(hse.pick), seated = hseWhere(hse.pick).type === "slot";
+    bar.innerHTML = `<span>📌 เลือก <b>${esc(hseShort(st))}</b> · แตะที่นั่งเพื่อวาง</span>${seated ? `<button type="button" data-s="unseatpick">↩ เก็บออกจากที่นั่ง</button>` : ""}<button type="button" data-s="unpick">ยกเลิก</button>`;
+    bar.classList.add("on"); return;
+  }
+  if(!hse.sel){ bar.classList.remove("on"); bar.innerHTML = ""; return; }
+  bar.classList.add("on");
+  if(hse.sel === "T"){ bar.innerHTML = `<span>🧑‍🏫 เลือกโต๊ะครู · ลากเพื่อย้าย</span><button type="button" data-s="off">✓ เสร็จ</button>`; return; }
+  const d = hseDesk(hse.sel); if(!d){ hse.sel = null; bar.classList.remove("on"); bar.innerHTML = ""; return; }
+  bar.innerHTML = `<span>เลือก${d.t === 2 ? "โต๊ะคู่" : "โต๊ะเดี่ยว"} · ลากเพื่อย้าย</span><button type="button" data-s="dup">⧉ ทำสำเนา</button><button type="button" data-s="empty">↩ เก็บนักเรียนออก</button><button type="button" class="danger" data-s="del">🗑 ลบโต๊ะ</button><button type="button" data-s="off">✓ เสร็จ</button>`;
+}
+function hseRender(){ renderHseStage(); renderHseTray(); renderHseInfo(); renderHseSelBar(); hseApplyZoom(); }
+
+function hseFit(minZ){
+  const sc = qs("#hseScroll"), w = sc.clientWidth;
+  if(hse.full){   // โหมดเต็มจอ: ย่อ/ขยายให้เห็นทั้งผังพอดีทั้งกว้างและสูง (ไม่ต้องเลื่อน)
+    const h = sc.clientHeight;
+    hse.z = (w && h) ? Math.max(.2, Math.min(1.6, (w - 2) / HSE_W, (h - 2) / hseStageH())) : .5;
+    hseApplyZoom(); return;
+  }
+  hse.z = w ? Math.min(1, Math.max(minZ, (w - 2) / HSE_W)) : .5;
+  hseApplyZoom();
+}
+/* ---------- โหมดเต็มจอ: เครื่องมืออยู่แถบบน · ผังอยู่กลาง · รูปนักเรียนอยู่ล่าง ---------- */
+function hseSetFull(on){
+  on = !!on; if(on === hse.full) return;
+  hse.full = on;
+  document.body.classList.toggle("hse-full", on);
+  const b = qs('#hseBar [data-a="full"]'); if(b) b.textContent = on ? "⤡ ออกจากเต็มจอ" : "⤢ เต็มจอ";
+  hse.sel = hse.pick = null;
+  if(on){ hse.fs = true; requestFS(document.documentElement); } else { hse.fs = false; exitFS(); }
+  hseRender();
+  const refit = ()=>{ if(hseActive()) hseFit(on ? .2 : .45); };
+  requestAnimationFrame(refit); setTimeout(refit, 150); setTimeout(refit, 450);   // รอเบราว์เซอร์สลับ fullscreen เสร็จแล้ววัดขนาดซ้ำ
+}
+[ "fullscreenchange","webkitfullscreenchange","mozfullscreenchange","MSFullscreenChange" ].forEach(ev=>
+  document.addEventListener(ev, ()=>{
+    const inFS = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
+    if(!inFS && hse.full && hse.fs) hseSetFull(false);   // กด Esc / ปุ่มย้อนกลับของระบบ → ออกจากโหมดเต็มจอของผังด้วย
+  })
+);
+let _hseRz = 0;
+window.addEventListener("resize", ()=>{
+  if(!hse.full || !hseActive()) return;
+  cancelAnimationFrame(_hseRz); _hseRz = requestAnimationFrame(()=> hseFit(.2));   // หมุนจอ/ย่อขยายหน้าต่าง → จัดผังให้พอดีใหม่
+});
+function hseZoom(dz){ hse.z = Math.max(.3, Math.min(1.6, Math.round((hse.z + dz) * 100) / 100)); hseApplyZoom(); }
+
+async function openHrSeat(){
+  exitFocusMode();
+  if(!hr.room){ toast("ยังไม่ได้เลือกห้องประจำชั้น"); return; }
+  hseRoster(); hseLoad();
+  qs("#hseSub").textContent = `${hr.room} · ภาคเรียนที่ ${period.term}`;
+  renderPeriodBars();
+  showView("view-hr-seat");
+  hseRender();
+  requestAnimationFrame(()=> hseFit(.45));
+}
+
+/* ---------- เพิ่ม / ลบโต๊ะ ---------- */
+function hseFreeSpot(t){
+  const w = HSE_DESK[t].w, h = HSE_DESK[t].h, gap = 14;
+  const rects = hse.desks.map(d=> ({ x:d.x, y:d.y, w:hseDim(d).w, h:hseDim(d).h })).concat([{ x:hse.teacher.x, y:hse.teacher.y, w:HSE_TEACHER.w, h:HSE_TEACHER.h }]);
+  const hit = (x, y)=> rects.some(r=> x < r.x + r.w + gap && x + w + gap > r.x && y < r.y + r.h + gap && y + h + gap > r.y);
+  for(let y = 130; y < 2400; y += h + gap) for(let x = 30; x + w <= HSE_W - 30; x += 10) if(!hit(x, y)) return { x:hseSnap(x), y:hseSnap(y) };
+  return { x:30, y:130 };
+}
+function hseAddDesk(t){
+  const p = hseFreeSpot(t), d = { id:hseUid(), t, x:p.x, y:p.y, seats:Array(t).fill(null) };
+  hse.desks.push(d); hse.sel = d.id; hse.pick = null; hseSave(); hseRender();
+  const el = qs(`#hseStage .hse-desk[data-id="${d.id}"]`); if(el && el.scrollIntoView) el.scrollIntoView({ block:"nearest", inline:"nearest" });
+}
+function hseDelDesk(id){
+  const i = hse.desks.findIndex(d=> d.id === id); if(i < 0) return;
+  hse.desks.splice(i, 1); hse.sel = null; hseSave(); hseRender(); toast("ลบโต๊ะแล้ว (นักเรียนกลับไปอยู่ในกล่องด้านล่าง)");
+}
+
+/* ---------- สร้างแถวอัตโนมัติ ---------- */
+function hseAutoOpen(){
+  const N = hse.roster.length;
+  if(!N){ toast("ไม่พบรายชื่อนักเรียนในห้องนี้"); return; }
+  let t = 2, cols = 3;
+  const gapOf = tt => tt === 2 ? 28 : 18;
+  const maxCols = tt => Math.max(1, Math.floor((HSE_W - 40 + gapOf(tt)) / (HSE_DESK[tt].w + gapOf(tt))));
+  openSheet({ title:"สร้างแถวโต๊ะอัตโนมัติ", who:`${esc(hr.room)} · นักเรียน ${N} คน`,
+    body:`<div class="field"><label>แบบโต๊ะ</label><div class="seg" id="hseAutoT"><button type="button" data-n="2" class="on">โต๊ะคู่</button><button type="button" data-n="1">โต๊ะเดี่ยว</button></div></div>
+      <div class="field"><label>จำนวนโต๊ะต่อแถว</label><input id="hseAutoCols" type="number" inputmode="numeric" min="1" max="8" value="3"></div>
+      <label style="display:flex; gap:10px; align-items:center; margin:2px 0 10px; font-size:14px;"><input type="checkbox" id="hseAutoFill"> จัดนักเรียนเข้าที่นั่งตามเลขที่ให้เลย</label>
+      <div class="hint" id="hseAutoPrev"></div>`,
+    actions:[{ text:"ยกเลิก", cls:"btn-outline" }, { text:"⚡ สร้างผัง", cls:"btn-primary", fn:()=> hseAutoBuild(t, cols, qs("#hseAutoFill").checked) }] });
+  const prev = ()=>{
+    cols = Math.max(1, Math.min(maxCols(t), Math.floor(Number(qs("#hseAutoCols").value)) || 1));
+    const nDesk = Math.ceil(N / t);
+    qs("#hseAutoPrev").textContent = `จะได้ ${Math.ceil(nDesk / cols)} แถว · ${nDesk} โต๊ะ · ${nDesk * t} ที่นั่ง (สูงสุด ${maxCols(t)} โต๊ะต่อแถว)`;
+  };
+  qsa("#hseAutoT button").forEach(b=> b.addEventListener("click", ()=>{
+    t = Number(b.dataset.n); qsa("#hseAutoT button").forEach(x=> x.classList.toggle("on", x === b));
+    qs("#hseAutoCols").value = t === 2 ? 3 : 6; prev();
+  }));
+  qs("#hseAutoCols").addEventListener("input", prev);
+  prev();
+}
+async function hseAutoBuild(t, cols, fill){
+  const N = hse.roster.length, dw = HSE_DESK[t].w, gx = t === 2 ? 28 : 18, rowH = HSE_DESK[t].h + 24;
+  cols = Math.max(1, Math.min(cols, Math.floor((HSE_W - 40 + gx) / (dw + gx))));
+  if(hse.desks.length && !(await confirmDialog({ title:"สร้างแถวโต๊ะใหม่?", icon:"⚡", message:"โต๊ะที่จัดไว้เดิมจะถูกแทนที่ด้วยแถวใหม่\n(คนที่นั่งอยู่แล้วจะเรียงเข้าที่นั่งใหม่ตามลำดับเดิม)", okText:"สร้างใหม่", cancelText:"ยกเลิก" }))) return;
+  const prev = hseSeatList().map(s=> hseDesk(s.d).seats[s.i]).filter(Boolean);
+  const nDesk = Math.ceil(N / t), x0 = (HSE_W - (cols * dw + (cols - 1) * gx)) / 2, desks = [];
+  for(let i = 0; i < nDesk; i++){
+    desks.push({ id:hseUid() + i, t, x:hseClampX(hseSnap(x0 + (i % cols) * (dw + gx)), dw), y:140 + Math.floor(i / cols) * rowH, seats:Array(t).fill(null) });
+  }
+  const order = fill ? hse.roster.map(s=> s.key) : prev;
+  let n = 0; desks.forEach(d=> d.seats.forEach((_, i)=>{ if(n < order.length) d.seats[i] = order[n++]; }));
+  hse.desks = desks; hse.sel = hse.pick = null; hseSave(); hseRender();
+  toast(`สร้างแล้ว ${nDesk} โต๊ะ ✓`);
+}
+
+/* ---------- สุ่ม / เก็บออก / ล้าง ---------- */
+async function hseRandom(){
+  const seats = hseSeatList();
+  if(!seats.length){ toast("ยังไม่มีโต๊ะ — เพิ่มโต๊ะก่อนครับ"); return; }
+  if(hse.desks.some(d=> d.seats.some(Boolean)) && !(await confirmDialog({ title:"สุ่มที่นั่งใหม่?", icon:"🎲", message:"ที่นั่งที่จัดไว้ตอนนี้จะถูกสับใหม่ทั้งหมด", okText:"สุ่มเลย", cancelText:"ยกเลิก" }))) return;
+  const keys = hse.roster.map(s=> s.key);
+  for(let i = keys.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [keys[i], keys[j]] = [keys[j], keys[i]]; }
+  hse.desks.forEach(d=>{ d.seats = d.seats.map(()=> null); });
+  seats.forEach((s, i)=>{ if(keys[i]) hseDesk(s.d).seats[s.i] = keys[i]; });
+  hse.pick = null; hseSave(); hseRender();
+  toast(keys.length > seats.length ? `สุ่มแล้ว · ที่นั่งไม่พอ เหลือ ${keys.length - seats.length} คนอยู่ในกล่องด้านล่าง` : "สุ่มที่นั่งแล้ว 🎲");
+}
+async function hseUnseatAll(){
+  if(!hse.desks.some(d=> d.seats.some(Boolean))){ toast("ยังไม่มีนักเรียนนั่งที่โต๊ะ"); return; }
+  if(!(await confirmDialog({ title:"เก็บนักเรียนออกทั้งหมด?", icon:"↩", message:"นักเรียนทุกคนจะกลับไปอยู่ในกล่องด้านล่าง\n(โต๊ะยังอยู่ที่เดิม)", okText:"เก็บออก", cancelText:"ไม่เก็บ" }))) return;
+  hse.desks.forEach(d=>{ d.seats = d.seats.map(()=> null); }); hse.pick = null; hseSave(); hseRender();
+}
+async function hseClearAll(){
+  if(!hse.desks.length){ toast("ผังยังว่างอยู่แล้ว"); return; }
+  if(!(await confirmDialog({ title:"ล้างผังที่นั่ง?", icon:"🧹", danger:true, message:"ลบโต๊ะทั้งหมดและเอานักเรียนออกจากที่นั่ง\n(โต๊ะครูยังอยู่)", okText:"ล้างผัง", cancelText:"ไม่ล้าง" }))) return;
+  hse.desks = []; hse.sel = hse.pick = null; hseSave(); hseRender();
+}
+
+/* ---------- ลากวาง (Pointer Events: ใช้ได้ทั้งเมาส์และนิ้วบนมือถือ) ---------- */
+function hseTargetAt(x, y){
+  const el = document.elementFromPoint(x, y); if(!el) return null;
+  if(el.closest("#hseTrayW")) return { type:"tray", el:qs("#hseTrayW") };
+  const slot = el.closest("#view-hr-seat .hse-slot");
+  if(slot) return { type:"slot", d:slot.dataset.d, i:Number(slot.dataset.i), el:slot };
+  const desk = el.closest("#view-hr-seat .hse-desk:not(.teacher)");
+  if(desk){   // วางบนโต๊ะแต่ไม่โดนช่อง → เลือกช่องที่ใกล้ที่สุด
+    let best = null, bd = 1e9;
+    qsa(".hse-slot", desk).forEach(s=>{ const r = s.getBoundingClientRect(), dd = Math.hypot(x - (r.left + r.width / 2), y - (r.top + r.height / 2)); if(dd < bd){ bd = dd; best = s; } });
+    if(best) return { type:"slot", d:best.dataset.d, i:Number(best.dataset.i), el:best };
+  }
+  return null;
+}
+function hseDragEnd(){
+  const d = hse.drag; if(!d) return;
+  if(d.ghost) d.ghost.remove();
+  if(d.src) d.src.classList.remove("hse-src");
+  if(d.el) d.el.classList.remove("dragging");
+  qsa(".hse-slot.over, #hseTrayW.over").forEach(x=> x.classList.remove("over"));
+  document.body.classList.remove("hse-dragging");
+  hse.drag = null;
+}
+function hseAutoScroll(e){
+  const edge = 70, tr = qs("#hseTrayW").getBoundingClientRect();
+  if(e.clientY < edge) window.scrollBy(0, -14); else if(e.clientY > tr.top - 50 && e.clientY < tr.top) window.scrollBy(0, 14);
+  const sc = qs("#hseScroll"), r = sc.getBoundingClientRect();
+  if(sc.scrollWidth > sc.clientWidth){ if(e.clientX < r.left + 40) sc.scrollLeft -= 14; else if(e.clientX > r.right - 40) sc.scrollLeft += 14; }
+}
+document.addEventListener("pointerdown", e=>{
+  if(!hseActive()) return;
+  if(e.pointerType === "mouse" && e.button !== 0) return;
+  if(hse.drag){ if(!e.isPrimary) return; hseDragEnd(); }   // ปล่อยค้างจากครั้งก่อน (เช่น ปล่อยนิ้วนอกจอ) → เริ่มใหม่
+  const stu = e.target.closest("#view-hr-seat .hse-stu");
+  if(stu){ hse.drag = { kind:"stu", key:stu.dataset.k, src:stu, sx:e.clientX, sy:e.clientY, started:false, ghost:null, pid:e.pointerId }; return; }
+  const desk = e.target.closest("#view-hr-seat .hse-desk"); if(!desk) return;
+  const id = desk.dataset.id, o = id === "T" ? hse.teacher : hseDesk(id); if(!o) return;
+  hse.drag = { kind:"desk", id, el:desk, ox:o.x, oy:o.y, nx:o.x, ny:o.y, w:id === "T" ? HSE_TEACHER.w : hseDim(o).w, sx:e.clientX, sy:e.clientY, started:false, pid:e.pointerId, target:e.target };
+});
+document.addEventListener("pointermove", e=>{
+  const d = hse.drag; if(!d || e.pointerId !== d.pid) return;
+  if(!d.started){
+    if(Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < (e.pointerType === "mouse" ? 5 : 8)) return;
+    d.started = true; document.body.classList.add("hse-dragging");
+    if(d.kind === "stu"){
+      const g = document.createElement("div"); g.className = "hse-ghost"; g.innerHTML = d.src.innerHTML;
+      document.body.appendChild(g); d.ghost = g; d.src.classList.add("hse-src");
+    }else d.el.classList.add("dragging");
+  }
+  e.preventDefault();
+  if(d.kind === "stu"){
+    d.ghost.style.left = e.clientX + "px"; d.ghost.style.top = e.clientY + "px";
+    qsa(".hse-slot.over, #hseTrayW.over").forEach(x=> x.classList.remove("over"));
+    const t = hseTargetAt(e.clientX, e.clientY); if(t) t.el.classList.add("over");
+  }else{
+    d.nx = hseClampX(hseSnap(d.ox + (e.clientX - d.sx) / hse.z), d.w); d.ny = hseClampY(hseSnap(d.oy + (e.clientY - d.sy) / hse.z));
+    d.el.style.left = d.nx + "px"; d.el.style.top = d.ny + "px";
+  }
+  hseAutoScroll(e);
+}, { passive:false });
+document.addEventListener("pointerup", e=>{
+  const d = hse.drag; if(!d || e.pointerId !== d.pid) return;
+  if(!d.started){ hseDragEnd(); hseTap(d); return; }
+  if(d.kind === "stu"){
+    const t = hseTargetAt(e.clientX, e.clientY); hseDragEnd();
+    if(t) hsePlace(d.key, t.type === "tray" ? { type:"tray" } : { type:"slot", d:t.d, i:t.i });
+  }else{
+    const o = d.id === "T" ? hse.teacher : hseDesk(d.id); if(o){ o.x = d.nx; o.y = d.ny; }
+    hseDragEnd(); hseSave(); hseRender();
+  }
+});
+document.addEventListener("pointercancel", ()=> hseDragEnd());
+document.addEventListener("contextmenu", e=>{ if(hse.drag && hse.drag.started) e.preventDefault(); });
+document.addEventListener("dragstart", e=>{ if(e.target.closest && e.target.closest("#view-hr-seat")) e.preventDefault(); });
+
+/* แตะ (ไม่ได้ลาก): แตะนักเรียน → เลือกไว้ แล้วแตะที่นั่งเพื่อวาง · แตะโต๊ะ → เลือกโต๊ะ (มีปุ่มทำสำเนา/ลบ) */
+function hseTap(d){
+  if(d.kind === "stu"){
+    const w = hseWhere(d.key);
+    if(hse.pick && hse.pick !== d.key && w.type === "slot"){ const k = hse.pick; hse.pick = null; hsePlace(k, w); return; }   // เลือกคนไว้แล้วแตะคนที่นั่งอยู่ = สลับที่
+    hse.pick = hse.pick === d.key ? null : d.key; hse.sel = null; hseRender(); return;
+  }
+  const slot = d.target && d.target.closest ? d.target.closest(".hse-slot") : null;
+  if(hse.pick && slot){ const k = hse.pick; hse.pick = null; hsePlace(k, { type:"slot", d:slot.dataset.d, i:Number(slot.dataset.i) }); return; }
+  hse.pick = null; hse.sel = hse.sel === d.id ? null : d.id; hseRender();
+}
+qs("#hseSelBar")?.addEventListener("click", e=>{
+  const b = e.target.closest("[data-s]"); if(!b) return;
+  const a = b.dataset.s, d = hse.sel && hse.sel !== "T" ? hseDesk(hse.sel) : null;
+  if(a === "unpick"){ hse.pick = null; hseRender(); }
+  else if(a === "unseatpick"){ const k = hse.pick; hse.pick = null; if(k) hsePlace(k, { type:"tray" }); }
+  else if(a === "off"){ hse.sel = null; hseRender(); }
+  else if(a === "del" && d) hseDelDesk(d.id);
+  else if(a === "empty" && d){ d.seats = d.seats.map(()=> null); hseSave(); hseRender(); }
+  else if(a === "dup" && d){
+    const p = hseFreeSpot(d.t), n = { id:hseUid(), t:d.t, x:p.x, y:p.y, seats:Array(d.t).fill(null) };
+    hse.desks.push(n); hse.sel = n.id; hseSave(); hseRender();
+  }
+});
+document.addEventListener("keydown", e=>{
+  if(!hseActive()) return;
+  if(/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement && document.activeElement.tagName) || "")) return;
+  if(e.key === "Escape"){ hse.sel = null; hse.pick = null; hseRender(); }
+  else if((e.key === "Delete" || e.key === "Backspace") && hse.sel && hse.sel !== "T"){ e.preventDefault(); hseDelDesk(hse.sel); }
+});
+
+/* ---------- รูปผังที่นั่ง (แสดงตัวอย่าง → คัดลอกรูป / บันทึกรูป / แชร์) ---------- */
+async function hseLoadPhoto(st){
+  const raw = String(st.photo || "").trim(); if(!raw) return null;
+  const id = photoId(raw); let url = "";
+  if(id){
+    url = hrPhotoCache.get(id) || "";
+    if(!url){ try{ const r = await apiGet("photo&id=" + encodeURIComponent(id), 2); if(r && r.dataUrl){ url = r.dataUrl; hrPhotoCache.set(id, url); } }catch(e){} }
+  }else if(/^data:/.test(raw)) url = raw;
+  if(!url) return null;
+  return new Promise(ok=>{ const im = new Image(); im.onload = ()=> ok(im); im.onerror = ()=> ok(null); im.src = url; });
+}
+async function hseDrawCanvas(){
+  const K = await abKit(), { F, mw, ell } = K;
+  const seatedKeys = []; hse.desks.forEach(d=> d.seats.forEach(k=>{ if(k && hse.byKey.has(k)) seatedKeys.push(k); }));
+  const seatedSet = new Set(seatedKeys), left = hse.roster.filter(s=> !seatedSet.has(s.key));
+  const imgs = new Map(), need = seatedKeys.map(k=> hse.byKey.get(k)).filter(s=> s.photo);
+  for(let i = 0; i < need.length; i += 5){
+    abProgress(`กำลังโหลดรูปนักเรียน ${Math.min(i + 5, need.length)}/${need.length}`);
+    await Promise.all(need.slice(i, i + 5).map(async s=>{ imgs.set(s.key, await hseLoadPhoto(s)); }));
+  }
+  const T = HSE_TEACHER;
+  const parts = hse.desks.map(d=> ({ x:d.x, y:d.y, w:hseDim(d).w, h:hseDim(d).h })).concat([{ x:hse.teacher.x, y:hse.teacher.y, w:T.w, h:T.h }]);
+  let minX = Math.min(...parts.map(p=> p.x)) - 24, maxX = Math.max(...parts.map(p=> p.x + p.w)) + 24;
+  if(maxX - minX < 560){ const ex = (560 - (maxX - minX)) / 2; minX -= ex; maxX += ex; }
+  const PY0 = Math.min(...parts.map(p=> p.y)) - 48, PY1 = Math.max(...parts.map(p=> p.y + p.h)) + 36;
+  const planW = maxX - minX, planH = PY1 - PY0;
+  const W = 960, CW = W - AB_PAD * 2, s = Math.min(1.35, (CW - 32) / planW), cardH = planH * s + 28;
+  const unLines = [];
+  if(left.length){
+    let line = "";
+    left.map(x=> `${x.no}. ${hseShort(x)}`).forEach(t=>{
+      const next = line ? line + "    " + t : t;
+      if(line && mw(next, F(500, 13)) > CW - 44){ unLines.push(line); line = t; } else line = next;
+    });
+    if(line) unLines.push(line);
+  }
+  const unH = left.length ? 46 + unLines.length * 24 : 0;
+  const top = AB_PAD + AB_BAN + 14, H = top + cardH + (unH ? 14 + unH : 0) + 22 + 26;
+  const g = K.make(W, H), { c, rr } = g;
+  abBanner(K, g, `ผังที่นั่งนักเรียน · ${hr.room}`, `ภาคเรียนที่ ${period.term} · นักเรียน ${hse.roster.length} คน · นั่งแล้ว ${seatedKeys.length} คน`);
+  abCard(g, AB_PAD, top, CW, cardH);
+
+  c.save(); rr(AB_PAD + 8, top + 8, CW - 16, cardH - 16, 12); c.clip();
+  c.fillStyle = "#FBFCFF"; c.fillRect(AB_PAD, top, CW, cardH);
+  c.translate(AB_PAD + (CW - planW * s) / 2 - minX * s, top + 14 - PY0 * s); c.scale(s, s);
+  // กระดาน + ท้ายห้อง
+  const bg = c.createLinearGradient(0, PY0 + 8, 0, PY0 + 36); bg.addColorStop(0, "#35705A"); bg.addColorStop(1, "#2B5C49");
+  c.fillStyle = bg; rr(minX + 24, PY0 + 8, planW - 48, 28, 9); c.fill();
+  c.fillStyle = "#fff"; c.font = F(700, 13); c.textAlign = "center"; c.fillText("กระดาน · หน้าห้อง", minX + planW / 2, PY0 + 22.5);
+  c.fillStyle = "#9AA6C2"; c.font = F(500, 12); c.fillText("ท้ายห้อง", minX + planW / 2, PY1 - 14);
+  // โต๊ะครู
+  const tg = c.createLinearGradient(0, hse.teacher.y, 0, hse.teacher.y + T.h); tg.addColorStop(0, "#EEE6FB"); tg.addColorStop(1, "#E0D4F6");
+  c.fillStyle = tg; rr(hse.teacher.x, hse.teacher.y, T.w, T.h, 12); c.fill(); c.strokeStyle = "#A18BDB"; c.lineWidth = 2; c.stroke();
+  c.fillStyle = "#4B3A8C"; c.font = F(700, 14); c.fillText("โต๊ะครู", hse.teacher.x + T.w / 2, hse.teacher.y + T.h / 2 + .5);
+  // โต๊ะนักเรียน
+  hse.desks.forEach(d=>{
+    const dim = hseDim(d), dg = c.createLinearGradient(0, d.y, 0, d.y + dim.h); dg.addColorStop(0, "#F8EBD3"); dg.addColorStop(1, "#F0DDBC");
+    c.fillStyle = dg; rr(d.x, d.y, dim.w, dim.h, 12); c.fill(); c.strokeStyle = "#D8BC8C"; c.lineWidth = 2; c.stroke();
+    const sw = (dim.w - 12 - (d.t - 1) * 4) / d.t, sh = dim.h - 12;
+    d.seats.forEach((k, i)=>{
+      const sx = d.x + 6 + i * (sw + 4), sy = d.y + 6, st = k && hse.byKey.get(k), cx = sx + sw / 2;
+      if(!st){ c.save(); c.setLineDash([5, 4]); c.strokeStyle = "#D3B57C"; c.lineWidth = 1.5; rr(sx, sy, sw, sh, 9); c.stroke(); c.restore(); return; }
+      const im = imgs.get(st.key), nm = hseShort(st);
+      if(im){
+        const r = 19, cy = sy + sh / 2 - 8, m = Math.min(im.naturalWidth, im.naturalHeight);
+        c.save(); c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2); c.clip();
+        c.drawImage(im, (im.naturalWidth - m) / 2, (im.naturalHeight - m) * .25, m, m, cx - r, cy - r, r * 2, r * 2); c.restore();
+        c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2); c.strokeStyle = "#fff"; c.lineWidth = 2; c.stroke();
+        if(st.no !== "" && st.no != null){
+          c.fillStyle = "#fff"; c.beginPath(); c.arc(cx + r - 2, cy + r - 2, 8.5, 0, Math.PI * 2); c.fill();
+          c.fillStyle = "#1B2233"; c.font = F(700, 10); c.textAlign = "center"; c.fillText(String(st.no), cx + r - 2, cy + r - 1.5);
+        }
+        c.fillStyle = "#3B2F1E"; c.font = F(600, 11.5); c.textAlign = "center"; c.fillText(ell(nm, sw - 6, F(600, 11.5)), cx, sy + sh - 12);
+      }else{
+        c.fillStyle = "#fff"; rr(sx + 5, sy + sh / 2 - 20, sw - 10, 40, 10); c.fill(); c.strokeStyle = "#E5D3AE"; c.lineWidth = 1; c.stroke();
+        c.textAlign = "center";
+        if(st.no !== "" && st.no != null){ c.fillStyle = "#7C879F"; c.font = F(700, 10.5); c.fillText(String(st.no), cx, sy + sh / 2 - 9); }
+        c.fillStyle = "#3B2F1E"; c.font = F(700, 12.5); c.fillText(ell(nm, sw - 20, F(700, 12.5)), cx, sy + sh / 2 + 8);
+      }
+    });
+  });
+  c.restore();
+
+  if(left.length){
+    const y = top + cardH + 14; abCard(g, AB_PAD, y, CW, unH);
+    abSecTitle(K, g, AB_PAD + 20, y + 23, "ยังไม่มีที่นั่ง", `(${left.length} คน)`);
+    c.textAlign = "left"; c.fillStyle = "#4A5778"; c.font = F(500, 13);
+    unLines.forEach((ln, i)=> c.fillText(ln, AB_PAD + 20, y + 52 + i * 24));
+  }
+  abFooter(K, g, H - 22, "");
+  return g.cv;
+}
+async function hseShowImage(){
+  if(!hse.desks.length){ toast("ยังไม่มีโต๊ะในผัง"); return; }
+  showSaving("กำลังสร้างรูปผังที่นั่ง...");
+  try{
+    const blob = await abPng(await hseDrawCanvas()); hideSaving();
+    showImgPreview(blob, { title:"ตัวอย่างรูปผังที่นั่ง", filename:`ผังที่นั่ง-${abSafe(hr.room)}-ภาค${period.term}.png` });
+  }catch(e){ hideSaving(); console.error(e); toast("สร้างรูปไม่สำเร็จ ลองใหม่อีกครั้ง"); }
+}
+
+qs("#hrGoSeat")?.addEventListener("click", openHrSeat);
+qs("#hseBack")?.addEventListener("click", ()=>{ hseSetFull(false); hse.sel = hse.pick = null; showView("view-homeroom"); });
+qs("#hseBar")?.addEventListener("click", e=>{
+  const b = e.target.closest("[data-a]"); if(!b) return;
+  const act = { add1:()=> hseAddDesk(1), add2:()=> hseAddDesk(2), auto:hseAutoOpen, rand:hseRandom, unseat:hseUnseatAll, clear:hseClearAll, img:hseShowImage,
+    zout:()=> hseZoom(-.1), zin:()=> hseZoom(.1), zfit:()=> hseFit(.3), full:()=> hseSetFull(!hse.full) }[b.dataset.a];
+  if(act) act();
+});
+
 /* เปลี่ยนภาคเรียนจากแถบด้านบนขณะอยู่หน้าเหล่านี้ → วาดข้อมูลของภาคเรียนใหม่ */
 function hrOnPeriodChanged(){
   const act = id => qs("#"+id).classList.contains("active");
@@ -5273,6 +6386,7 @@ function hrOnPeriodChanged(){
   if(act("view-hr-orders")) renderHrOrders();
   if(act("view-hr-absent")) renderHrAbsent();
   if(act("view-hr-table")){ hrt.slots = hrtFromState(); hrt.snap = hrtSerialize(); hrt.sel = null; renderHrTable(); }
+  if(act("view-hr-seat")){ hseRoster(); hseLoad(); hseRender(); }
   if(act("view-hr-summary")) renderHrSummary();
 }
 
