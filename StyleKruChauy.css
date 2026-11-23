@@ -578,7 +578,8 @@ td.sum b.s-late.on{color:#B45309; font-weight:700;}
 .ss-near{background:#FFF1BF; color:#7A4F00; border-radius:12px; padding:8px 12px; font-size:12.5px; font-weight:600;}
 .ss-warn{background:#FDECEC; color:#B42318; border-radius:12px; padding:8px 12px; font-size:12px; font-weight:500; line-height:1.5;}
 #view-summary.active{height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)); min-height:0;}
-#view-summary .score-scroll{flex:1 1 0; min-height:0; max-height:none;}
+#view-summary.active{overflow-y:auto;}
+#view-summary .score-scroll{flex:1 0 340px; min-height:340px; max-height:none;}   /* ตารางต้องไม่ถูกบีบจนหายเมื่อกราฟ/สัดส่วนกินที่ — ให้หน้าเลื่อนลงดูได้ */
 .sum-table thead th{cursor:default; min-width:54px; font-size:12px;}
 .sum-table thead th.name-head{min-width:122px;}
 .sum-table thead tr.r1 th{top:0; height:34px; text-align:center;}
@@ -2634,3 +2635,90 @@ table.ab-table th.ab-col{cursor:pointer;} table.ab-table th.ab-col.on{color:#DB2
 .ab-dayrow{display:flex; flex-direction:column; gap:3px;}
 .ab-dsub{font-size:11.5px; color:var(--ink-soft); padding-left:2px; line-height:1.4;} .ab-dsub em{font-style:normal; opacity:.7;}
 .ab-sub.two .n small{white-space:normal;}
+
+/* ===== จัดที่นั่งนักเรียน (ผังห้องมุมมองจากด้านบน) ===== */
+.hr-tile.seat{background:#E6F4EA; color:#0D652D; box-shadow:0 1px 2px rgba(27,34,51,.06), 0 10px 20px -12px rgba(52,168,83,.8);}
+.hr-tile.seat .t-ico{background:#34A853; box-shadow:0 8px 14px -8px rgba(52,168,83,.9);}
+.hse-bar{display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 8px; align-items:center;}
+.hse-bar .btn{width:auto; flex:none; padding:8px 12px; font-size:13px;}
+.hse-sep{flex:1;}
+.hse-selbar{display:none; align-items:center; flex-wrap:wrap; gap:8px; padding:8px 10px; margin-bottom:8px; background:#EEF3FF; border:1px solid #D7E1FB; border-radius:14px; font-size:13px; color:#1B2233;}
+.hse-selbar.on{display:flex;}
+.hse-selbar button{border:1px solid #C9D6F8; background:#fff; color:#1B2233; border-radius:10px; padding:6px 10px; font:inherit; font-size:12.5px; font-weight:600; cursor:pointer;}
+.hse-selbar button.danger{color:#B3261E; border-color:#F2C3BF;}
+.hse-info{font-size:12.5px; color:var(--ink-soft); margin:0 2px 8px; display:flex; gap:6px 14px; flex-wrap:wrap;}
+.hse-info b{color:var(--ink);}
+.hse-scroll{overflow:auto; border:1px solid var(--line); border-radius:18px; background:#E9EEF8;}
+.hse-zwrap{position:relative; margin:0 auto;}
+.hse-stage{position:absolute; left:0; top:0; width:920px; transform-origin:0 0; background-color:#FBFCFF; background-image:radial-gradient(circle,#D9E1F1 1.3px,transparent 1.6px); background-size:20px 20px; user-select:none; -webkit-user-select:none; font-family:'Noto Sans Thai',sans-serif;}
+.hse-board{position:absolute; left:60px; right:60px; top:8px; height:28px; border-radius:9px; background:linear-gradient(#35705A,#2B5C49); color:#fff; font-size:13px; font-weight:700; display:flex; align-items:center; justify-content:center; letter-spacing:.3px; box-shadow:0 3px 8px -4px rgba(0,0,0,.45); pointer-events:none;}
+.hse-back{position:absolute; left:0; right:0; bottom:10px; text-align:center; font-size:12px; color:#9AA6C2; letter-spacing:1px; pointer-events:none;}
+.hse-hint{position:absolute; left:50%; top:230px; transform:translateX(-50%); width:70%; text-align:center; color:#5F6B85; font-size:14px; line-height:1.8; pointer-events:none;}
+.hse-desk{position:absolute; box-sizing:border-box; border-radius:12px; touch-action:none; cursor:grab;}
+.hse-desk.single, .hse-desk.double{display:flex; gap:4px; padding:4px; background:linear-gradient(#F8EBD3,#F0DDBC); border:2px solid #D8BC8C; box-shadow:0 8px 14px -10px rgba(120,80,20,.6);}
+.hse-desk.sel{outline:3px solid #4F6BF5; outline-offset:2px;}
+.hse-desk.teacher{display:flex; align-items:center; justify-content:center; background:linear-gradient(#EEE6FB,#E0D4F6); border:2px solid #A18BDB; color:#4B3A8C; font-weight:700; font-size:14px; box-shadow:0 8px 14px -10px rgba(75,58,140,.6);}
+.hse-slot{flex:1; min-width:0; border-radius:9px; display:flex; flex-direction:column; align-items:center; justify-content:center; position:relative;}
+.hse-slot.empty{border:1.5px dashed #D3B57C; color:#C2A56F; font-size:20px;}
+.hse-slot.over{background:rgba(79,107,245,.2); outline:2px solid #4F6BF5;}
+.hse-stu{display:flex; flex-direction:column; align-items:center; gap:2px; cursor:grab; touch-action:none; max-width:100%;}
+.hse-stu.pick .hr-av{box-shadow:0 0 0 3px #4F6BF5;}
+.hse-stu.hse-src{opacity:.35;}
+.hse-av.hr-av{width:38px; height:38px; font-size:16px; pointer-events:none;}
+.hse-av.hr-av img{-webkit-user-drag:none; user-select:none;}
+.hse-av .hr-badge{min-width:17px; height:17px; padding:0 3px; font-size:9.5px; right:-7px; bottom:-3px;}
+.hse-nm{font-size:11px; font-weight:600; color:var(--ink); max-width:84px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; line-height:1.2; pointer-events:none;}
+.hse-desk .hse-nm{color:#3B2F1E;}
+.hse-trayw{position:sticky; bottom:0; z-index:20; margin-top:12px; background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:8px 10px 10px; box-shadow:0 -10px 24px -14px rgba(27,34,51,.35);}
+.hse-trayw.over{outline:2px solid #4F6BF5;}
+.hse-tray-h{display:flex; justify-content:space-between; align-items:center; font-size:12.5px; color:var(--ink-soft); margin-bottom:6px;}
+.hse-tray-h b{color:var(--ink);}
+.hse-tray{display:flex; gap:8px; overflow-x:auto; padding:2px 2px 4px; min-height:66px; align-items:flex-start;}
+.hse-tray .hse-stu{flex:none; width:66px; touch-action:pan-x;}
+.hse-tray .hse-av.hr-av{width:44px; height:44px; font-size:18px;}
+.hse-tray .hse-nm{max-width:64px;}
+.hse-tray-done{color:#0D652D; font-size:13.5px; font-weight:600; padding:14px 4px;}
+.hse-ghost{position:fixed; z-index:9999; pointer-events:none; display:flex; flex-direction:column; align-items:center; gap:2px; transform:translate(-50%,-62%); filter:drop-shadow(0 10px 14px rgba(0,0,0,.3));}
+.hse-ghost .hse-nm{background:#fff; border-radius:8px; padding:1px 7px; color:#1B2233;}
+body.hse-dragging{cursor:grabbing; user-select:none; -webkit-user-select:none;}
+/* ชื่อนักเรียน (กรณีไม่มีรูป) ที่วางบนโต๊ะ / ในกล่องนักเรียนที่ยังไม่มีที่นั่ง */
+.hse-chip{display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:54px; max-width:100%; padding:4px 6px; border-radius:10px; background:#fff; border:1px solid #E5D3AE; box-shadow:0 1px 2px rgba(27,34,51,.1); pointer-events:none;}
+.hse-chip b{font-size:10px; font-weight:700; color:#7C879F; line-height:1.1;}
+.hse-chip span{font-size:12px; font-weight:700; color:#3B2F1E; line-height:1.2; text-align:center; max-width:100%; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:break-word;}
+.hse-stu.pick .hse-chip{box-shadow:0 0 0 3px #4F6BF5;}
+.hse-tray .hse-chip{width:100%;}
+.hse-ghost .hse-chip{box-shadow:0 6px 14px -6px rgba(0,0,0,.4);}
+.hse-desk.dragging{z-index:5; box-shadow:0 16px 24px -12px rgba(0,0,0,.45); cursor:grabbing;}
+.hse-desk.teacher.sel{outline:3px solid #7B61F0; outline-offset:2px;}
+
+/* =====================================================================
+   จัดที่นั่ง · โหมดเต็มจอ (PC / มือถือ)
+   แถบบน = เครื่องมือ · กลาง = ผังห้อง (ย่อให้พอดีจอ ไม่ต้องเลื่อน) · ล่าง = รูปนักเรียนที่ยังไม่มีที่นั่ง
+   ลากโต๊ะ/ลากนักเรียน/แตะเลือก ทำงานเหมือนเดิมทุกอย่าง
+   ===================================================================== */
+.hse-fullbtn{order:-1;}
+body.hse-full{overflow:hidden; padding:0 !important; background:var(--bg,#F4F6FB);}
+body.hse-full #app{max-width:none !important;}
+body.hse-full #view-hr-seat.active{
+  position:fixed; inset:0; z-index:40; display:flex; flex-direction:column; overflow:hidden;
+  background:var(--bg,#F4F6FB);
+  padding:calc(6px + env(safe-area-inset-top,0px)) calc(8px + env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) calc(8px + env(safe-area-inset-left,0px)) !important;
+}
+body.hse-full #view-hr-seat .topbar,
+body.hse-full #view-hr-seat .period-bar{display:none !important;}
+body.hse-full #view-hr-seat .hse-bar{flex:none; flex-wrap:nowrap; overflow-x:auto; margin:0 0 6px; padding-bottom:3px; -webkit-overflow-scrolling:touch; scrollbar-width:thin;}
+body.hse-full #view-hr-seat .hse-bar .btn{white-space:nowrap;}
+body.hse-full #view-hr-seat .hse-sep{flex:1 0 6px;}
+body.hse-full #view-hr-seat .hse-selbar{flex:none; margin-bottom:6px;}
+body.hse-full #view-hr-seat .hse-info{flex:none; margin:0 2px 6px;}
+body.hse-full #view-hr-seat .hse-scroll{flex:1 1 auto; min-height:0; overflow:auto; border-radius:14px; overscroll-behavior:contain;}
+body.hse-full #view-hr-seat .hse-trayw{position:static; flex:none; margin-top:8px; border-radius:16px; box-shadow:0 -6px 16px -12px rgba(27,34,51,.35);}
+@media (min-width:900px){
+  body.hse-full #view-hr-seat .hse-tray{flex-wrap:wrap; max-height:24vh; overflow-x:hidden; overflow-y:auto;}
+}
+@media (max-height:480px){   /* มือถือแนวนอน: ประหยัดความสูง */
+  body.hse-full #view-hr-seat .hse-tray-h{display:none;}
+  body.hse-full #view-hr-seat .hse-tray{min-height:58px;}
+  body.hse-full #view-hr-seat .hse-info{display:none;}
+}
+.w-card .w-val{display:block;padding:8px 10px;border-radius:8px;background:rgba(127,127,127,.12);font-weight:700;text-align:center}
