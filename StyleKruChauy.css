@@ -2722,3 +2722,9 @@ body.hse-full #view-hr-seat .hse-trayw{position:static; flex:none; margin-top:8p
   body.hse-full #view-hr-seat .hse-info{display:none;}
 }
 .w-card .w-val{display:block;padding:8px 10px;border-radius:8px;background:rgba(127,127,127,.12);font-weight:700;text-align:center}
+
+/* สัดส่วนคะแนนแยกกลางภาค/ปลายภาค */
+.w-grid3{grid-template-columns:repeat(3,1fr);}
+.w-half-title{margin:10px 0 6px; font-size:12.5px; font-weight:700; color:var(--ink-soft);}
+.w-half-title:first-child{margin-top:0;}
+.w-half-title b{color:var(--ink);}
