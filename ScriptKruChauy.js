@@ -6,7 +6,7 @@ const SLOT_MIN = 36; // จำนวนช่องว่างเริ่ม�
 const WEEKDAYS = ["อา","จ","อ","พ","พฤ","ศ","ส"];
 
 const state = {
-  weights: { default:{ work:40, beh:10, mid:20, fin:30 }, bySubject:{} },   // สัดส่วนคะแนน — มาจาก Apps Script (SCORE_WEIGHTS) ไม่เก็บในเครื่อง
+  weights: { default:{ workm:15, behm:5, mid:20, workf:25, behf:5, fin:30 }, bySubject:{} },   // สัดส่วนคะแนน — มาจาก Apps Script (SCORE_WEIGHTS) ไม่เก็บในเครื่อง
   students: [], scores: [], activities: [], attendance: [], teaching: [], config: [], examRows: [], examSetup: [], examKeyRows: [], blocked: [], hrDocs: [], hrOrders: [], hrSetup: [], hrTable: [], hrSubjects: [],
   examUi: { mc:"", es:"", fb:"", wmc:"", wes:"", vals:new Map(), dirty:false },
   attend: { room:"", subject:"", date:"", rows:[] },
@@ -969,9 +969,39 @@ function openAssignmentModal(date){
   qs("#actName").value = act?.["งาน"] || "";
   qs("#actDesc").value = stripExtra(act?.["คำอธิบายงาน"] || "");
   qs("#actExtra").checked = isExtraAct(act);
+  const delBtn = qs("#actDeleteBtn"); if(delBtn) delBtn.style.display = (date && act) ? "" : "none";   // ลบได้เฉพาะคอลัมน์ที่มีอยู่จริงในชีท Act
   qs("#modalAssignment").classList.add("active");
 }
 qsa("#modalAssignment [data-close]").forEach(b=>b.addEventListener("click", ()=> qs("#modalAssignment").classList.remove("active")));
+/* ลบคอลัมน์งาน (หัวคะแนน 1 วัน) — ยืนยัน 2 ชั้น: ชั้นแรกถามว่าจะลบไหม ชั้นสองเตือนซ้ำว่ากู้คืนไม่ได้ */
+qs("#actDeleteBtn").addEventListener("click", async ()=>{
+  const date = state.score.editingDate, act = findActivity(date);
+  if(!date || !act){ toast("ไม่พบคอลัมน์นี้ในชีท Act"); return; }
+  const { room, subject } = state.score;
+  const title = String(act["งาน"] ?? "").trim();
+  const nScores = state.scores.filter(s=> s["ระดับชั้น"]===room && inPeriod(s) && sameStr(s["รายวิชา"], subject) && s["ชื่อ"] && dateKey(s["วันที่"])===date && savedScore(s["ชื่อ"], date)!==null).length;
+  const what = `${fmtLong(date)}${title ? " · "+title : ""}`;
+  const ok1 = await confirmDialog({
+    title:"ลบคอลัมน์งานนี้?", icon:"🗑️", danger:true, okText:"ลบ…", cancelText:"ยกเลิก",
+    message:`${what}\n${room} · ${subject}\nคะแนนของนักเรียนในคอลัมน์นี้จะหายไปด้วย`,
+    stats:[{ label:"คะแนนที่จะถูกลบ", value:String(nScores), cls: nScores ? "bad" : "" }]
+  });
+  if(!ok1) return;
+  const ok2 = await confirmDialog({
+    title:"ยืนยันอีกครั้ง", icon:"⚠️", danger:true, okText:"ใช่ ลบถาวร", cancelText:"ไม่ลบ",
+    message:`ลบคอลัมน์ ${what} ถาวรใช่ไหม?\nลบแล้วกู้คืนไม่ได้ (ทั้งหัวคอลัมน์และคะแนนทุกคน)`
+  });
+  if(!ok2) return;
+  qs("#modalAssignment").classList.remove("active");
+  showSaving("กำลังลบคอลัมน์งาน...");
+  const res = await apiPost({ type:"deleteActivity", term: period.term, ptype: period.type, subject, level: room, date });
+  if(res && res.success){
+    await loadAll(["activities","scores"]);
+    syncHeadersWithActivities();   // ตัดคะแนนที่ค้างรอบันทึกของวันนั้นออกด้วย
+    hideSaving(); renderScoreTable();
+    toast(res.message || "ลบคอลัมน์แล้ว");
+  } else { hideSaving(); toast((res && res.message) || "ลบไม่สำเร็จ"); }
+});
 qs("#actSaveBtn").addEventListener("click", async ()=>{
   const oldDate = state.score.editingDate;
   const newDate = qs("#actDateInput").value;
@@ -1636,12 +1666,17 @@ qs("#examSaveBtn").addEventListener("click", async ()=>{
 const GRADES = [[80,"4"],[75,"3.5"],[70,"3"],[65,"2.5"],[60,"2"],[55,"1.5"],[50,"1"]];
 const PASS_MIN = GRADES[GRADES.length-1][0];   // คะแนนรวมต่ำสุดที่ได้เกรด 1 (= 50) — ใช้คำนวณคะแนนปลายภาคเมื่อแก้ 0 → 1
 const gradeOf = n => { for(const [min,g] of GRADES) if(n>=min) return g; return "0"; };
-const WDEFAULT = { work:40, beh:10, mid:20, fin:30 };
-const WLABEL = { work:"งาน / คะแนนเก็บ", beh:"จิตพิสัย", mid:"สอบกลางภาค", fin:"สอบปลายภาค" };
+/* สัดส่วนแยกตามครึ่งภาค: กลางภาค = เก็บ 15 + จิต 5 + สอบ 20 = 40 · ปลายภาค = เก็บ 25 + จิต 5 + สอบ 30 = 60 · รวม 100
+   (m = กลางภาค · f = ปลายภาค) */
+const WDEFAULT = { workm:15, behm:5, mid:20, workf:25, behf:5, fin:30 };
+const WLABEL = { workm:"คะแนนเก็บ กลางภาค", behm:"จิตพิสัย กลางภาค", mid:"สอบกลางภาค", workf:"คะแนนเก็บ ปลายภาค", behf:"จิตพิสัย ปลายภาค", fin:"สอบปลายภาค" };
 /* สัดส่วนคะแนนอยู่ใน Apps Script (SCORE_WEIGHTS) — หน้าเว็บอ่านอย่างเดียว */
 function loadWeights(){
   const W = state.weights || {}, by = (W.bySubject||{})[state.score.subject] || {};
-  return { ...WDEFAULT, ...(W.default||{}), ...by };
+  const m = { ...(W.default||{}), ...by }, out = {};
+  // เอาเฉพาะคีย์ใหม่ (Apps Script เก่าที่ยังส่ง work/beh มาจะถูกข้าม ใช้ค่าเริ่มต้นแทน)
+  Object.keys(WDEFAULT).forEach(k=>{ const v = Number(m[k]); out[k] = (m[k]!==undefined && m[k]!==null && m[k]!=="" && isFinite(v)) ? v : WDEFAULT[k]; });
+  return out;
 }
 const fmt1 = n => String(Math.round(n*10)/10);
 
@@ -1669,7 +1704,10 @@ function computeSummary(w, ov){
   const sk = (c, st) => `${c.t}|${T(st.key)}|${c.d}`;
   // นับเฉพาะคอลัมน์ที่มีคนได้คะแนนแล้ว (ยังไม่ถึงวันสอนจะไม่ถูกนับเป็นคะแนนที่หายไป)
   const used = cols.filter(c => roster.some(st => smap.has(sk(c, st))));
-  const usedWork = used.reduce((a,c)=> a + c.m, 0);   // นับ Extra เป็น 2 งาน
+  const usedWorkT = {};   // จำนวนงานที่นับแล้วของแต่ละครึ่งภาค (Extra = 2 งาน)
+  TYPES.forEach(t=>{ usedWorkT[t] = used.filter(c=>c.t===t).reduce((a,c)=> a + c.m, 0); });
+  const usedWork = usedWorkT["กลางภาค"] + usedWorkT["ปลายภาค"];
+  const WK = { "กลางภาค":w.workm, "ปลายภาค":w.workf }, BH = { "กลางภาค":w.behm, "ปลายภาค":w.behf }, EX = { "กลางภาค":w.mid, "ปลายภาค":w.fin };
 
   const full = {}, exW = {}, fb = {};
   TYPES.forEach(t=>{
@@ -1680,16 +1718,13 @@ function computeSummary(w, ov){
     fb[t] = numOrNull(s?.["คะแนนเต็มจิตพิสัย"]);
     if(ov && ov.t===t && ov.fb!==undefined && ov.fb!==null) fb[t] = ov.fb;      // พรีวิวตอนยังไม่เคยตั้งคะแนนเต็มจิตพิสัย
   });
-  // จิตพิสัย: สัดส่วน = คะแนนที่ได้ ÷ ผลรวมคะแนนเต็มจิตพิสัย (กลางภาค+ปลายภาค) × น้ำหนักจิตพิสัย — เหมือนวิธีของงาน
-  // ถ้าตั้งคะแนนเต็มจิตพิสัยไว้แค่ครึ่งภาคเดียว ให้ครึ่งที่ยังไม่ตั้งใช้ค่าเดียวกัน — กรอกจิตพิสัยแล้วนับได้เลย ไม่ต้องรอคะแนนสอบ/ตั้งครบ
-  const fbAny = TYPES.map(t=>fb[t]).find(v=>v>0);
-  if(fbAny) TYPES.forEach(t=>{ if(!(fb[t]>0)) fb[t] = fbAny; });
-  const fbSum = TYPES.reduce((a,t)=> a + (fb[t]>0 ? fb[t] : 0), 0);
+  // จิตพิสัย: แยกกลางภาค/ปลายภาค — คะแนนที่ได้ ÷ คะแนนเต็มจิตพิสัยของครึ่งภาคนั้น × น้ำหนักจิตพิสัยของครึ่งภาคนั้น (กลาง 5 / ปลาย 5)
+  const fbSum = TYPES.reduce((a,t)=> a + (fb[t]>0 ? fb[t] : 0), 0);   // > 0 = ตั้งคะแนนเต็มจิตพิสัยอย่างน้อยครึ่งภาคหนึ่งแล้ว
   // คะแนนเต็มที่ "ได้จริง" ของแต่ละครึ่งภาค (ใช้หาเปอร์เซ็นต์ข้างช่องรวม): งาน + จิตพิสัย + สอบ เฉพาะส่วนที่ตั้งค่าไว้แล้ว
   const maxOf = t => {
-    const wk = usedWork ? used.filter(c=>c.t===t).reduce((a,c)=>a+c.m,0) / usedWork * w.work : 0;
-    const bh = (fbSum>0 && fb[t]>0) ? fb[t] / fbSum * w.beh : 0;
-    const ex = full[t]>0 ? (t==="กลางภาค" ? w.mid : w.fin) : 0;
+    const wk = usedWorkT[t] ? WK[t] : 0;
+    const bh = fb[t]>0 ? BH[t] : 0;
+    const ex = full[t]>0 ? EX[t] : 0;
     return wk + bh + ex;
   };
   const maxm = maxOf("กลางภาค"), maxf = maxOf("ปลายภาค");
@@ -1711,23 +1746,26 @@ function computeSummary(w, ov){
     o.workm = 0; o.workf = 0;
     TYPES.forEach(t=>{
       const sum = used.filter(c=>c.t===t).reduce((a,c)=> a + (smap.get(sk(c,st))||0) * c.m, 0);   // Extra คูณ 2
-      o["work"+TK[t]] = usedWork ? sum / (5*usedWork) * w.work : 0;
+      o["work"+TK[t]] = usedWorkT[t] ? sum / (5*usedWorkT[t]) * WK[t] : 0;   // งานแต่ละครึ่งภาคคิดแยกกัน เต็ม 15 / 25
       const r = findExamRow(term, t, room, subject, st.key);
       let b = numOrNull(r?.["จิตพิสัย"]);
       if(ov && ov.name===st.key && ov.t===t) b = ov.v;
       o.bRaw[t] = b;
-      o["beh"+TK[t]] = (fbSum>0 && fb[t]>0 && b!==null) ? b / fbSum * w.beh : 0;
+      o["beh"+TK[t]] = (fb[t]>0 && b!==null) ? b / fb[t] * BH[t] : 0;
       const mc = numOrNull(r?.["ปรนัย"]), es = numOrNull(r?.["อัตนัย"]);
       let ex = 0;
       if(full[t]>0 && (mc!==null || es!==null)){
         const sc = Math.round(examWeighted(mc, es, exW[t].fm, exW[t].fe, exW[t].pm, exW[t].pe) + 1e-9);   // คะแนนสอบปัดเป็นจำนวนเต็มเหมือนหน้าลงคะแนน
-        ex = sc / full[t] * (t==="กลางภาค" ? w.mid : w.fin);
+        ex = sc / full[t] * EX[t];
       }
       o["ex"+TK[t]] = ex;
     });
-    o.mid = o.workm + o.behm + o.exm;
-    o.fin = o.workf + o.behf + o.exf;
-    o.total = o.mid + o.fin;
+    // คะแนนรวมทุกช่อง (รวมกลางภาค / รวมปลายภาค / รวมทั้งภาค) ปัดเศษปกติเป็นจำนวนเต็ม (.5 ขึ้นไปปัดขึ้น) จากค่าจริงก่อนปัด
+    o.midRaw = o.workm + o.behm + o.exm;
+    o.finRaw = o.workf + o.behf + o.exf;
+    o.total = o.midRaw + o.finRaw;
+    o.mid = Math.round(o.midRaw + 1e-9);
+    o.fin = Math.round(o.finRaw + 1e-9);
     o.r = Math.round(o.total + 1e-9);                       // ปัดเป็นจำนวนเต็มก่อนตัดเกรด
     o.grade = gradeOf(o.r);
     o.near = o.r >= 45 && o.r < 80 && o.r % 5 === 4;         // ขาดอีก 1 คะแนนจะได้เกรดสูงขึ้น (49, 54, 59, 64, 69, 74, 79)
@@ -1749,7 +1787,7 @@ function computeSummary(w, ov){
     o.over = threshold!=null && o.al > threshold;
     return o;
   });
-  return { rows, usedWork, full, fb, fbSum, hw, threshold, maxm, maxf };
+  return { rows, usedWork, usedWorkT, full, fb, fbSum, hw, threshold, maxm, maxf };
 }
 
 const wFoldOpen = () => { try{ return localStorage.getItem("kc_wFold")!=="0"; }catch(e){ return true; } };
@@ -1759,11 +1797,14 @@ function renderWeights(){
   box.innerHTML = `<details class="w-fold" id="wFold" ${wFoldOpen() ? "open" : ""}>
     <summary><span class="w-title">⚖️ สัดส่วนคะแนน (%) · ภาคเรียนที่ ${period.term}</span><span class="w-mini" id="wMini"></span></summary>
     <div class="w-body">
-    <div class="w-grid">${Object.keys(WLABEL).map(k=>`<label><span>${WLABEL[k]}</span><b class="w-val">${fmt1(w[k])}</b></label>`).join("")}</div>
+    <div class="w-half-title">กลางภาค · รวม <b>${fmt1(w.workm+w.behm+w.mid)}</b></div>
+    <div class="w-grid w-grid3">${["workm","behm","mid"].map(k=>`<label><span>${WLABEL[k].replace(/ กลางภาค$/,"")}</span><b class="w-val">${fmt1(w[k])}</b></label>`).join("")}</div>
+    <div class="w-half-title">ปลายภาค · รวม <b>${fmt1(w.workf+w.behf+w.fin)}</b></div>
+    <div class="w-grid w-grid3">${["workf","behf","fin"].map(k=>`<label><span>${WLABEL[k].replace(/ ปลายภาค$/,"")}</span><b class="w-val">${fmt1(w[k])}</b></label>`).join("")}</div>
     <div class="w-total" id="wTotal"></div>
-    <div class="hint" style="margin:6px 0 0;">✏️ อยากแก้สัดส่วน → เปิด Apps Script แล้วแก้ <b>SCORE_WEIGHTS</b> (บนสุดของไฟล์) จากนั้น Deploy › เวอร์ชันใหม่ แล้วรีเฟรชหน้านี้</div>
+    <div class="hint" style="margin:6px 0 0;">✏️ อยากแก้สัดส่วน → เปิด Apps Script แล้วแก้ <b>SCORE_WEIGHTS</b> (บนสุดของไฟล์ — workm / behm / mid / workf / behf / fin) จากนั้น Deploy › เวอร์ชันใหม่ แล้วรีเฟรชหน้านี้</div>
     <div class="w-hours"><label><span>คาบ/สัปดาห์ <small>(ใช้หาเกณฑ์ มส. = ×18 สัปดาห์ ×20%)</small></span><input type="number" inputmode="numeric" min="0" step="1" data-hw="1" placeholder="เช่น 2" value="${hw===""?"":hw}"></label></div>
-    <div class="hint" style="margin:8px 0 0;">งาน = หัวคะแนนที่ตั้งชื่องานไว้ · จิตพิสัย = คะแนนที่กรอกเองในแท็บคะแนนสอบ (เทียบกับคะแนนเต็มจิตพิสัย กลางภาค+ปลายภาค) · สอบ = (ปรนัย+อัตนัย ปัดเป็นจำนวนเต็ม) ÷ คะแนนเต็ม · แตะ ✎ ข้างช่องจิตเพื่อแก้คะแนนได้เลย</div>
+    <div class="hint" style="margin:8px 0 0;">คะแนนเก็บ = หัวคะแนนที่ตั้งชื่องานไว้ (คิดแยกกลางภาค/ปลายภาค) · จิตพิสัย = คะแนนที่กรอกเองในแท็บคะแนนสอบ (เทียบกับคะแนนเต็มจิตพิสัยของครึ่งภาคนั้น) · สอบ = (ปรนัย+อัตนัย ปัดเป็นจำนวนเต็ม) ÷ คะแนนเต็ม · แตะ ✎ ข้างช่องจิตเพื่อแก้คะแนนได้เลย</div>
     </div></details>`;
   qs("#wFold").addEventListener("toggle", e=>{ try{ localStorage.setItem("kc_wFold", e.target.open ? "1" : "0"); }catch(err){} });
 }
@@ -1808,7 +1849,7 @@ const _sumSent = new Map(); let _sumTimer = null;
 function syncScoreSummary(S){
   if(state.gsOld || !S || !S.rows.length) return;
   const { room, subject } = state.score, term = period.term;
-  const items = S.rows.map(o=>({ name:o.st.key, no:o.st.no, w:o.workm+o.workf, b:o.behm+o.behf, m:o.exm, f:o.exf, t:o.total }));
+  const items = S.rows.map(o=>({ name:o.st.key, no:o.st.no, w:o.workm+o.workf, b:o.behm+o.behf, m:o.exm, f:o.exf, t:o.r }));
   const sig = JSON.stringify(items), k = term+"|"+room+"|"+subject;
   if(_sumSent.get(k)===sig) return;
   clearTimeout(_sumTimer);
@@ -1824,7 +1865,7 @@ function renderSumTable(){
   const wsum = Object.values(w).reduce((a,b)=>a+b, 0);
   const tot = qs("#wTotal");
   tot.className = "w-total " + (Math.abs(wsum-100) < 0.001 ? "ok" : "bad");
-  const mini = qs("#wMini"); if(mini) mini.textContent = `งาน ${fmt1(w.work)} · จิต ${fmt1(w.beh)} · กลาง ${fmt1(w.mid)} · ปลาย ${fmt1(w.fin)}` + (Math.abs(wsum-100) < 0.001 ? "" : " ⚠");
+  const mini = qs("#wMini"); if(mini) mini.textContent = `กลางภาค ${fmt1(w.workm+w.behm+w.mid)} · ปลายภาค ${fmt1(w.workf+w.behf+w.fin)}` + (Math.abs(wsum-100) < 0.001 ? "" : " ⚠");
   tot.innerHTML = Math.abs(wsum-100) < 0.001 ? `รวม <b>100</b>% ✓` : `รวม <b>${fmt1(wsum)}</b>% — ควรเป็น 100 (คะแนนเต็มจะเป็น ${fmt1(wsum)})`;
 
   const roster = scoreRoster(state.score.room);
@@ -1846,7 +1887,7 @@ function renderSumTable(){
     const beh = tp => {
       const raw = o.bRaw[tp], f = S.fb[tp];
       const rawTxt = raw!==null ? `<small class="braw">${fmtNum(raw)}${f>0 ? "/"+fmtNum(f) : ""}</small>` : "";
-      return `<td class="behcell"><span class="bv">${fmt1(tp==="กลางภาค" ? o.behm : o.behf)}</span>${tp==="ปลายภาค" ? `<button type="button" class="pen" data-i="${i}" data-t="${tp}" title="แก้จิตพิสัย${tp}" aria-label="แก้จิตพิสัย${tp}">✎</button>` : ""}${rawTxt}</td>`;
+      return `<td class="behcell"><span class="bv">${fmt1(tp==="กลางภาค" ? o.behm : o.behf)}</span><button type="button" class="pen" data-i="${i}" data-t="${tp}" title="แก้จิตพิสัย${tp}" aria-label="แก้จิตพิสัย${tp}">✎</button>${rawTxt}</td>`;
     };
     /* เปอร์เซ็นต์ปัดขึ้นเป็นจำนวนเต็ม (กันเศษลอยตัวเลขเช่น 80.0000001 ไม่ให้ขึ้นเป็น 81) */
     const pctTxt = v => v===null ? "–" : Math.ceil(v - 1e-9) + "%";
@@ -1864,9 +1905,11 @@ function renderSumTable(){
   wrap.innerHTML = `<table class="score-table sum-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
 
   const notes = [];
-  if(!S.usedWork) notes.push("ยังไม่มีคะแนนงาน (หัวคะแนนที่มีชื่องาน)");
-  if(!S.fbSum) notes.push("ยังไม่ได้ตั้งคะแนนเต็มจิตพิสัย (ตั้งในแท็บคะแนนสอบ หรือแตะ ✎ ที่ช่องจิตปลายภาค)");
-  TYPES.forEach(t=>{ if(!S.full[t]) notes.push(`ยังไม่ได้ตั้งคะแนนเต็มสอบ${t}`); });
+  TYPES.forEach(t=>{
+    if(!S.usedWorkT[t]) notes.push(`ยังไม่มีคะแนนเก็บ${t} (หัวคะแนนที่มีชื่องาน)`);
+    if(!(S.fb[t]>0)) notes.push(`ยังไม่ได้ตั้งคะแนนเต็มจิตพิสัย${t} (ตั้งในแท็บคะแนนสอบ หรือแตะ ✎ ที่ช่องจิต)`);
+    if(!S.full[t]) notes.push(`ยังไม่ได้ตั้งคะแนนเต็มสอบ${t}`);
+  });
   if(S.threshold==null) notes.push("ยังไม่ได้ใส่จำนวนคาบ/สัปดาห์ จึงยังตรวจเกณฑ์ มส. จากการขาด+ลาไม่ได้");
   const chips = ["4","3.5","3","2.5","2","1.5","1","0","มส"].filter(g=>dist[g]).map(g=>`<span class="gr ${gCls(g)}">${g==="มส"?"มส.":g}<i>×${dist[g]}</i></span>`).join("");
   renderSumChart(S);
